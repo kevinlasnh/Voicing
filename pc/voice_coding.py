@@ -62,10 +62,55 @@ state = AppState()
 # ============================================================
 # Network Utilities / 网络工具
 # ============================================================
-def get_local_ip() -> str:
-    """Get the local IP address of this machine / 获取本机局域网IP"""
+def get_all_ips() -> list:
+    """Get all local IP addresses / 获取所有本机IP地址"""
+    ips = []
     try:
-        # Create a socket to determine the local IP
+        import subprocess
+        result = subprocess.run(
+            ['powershell', '-Command', 
+             "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -ExpandProperty IPAddress"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            ips = [ip.strip() for ip in result.stdout.strip().split('\n') if ip.strip()]
+    except:
+        pass
+    return ips
+
+
+def get_hotspot_ip() -> str | None:
+    """Get Windows Mobile Hotspot IP (usually 192.168.137.1) / 获取热点IP"""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['powershell', '-Command', 
+             "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like '*本地连接*' -or $_.InterfaceAlias -like '*Local Area Connection*' } | Select-Object -ExpandProperty IPAddress"],
+            capture_output=True, text=True, timeout=5
+        )
+        if result.returncode == 0:
+            for ip in result.stdout.strip().split('\n'):
+                ip = ip.strip()
+                if ip.startswith('192.168.137.'):
+                    return ip
+    except:
+        pass
+    return None
+
+
+def get_local_ip() -> str:
+    """
+    Get the best local IP address for connection.
+    Priority: 1. Hotspot (192.168.137.x)  2. Regular LAN IP
+    获取最佳本机IP，优先使用热点IP
+    """
+    # First try hotspot IP
+    hotspot_ip = get_hotspot_ip()
+    if hotspot_ip:
+        return hotspot_ip
+    
+    # Fallback to regular method
+    try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(("8.8.8.8", 80))
         ip = s.getsockname()[0]
@@ -318,15 +363,35 @@ def toggle_startup(icon, menu_item):
 
 
 def show_ip_address(icon, menu_item):
-    """Show IP address notification / 显示IP地址通知"""
+    """Show IP address notification and copy to clipboard / 显示IP地址并复制"""
+    # Get all available IPs
+    all_ips = get_all_ips()
+    hotspot_ip = get_hotspot_ip()
+    
+    # Build message
     web_url = f"http://{state.local_ip}:{state.http_port}"
+    
+    msg_lines = [f"📱 手机浏览器访问:", web_url, ""]
+    
+    if hotspot_ip:
+        msg_lines.append(f"🔥 热点IP: {hotspot_ip}:{state.http_port}")
+    
+    if len(all_ips) > 1:
+        msg_lines.append("其他IP:")
+        for ip in all_ips:
+            if ip != state.local_ip:
+                msg_lines.append(f"  {ip}:{state.http_port}")
+    
+    msg_lines.append("\n(已复制到剪贴板)")
+    
     # Copy to clipboard
     try:
         import pyperclip
         pyperclip.copy(web_url)
-        icon.notify(f"手机浏览器访问:\n{web_url}\n(已复制)", "Voice Coding")
     except:
-        icon.notify(f"手机浏览器访问:\n{web_url}", "Voice Coding")
+        pass
+    
+    icon.notify("\n".join(msg_lines), "Voice Coding")
 
 
 def quit_app(icon, menu_item):
