@@ -1,22 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+
 a = Analysis(
     ['voice_coding.py'],
     pathex=[],
     binaries=[],
-    datas=[('web', 'web')],  # Include web folder
-    hiddenimports=[
-        'pystray._win32',
-        'PIL.Image',
-        'PIL.ImageDraw',
-        'websockets',
-        'websockets.server',
-        'websockets.legacy',
-        'websockets.legacy.server',
-        'asyncio',
-        'pyautogui',
-        'pyperclip',
-    ],
+    datas=[('web', 'web')],
+    hiddenimports=[],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -24,7 +14,6 @@ a = Analysis(
     noarchive=False,
     optimize=0,
 )
-
 pyz = PYZ(a.pure)
 
 exe = EXE(
@@ -40,11 +29,10 @@ exe = EXE(
     upx=True,
     upx_exclude=[],
     runtime_tmpdir=None,
-    console=False,  # No console window
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,  # Can add .ico file later
 )

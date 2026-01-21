@@ -1,133 +1,166 @@
-# Voice Coding / 语音编程
+# Voice Coding 语音编程
 
-A lightweight Bluetooth/WiFi text bridge between your phone and PC. Type on your phone, text appears at your PC's cursor.
+<p align="center">
+  <strong>手机输入，电脑打字</strong><br>
+  轻量级手机-电脑文本桥接工具
+</p>
 
-轻量级手机-电脑文本桥接工具。在手机上输入（语音输入），文本自动出现在电脑光标处。
-
----
-
-## ✨ Features / 功能特性
-
-| Feature / 功能 | Description / 描述 |
-|---|---|
-| 📱 **Phone Input / 手机输入** | Type or voice-input on your phone. 在手机上打字或语音输入。 |
-| 💻 **PC Output / 电脑输出** | Text appears instantly at cursor position. 文本瞬间出现在光标处。 |
-| 🔗 **Direct Connection / 直连** | No cloud, no server, just peer-to-peer. 无云端，无服务器，端对端直连。 |
-| 📦 **Packet Transfer / 整包传输** | Text sent as complete packet, order guaranteed. 文本整包发送，顺序保证。 |
-| 🖥️ **System Tray / 系统托盘** | Silent background service with tray icon. 静默后台运行，托盘图标。 |
+<p align="center">
+  <a href="#功能特性">功能</a> •
+  <a href="#快速开始">快速开始</a> •
+  <a href="#使用场景">场景</a> •
+  <a href="#开发">开发</a> •
+  <a href="#许可证">许可证</a>
+</p>
 
 ---
 
-## 📦 Download / 下载
+## 功能特性
 
-| Platform / 平台 | Download / 下载 |
-|---|---|
-| Windows PC | [VoiceCoding.exe](./dist/VoiceCoding.exe) |
-| Android | [VoiceCoding.apk](./dist/VoiceCoding.apk) |
+| 功能 | 描述 |
+|------|------|
+| 📱 **手机输入** | 在手机上打字或使用语音输入 |
+| 💻 **电脑输出** | 文本瞬间出现在电脑光标处 |
+| 🔗 **局域网直连** | 无需云端，无需服务器，端对端直连 |
+| 📦 **整包传输** | 文本整包发送，顺序保证 |
+| 🖥️ **系统托盘** | 静默后台运行，托盘图标控制 |
+| 🌐 **Web 客户端** | 手机端无需安装 App，浏览器直接访问 |
+| 🔄 **自动重连** | 断线自动重连，稳定可靠 |
+| ⚡ **开机自启** | 支持设置开机自动启动 |
 
----
+## 系统要求
 
-## 🚀 Quick Start / 快速开始
+### PC 端
+- Windows 10/11
+- 无需安装额外运行时
 
-### Step 1: PC Setup / 电脑端设置
+### 手机端
+- 任意现代浏览器（推荐 Edge/Chrome）
+- 与电脑在同一局域网/热点下
 
-1. Run `VoiceCoding.exe` on your Windows PC.  
-   在 Windows 电脑上运行 `VoiceCoding.exe`。
+## 快速开始
 
-2. A green icon appears in the system tray (bottom-right).  
-   系统托盘（右下角）出现绿色图标。
+### 1️⃣ 启动电脑端
 
-3. Note the IP address shown (e.g., `192.168.1.100:9527`).  
-   记下显示的 IP 地址（如 `192.168.1.100:9527`）。
+1. 运行 `VoiceCoding.exe`
+2. 系统托盘出现图标，表示服务已启动
+3. 右键托盘图标可查看本机 IP 地址
 
-### Step 2: Phone Setup / 手机端设置
+### 2️⃣ 手机连接
 
-1. Install `VoiceCoding.apk` on your Android phone.  
-   在安卓手机上安装 `VoiceCoding.apk`。
+1. 确保手机和电脑在**同一网络**下（WiFi 或手机热点）
+2. 手机浏览器访问：`http://<电脑IP>:9527`
+   - 例如：`http://192.168.1.100:9527`
+3. 页面显示"已连接"即可使用
 
-2. Open the app, enter the PC's IP address.  
-   打开应用，输入电脑的 IP 地址。
+### 3️⃣ 开始使用
 
-3. Tap "Connect" to establish connection.  
-   点击"连接"建立连接。
+1. 在电脑上点击你想输入文字的位置（如 VS Code、Word、浏览器等）
+2. 在手机网页输入框中输入文字（支持语音输入）
+3. 点击"发送到电脑"
+4. 文字自动出现在电脑光标处！
 
-### Step 3: Start Typing / 开始输入
+## 使用场景
 
-1. Type or use voice input on your phone.  
-   在手机上打字或使用语音输入。
+- 🎤 **语音编程** - 用手机语音输入写代码注释
+- 📝 **长文输入** - 躺在沙发上用手机给电脑打字
+- 🌍 **多语言输入** - 利用手机更好的输入法输入各种语言
+- 🎮 **游戏聊天** - 全屏游戏时用手机打字
 
-2. Tap "Send" - text appears at your PC's cursor!  
-   点击"发送" - 文本出现在电脑光标处！
+## 托盘菜单
 
----
+右键点击系统托盘图标：
 
-## 🖱️ Tray Menu / 托盘菜单
+| 菜单项 | 功能 |
+|--------|------|
+| **IP 地址** | 显示本机 IP，点击可复制 |
+| **启用/禁用同步** | 临时开关文本同步功能 |
+| **开机自启** | 设置是否开机自动启动 |
+| **退出** | 关闭程序 |
 
-Right-click the tray icon for options:  
-右键点击托盘图标查看选项：
-
-| Option / 选项 | Description / 描述 |
-|---|---|
-| 🚀 **Start with Windows / 开机启动** | Auto-start when Windows boots. 开机自动启动。 |
-| ⏯️ **Enable Sync / 启用同步** | Toggle text sync on/off. 切换同步开关。 |
-| 📋 **Show IP / 显示IP** | Show connection IP address. 显示连接IP地址。 |
-| ❌ **Quit / 退出** | Exit the application. 退出程序。 |
-
----
-
-## 🛠️ Tech Stack / 技术栈
-
-### PC (Windows)
-- Python 3.10+
-- `pystray` - System tray integration
-- `websockets` - Real-time communication
-- `pyautogui` - Keyboard simulation
-
-### Android
-- Kivy / KivyMD - Cross-platform UI
-- WebSocket client
-
----
-
-## 📁 Project Structure / 项目结构
+## 项目结构
 
 ```
 Voice-Coding/
-├── README.md
-├── .gitignore
-├── pc/                      # Windows PC application
-│   ├── voice_coding.py      # Main application
-│   ├── requirements.txt     # Python dependencies
-│   └── VoiceCoding.spec     # PyInstaller config
-├── android/                 # Android application
-│   ├── main.py              # Kivy main app
-│   ├── buildozer.spec       # Android build config
-│   └── voicecoding.kv       # Kivy UI layout
-└── dist/                    # Built executables
-    ├── VoiceCoding.exe
-    └── VoiceCoding.apk
+├── pc/                     # PC 端源码
+│   ├── voice_coding.py     # 主程序
+│   ├── requirements.txt    # Python 依赖
+│   └── web/               # Web 前端
+│       ├── index.html     # 手机端页面
+│       ├── manifest.json  # PWA 配置
+│       └── sw.js          # Service Worker
+├── android/               # Android 原生客户端（可选）
+│   ├── main.py           # Kivy 主程序
+│   └── buildozer.spec    # 打包配置
+├── CHANGELOG.md          # 更新日志
+├── LICENSE               # 许可证
+└── README.md             # 本文件
 ```
 
----
+## 开发
 
-## 🔧 Build from Source / 从源码构建
+### 环境准备
 
-### PC Application
 ```bash
-cd pc
+# 克隆仓库
+git clone https://github.com/kevinlasnh/Voice-Coding.git
+cd Voice-Coding/pc
+
+# 安装依赖
 pip install -r requirements.txt
-pyinstaller VoiceCoding.spec
+
+# 运行开发版本
+python voice_coding.py
 ```
 
-### Android Application
+### 打包发布
+
 ```bash
-cd android
-pip install buildozer
-buildozer android debug  # Requires Linux/WSL
+# 使用 PyInstaller 打包
+pyinstaller --onefile --noconsole --name VoiceCoding --add-data "web;web" voice_coding.py
 ```
+
+打包后的可执行文件位于 `dist/VoiceCoding.exe`
+
+### 技术栈
+
+- **后端**: Python 3.10+, WebSocket, HTTP Server
+- **前端**: HTML5, CSS3, JavaScript (原生)
+- **打包**: PyInstaller
+- **依赖**: websockets, pyautogui, pystray, Pillow
+
+## 常见问题
+
+### Q: 手机无法连接电脑？
+
+1. 确保手机和电脑在同一网络
+2. 检查电脑防火墙是否阻止了 9527 端口
+3. 尝试关闭电脑防火墙测试
+
+### Q: 文字输入到了错误的位置？
+
+确保在点击"发送"前，电脑上的光标已经在正确的输入位置。
+
+### Q: 如何使用手机热点连接？
+
+1. 开启手机热点
+2. 电脑连接手机热点
+3. 访问热点网关地址（通常是 `192.168.43.1:9527`）
+
+## 更新日志
+
+查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史。
+
+## 贡献
+
+欢迎提交 Issue 和 Pull Request！
+
+## 许可证
+
+[MIT License](LICENSE)
 
 ---
 
-## 📄 License / 许可证
-
-MIT License
+<p align="center">
+  Made with ❤️ by <a href="https://github.com/kevinlasnh">kevinlasnh</a>
+</p>

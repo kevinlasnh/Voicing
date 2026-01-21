@@ -2,250 +2,333 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#4CAF50">
+    <meta name="theme-color" content="#2D2B28">
     <title>Voice Coding</title>
-    <link rel="manifest" href="/manifest.json">
     <style>
+        :root {
+            /* Anthropic 风格配色 */
+            --bg-color: #FFFFFF;
+            --card-bg: #343330;
+            --surface: #3D3B37;
+            --border-color: #4A4844;
+            --input-bg: #2D2B28;
+            --primary: #D97757;        /* Anthropic 橙色 */
+            --primary-hover: #C5684A;
+            --text-main: #ECECEC;
+            --text-secondary: #A8A8A8;
+            --text-muted: #6B6B6B;
+            --danger: #E85C4A;
+            --success: #5CB87A;
+            --warning: #E5A84B;
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
+            -webkit-tap-highlight-color: transparent;
         }
-        
+
+        html, body {
+            height: 100%;
+            background-color: var(--bg-color);
+            overflow: hidden;
+        }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            color: #333;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-main);
+            /* 固定布局，不随浏览器动态调整 */
+            padding: 16px;
         }
-        
-        .container {
-            max-width: 500px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+
+        .card {
+            width: 100%;
+            /* 高度在JS中设置为固定值 */
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 16px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            overflow: hidden;
         }
-        
+
+        /* Header Area */
+        .header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-shrink: 0;
+        }
+
+        .logo {
+            width: 36px;
+            height: 36px;
+            background: var(--primary);
+            color: #fff;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 18px;
+        }
+
+        .header-info {
+            flex: 1;
+        }
+
         h1 {
-            text-align: center;
-            color: #4CAF50;
-            margin-bottom: 8px;
-            font-size: 28px;
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-main);
+            line-height: 1.2;
         }
-        
+
         .subtitle {
-            text-align: center;
-            color: #666;
-            margin-bottom: 24px;
-            font-size: 14px;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
         }
-        
-        .status {
-            text-align: center;
-            padding: 12px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-            font-weight: 500;
+
+        /* Status Section */
+        .status-section {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 14px 16px;
+            flex-shrink: 0;
         }
-        
-        .status.connected {
-            background: #e8f5e9;
-            color: #2e7d32;
+
+        .status-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        
-        .status.disconnected {
-            background: #ffebee;
-            color: #c62828;
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--danger);
+            flex-shrink: 0;
         }
-        
-        .status.connecting {
-            background: #fff3e0;
-            color: #ef6c00;
+
+        .status-row.connected .status-dot { 
+            background: var(--success); 
+            box-shadow: 0 0 8px var(--success);
         }
-        
-        .status.sync-disabled {
-            background: #ffebee;
-            color: #c62828;
+        .status-row.connecting .status-dot { 
+            background: var(--warning); 
+            animation: pulse 1.5s infinite; 
         }
-        
-        .sync-warning {
-            background: #fff3e0;
-            border: 2px solid #ff9800;
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 16px;
-            display: none;
-            text-align: center;
+        .status-row.disconnected .status-dot { 
+            background: var(--danger); 
         }
-        
-        .sync-warning.show {
-            display: block;
-            animation: pulse 2s infinite;
-        }
-        
+
         @keyframes pulse {
             0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
+            50% { opacity: 0.4; }
         }
-        
-        .sync-warning strong {
-            color: #e65100;
+
+        .status-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .status-text {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .status-row.connected .status-text { color: var(--success); }
+        .status-row.connecting .status-text { color: var(--warning); }
+        .status-row.disconnected .status-text { color: var(--text-secondary); }
+
+        .device-name {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: none;
+        }
+
+        .device-name.show {
             display: block;
-            margin-bottom: 4px;
         }
-        
+
+        /* Sync Warning */
+        .sync-alert {
+            font-size: 13px;
+            color: var(--danger);
+            background: rgba(232, 92, 74, 0.15);
+            padding: 12px 14px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+            flex-shrink: 0;
+        }
+        .sync-alert.show { display: block; }
+
+        /* Input Area - 占用剩余空间 */
+        .input-wrapper {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 120px;
+        }
+
         textarea {
+            flex: 1;
             width: 100%;
-            height: 200px;
-            border: 2px solid #e0e0e0;
+            min-height: 100%;
+            background: var(--input-bg);
+            border: 1px solid var(--border-color);
             border-radius: 12px;
-            padding: 16px;
-            font-size: 18px;
+            padding: 14px;
+            color: var(--text-main);
+            font-size: 16px;
+            font-family: inherit;
             resize: none;
-            margin-bottom: 16px;
-            transition: border-color 0.3s;
+            line-height: 1.5;
+            transition: border-color 0.2s, background 0.2s;
         }
-        
+
         textarea:focus {
             outline: none;
-            border-color: #4CAF50;
+            border-color: var(--primary);
+            background: var(--surface);
         }
-        
-        .buttons {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 16px;
+
+        textarea::placeholder {
+            color: var(--text-muted);
         }
-        
+
+        /* Buttons */
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            flex-shrink: 0;
+        }
+
         button {
-            padding: 16px;
             border: none;
-            border-radius: 12px;
-            font-size: 16px;
-            font-weight: 600;
             cursor: pointer;
-            transition: transform 0.1s, opacity 0.2s;
+            font-family: inherit;
+            font-weight: 600;
+            font-size: 15px;
+            border-radius: 10px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
-        
+
         button:active {
-            transform: scale(0.98);
+            transform: scale(0.97);
         }
-        
-        button:disabled {
-            opacity: 0.5;
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text-main);
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            width: 100%;
+        }
+
+        .btn-secondary:active {
+            background: var(--border-color);
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: #fff;
+            padding: 14px;
+            font-size: 16px;
+            width: 100%;
+        }
+
+        .btn-primary:active {
+            background: var(--primary-hover);
+        }
+
+        .btn-primary:disabled {
+            background: #5C4A42;
+            color: rgba(255,255,255,0.4);
             cursor: not-allowed;
+            transform: none;
         }
-        
-        .btn-clear {
-            background: #f5f5f5;
-            color: #666;
-        }
-        
-        .btn-paste {
-            background: #e3f2fd;
-            color: #1976d2;
-        }
-        
-        .btn-send {
-            grid-column: span 2;
-            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
-            color: white;
-            padding: 20px;
-            font-size: 20px;
-        }
-        
-        .btn-send:disabled {
-            background: #ccc;
-        }
-        
-        .tip {
-            text-align: center;
-            color: #888;
-            font-size: 12px;
-            margin-top: 16px;
-        }
-        
+
+        /* Toast */
         .toast {
             position: fixed;
-            bottom: 100px;
+            top: 50%;
             left: 50%;
-            transform: translateX(-50%) translateY(100px);
-            background: rgba(0,0,0,0.8);
-            color: white;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: var(--surface);
+            color: var(--text-main);
             padding: 12px 24px;
-            border-radius: 25px;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 14px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 8px 32px rgba(0,0,0,0.4);
             opacity: 0;
-            transition: all 0.3s;
-            z-index: 1000;
+            transition: all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            z-index: 100;
         }
         
         .toast.show {
-            transform: translateX(-50%) translateY(0);
             opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
         }
 
-        /* Install prompt */
-        .install-prompt {
-            background: #fff3e0;
-            border-radius: 10px;
-            padding: 12px;
-            margin-bottom: 16px;
-            display: none;
-        }
-        
-        .install-prompt.show {
-            display: block;
-        }
-        
-        .install-btn {
-            background: #ff9800;
-            color: white;
-            width: 100%;
-            margin-top: 8px;
-        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>⌨️ Voice Coding</h1>
-        <p class="subtitle">语音编程 - 手机输入，电脑显示</p>
-        
-        <div class="install-prompt" id="installPrompt">
-            <strong>💡 添加到主屏幕</strong>
-            <p style="font-size:12px;color:#666;margin-top:4px;">获得更好的使用体验</p>
-            <button class="btn-clear install-btn" onclick="installPWA()">添加到主屏幕</button>
+
+    <div class="card">
+        <div class="header">
+            <div class="logo">V</div>
+            <div class="header-info">
+                <h1>Voice Coding</h1>
+                <div class="subtitle">语音输入助手</div>
+            </div>
         </div>
-        
-        <div class="sync-warning" id="syncWarning">
-            <strong>⚠️ 电脑端同步已关闭</strong>
-            <p style="font-size:12px;color:#666;">请在电脑托盘图标上启用同步</p>
+
+        <div class="status-section">
+            <div class="status-row disconnected" id="statusRow">
+                <div class="status-dot"></div>
+                <div class="status-info">
+                    <div class="status-text" id="statusText">未连接</div>
+                    <div class="device-name" id="deviceName"></div>
+                </div>
+            </div>
         </div>
-        
-        <div class="status disconnected" id="status">
-            未连接 / Disconnected
+
+        <div class="sync-alert" id="syncAlert">
+            ⚠️ 电脑端同步已关闭，无法发送
         </div>
-        
-        <textarea 
-            id="textInput" 
-            placeholder="在这里输入文字，或使用语音输入...&#10;Type here or use voice input..."
-        ></textarea>
-        
-        <div class="buttons">
-            <button class="btn-clear" onclick="clearText()">🗑️ 清空</button>
-            <button class="btn-paste" onclick="pasteText()">📋 粘贴</button>
-            <button class="btn-send" id="sendBtn" onclick="sendText()" disabled>
-                📤 发送到电脑 / Send
+
+        <div class="input-wrapper">
+            <textarea id="textInput" placeholder="输入文字或使用语音..."></textarea>
+        </div>
+
+        <div class="actions">
+            <button class="btn-secondary" onclick="clearText()">清空</button>
+            <button class="btn-primary" id="sendBtn" onclick="sendText()" disabled>
+                发送到电脑
             </button>
         </div>
-        
-        <p class="tip">💡 提示：使用手机键盘的语音输入功能，说话即可输入文字！</p>
     </div>
     
     <div class="toast" id="toast"></div>
@@ -254,136 +337,138 @@
         let ws = null;
         let isConnected = false;
         let syncEnabled = true;
-        let deferredPrompt = null;
+        let computerName = '';
         
-        const statusEl = document.getElementById('status');
+        const statusRow = document.getElementById('statusRow');
+        const statusTextEl = document.getElementById('statusText');
+        const deviceNameEl = document.getElementById('deviceName');
         const textInput = document.getElementById('textInput');
         const sendBtn = document.getElementById('sendBtn');
         const toastEl = document.getElementById('toast');
-        const installPrompt = document.getElementById('installPrompt');
-        const syncWarning = document.getElementById('syncWarning');
+        const syncAlert = document.getElementById('syncAlert');
         
-        // Auto-connect on load
-        window.onload = function() {
-            connect();
-        };
-        
-        // PWA install prompt
-        window.addEventListener('beforeinstallprompt', (e) => {
-            e.preventDefault();
-            deferredPrompt = e;
-            installPrompt.classList.add('show');
-        });
-        
-        function installPWA() {
-            if (deferredPrompt) {
-                deferredPrompt.prompt();
-                deferredPrompt.userChoice.then((result) => {
-                    if (result.outcome === 'accepted') {
-                        showToast('已添加到主屏幕！');
-                    }
-                    deferredPrompt = null;
-                    installPrompt.classList.remove('show');
-                });
-            }
-        }
+        let isReconnecting = false;
+        let reconnectTimer = null;
         
         function connect() {
-            // WebSocket connects to same host
-            const wsUrl = `ws://${window.location.hostname}:9527`;
+            const wsHost = window.location.hostname || '192.168.137.1';
+            const wsUrl = `ws://${wsHost}:9527`;
             
-            setStatus('connecting', '连接中... / Connecting...');
+            if (!isReconnecting) {
+                updateVisualStatus('connecting');
+            }
             
             try {
                 ws = new WebSocket(wsUrl);
                 
-                ws.onopen = function() {
-                    console.log('WebSocket connected');
+                const connectTimeout = setTimeout(() => {
+                    if (!isConnected) ws.close();
+                }, 5000);
+                
+                ws.onopen = () => {
+                    clearTimeout(connectTimeout);
+                    isReconnecting = false;
                 };
                 
-                ws.onmessage = function(event) {
+                ws.onmessage = (event) => {
                     const data = JSON.parse(event.data);
                     
                     if (data.type === 'connected') {
                         isConnected = true;
+                        isReconnecting = false;
                         syncEnabled = data.sync_enabled !== false;
-                        updateSyncState();
-                        sendBtn.disabled = false;
+                        computerName = data.computer_name || '';
+                        
+                        updateVisualStatus('connected');
+                        updateDeviceName();
+                        checkSyncState();
+                        
                     } else if (data.type === 'ack') {
-                        showToast('✓ 已发送！');
+                        showToast('✓ 已发送');
                         textInput.value = '';
-                    } else if (data.type === 'sync_disabled') {
-                        showToast('⚠️ 电脑端同步已关闭');
-                    } else if (data.type === 'sync_state') {
+                    } else if (data.type === 'sync_state' || data.type === 'pong') {
                         syncEnabled = data.sync_enabled !== false;
-                        updateSyncState();
-                    } else if (data.type === 'pong') {
-                        syncEnabled = data.sync_enabled !== false;
-                        updateSyncState();
+                        checkSyncState();
                     }
                 };
                 
-                ws.onclose = function() {
-                    isConnected = false;
-                    syncEnabled = true;
-                    syncWarning.classList.remove('show');
-                    setStatus('disconnected', '连接断开，点击重连 / Tap to reconnect');
-                    sendBtn.disabled = true;
-                    
-                    // Auto reconnect after 3 seconds
-                    setTimeout(connect, 3000);
+                ws.onclose = () => {
+                    clearTimeout(connectTimeout);
+                    handleDisconnect();
                 };
                 
-                ws.onerror = function(err) {
-                    console.error('WebSocket error:', err);
-                    setStatus('disconnected', '连接失败 / Connection failed');
-                };
+                ws.onerror = () => {};
                 
             } catch (e) {
-                setStatus('disconnected', '连接失败 / Connection failed');
+                handleDisconnect();
             }
         }
         
-        function setStatus(type, text) {
-            statusEl.className = 'status ' + type;
-            statusEl.textContent = text;
-            statusEl.onclick = type === 'disconnected' ? connect : null;
+        function handleDisconnect() {
+            isConnected = false;
+            syncEnabled = true;
+            computerName = '';
+            syncAlert.classList.remove('show');
+            sendBtn.disabled = true;
+            deviceNameEl.classList.remove('show');
+            
+            isReconnecting = true;
+            updateVisualStatus('disconnected');
+            
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connect, 3000);
         }
         
-        function updateSyncState() {
+        function updateVisualStatus(state) {
+            statusRow.classList.remove('connected', 'connecting', 'disconnected');
+            
+            if (state === 'connected') {
+                statusRow.classList.add('connected');
+                statusTextEl.textContent = '已连接';
+                sendBtn.disabled = !syncEnabled;
+            } else if (state === 'connecting') {
+                statusRow.classList.add('connecting');
+                statusTextEl.textContent = '正在连接...';
+                sendBtn.disabled = true;
+            } else {
+                statusRow.classList.add('disconnected');
+                statusTextEl.textContent = '未连接';
+                sendBtn.disabled = true;
+            }
+        }
+        
+        function updateDeviceName() {
+            if (computerName) {
+                deviceNameEl.textContent = '设备: ' + computerName;
+                deviceNameEl.classList.add('show');
+            } else {
+                deviceNameEl.classList.remove('show');
+            }
+        }
+        
+        function checkSyncState() {
             if (!isConnected) return;
             
             if (syncEnabled) {
-                setStatus('connected', '✓ 已连接 / Connected');
-                syncWarning.classList.remove('show');
+                syncAlert.classList.remove('show');
                 sendBtn.disabled = false;
+                statusTextEl.textContent = '已连接';
             } else {
-                setStatus('sync-disabled', '⚠️ 已连接但同步已关闭');
-                syncWarning.classList.add('show');
+                syncAlert.classList.add('show');
                 sendBtn.disabled = true;
+                statusTextEl.textContent = '已连接 · 同步关闭';
             }
         }
         
         function sendText() {
             const text = textInput.value.trim();
-            
-            if (!text) {
-                showToast('请输入文字');
-                return;
-            }
-            
-            if (!isConnected || !ws) {
-                showToast('未连接到电脑');
-                return;
-            }
+            if (!text) { showToast('请输入内容'); return; }
+            if (!isConnected || !ws) { showToast('未连接到电脑'); return; }
             
             try {
-                ws.send(JSON.stringify({
-                    type: 'text',
-                    content: text
-                }));
+                ws.send(JSON.stringify({ type: 'text', content: text }));
             } catch (e) {
-                showToast('发送失败');
+                showToast('发送出错');
             }
         }
         
@@ -392,30 +477,30 @@
             textInput.focus();
         }
         
-        async function pasteText() {
-            try {
-                const text = await navigator.clipboard.readText();
-                textInput.value = text;
-                showToast('已粘贴');
-            } catch (e) {
-                showToast('无法访问剪贴板');
-            }
-        }
-        
-        function showToast(message) {
-            toastEl.textContent = message;
+        function showToast(msg) {
+            toastEl.textContent = msg;
             toastEl.classList.add('show');
-            setTimeout(() => {
-                toastEl.classList.remove('show');
-            }, 2000);
+            setTimeout(() => toastEl.classList.remove('show'), 1800);
         }
         
-        // Enter key to send
-        textInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter' && e.ctrlKey) {
-                sendText();
-            }
+        textInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.ctrlKey) sendText();
         });
+        
+        // 页面加载时设置固定高度，之后不再变化
+        function setFixedHeight() {
+            // 使用 visualViewport 获取实际可见区域，或者 innerHeight 回退
+            const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+            const card = document.querySelector('.card');
+            // 固定高度 = 可见视口高度 - 上下边距(32px) - 额外安全边距(2px给浏览器工具栏)
+            const fixedHeight = vh - 32 - 2;
+            card.style.height = fixedHeight + 'px';
+        }
+        
+        // 只在首次加载时设置一次
+        setFixedHeight();
+        
+        window.onload = connect;
     </script>
 </body>
 </html>

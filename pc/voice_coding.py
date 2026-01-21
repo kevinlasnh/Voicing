@@ -13,6 +13,7 @@ import os
 import threading
 import winreg
 import json
+import ctypes
 from typing import Optional
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -25,6 +26,43 @@ import pyautogui
 import pystray
 from pystray import MenuItem as item
 from PIL import Image, ImageDraw
+
+# ============================================================
+# Single Instance Check / 单实例检查
+# ============================================================
+MUTEX_NAME = "VoiceCoding_SingleInstance_Mutex"
+
+def check_single_instance() -> bool:
+    """
+    Check if another instance is already running / 检查是否已有实例在运行
+    Returns True if this is the only instance, False if another is running.
+    """
+    # Try to create a named mutex
+    kernel32 = ctypes.windll.kernel32
+    mutex = kernel32.CreateMutexW(None, False, MUTEX_NAME)
+    last_error = kernel32.GetLastError()
+    
+    # ERROR_ALREADY_EXISTS = 183
+    if last_error == 183:
+        # Another instance is already running
+        kernel32.CloseHandle(mutex)
+        return False
+    
+    # Store mutex handle globally to keep it alive
+    global _mutex_handle
+    _mutex_handle = mutex
+    return True
+
+
+def show_already_running_message():
+    """Show message that app is already running / 显示程序已运行的提示"""
+    ctypes.windll.user32.MessageBoxW(
+        0,
+        "Voice Coding 已经在运行中！\n\n请查看系统托盘图标。\n\nVoice Coding is already running!\nPlease check the system tray.",
+        "Voice Coding",
+        0x40  # MB_ICONINFORMATION
+    )
+
 
 # ============================================================
 # Configuration / 配置
@@ -64,7 +102,67 @@ state = AppState()
 # Network Configuration / 网络配置
 # ============================================================
 # Windows Mobile Hotspot default IP / Windows 移动热点默认 IP
-HOTSPOT_IP = "192.168.137.1"
+DEFAULT_HOTSPOT_IP = "192.168.137.1"
+
+
+def get_hotspot_ip() -> str:
+    """
+    Get the actual hotspot IP address / 获取热点的实际 IP 地址
+    
+    Windows Mobile Hotspot typically uses 192.168.137.1, but this function
+    will try to detect the actual IP by looking for the hotspot adapter.
+    """
+    try:
+        import socket
+        
+        # Method 1: Try to find hotspot adapter by checking common hotspot IP ranges
+        for adapter_ip in get_all_local_ips():
+            # Windows Mobile Hotspot typically uses 192.168.137.x
+            if adapter_ip.startswith("192.168.137."):
+                return adapter_ip
+        
+        # Method 2: Fallback to default
+        return DEFAULT_HOTSPOT_IP
+        
+    except Exception as e:
+        print(f"Error detecting hotspot IP: {e}")
+        return DEFAULT_HOTSPOT_IP
+
+
+def get_all_local_ips() -> list:
+    """Get all local IP addresses / 获取所有本地 IP 地址"""
+    ips = []
+    try:
+        import socket
+        hostname = socket.gethostname()
+        # Get all addresses associated with hostname
+        for info in socket.getaddrinfo(hostname, None, socket.AF_INET):
+            ip = info[4][0]
+            if ip not in ips and not ip.startswith("127."):
+                ips.append(ip)
+    except:
+        pass
+    
+    # Also try to get IPs from network interfaces directly
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['powershell', '-Command', 
+             "Get-NetIPAddress -AddressFamily IPv4 | Select-Object -ExpandProperty IPAddress"],
+            capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW
+        )
+        for line in result.stdout.strip().split('\n'):
+            ip = line.strip()
+            if ip and not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except:
+        pass
+    
+    return ips
+
+
+# Will be set at runtime / 运行时设置
+HOTSPOT_IP = DEFAULT_HOTSPOT_IP
 
 
 # ============================================================
@@ -157,14 +255,21 @@ async def handle_client(websocket):
     
     # Update tray icon when client connects
     if state.tray_icon:
-        update_tray_icon(state.tray_icon)
+        try:
+            update_tray_icon(state.tray_icon)
+        except Exception as e:
+            print(f"Error updating tray icon: {e}")
     
     try:
-        # Send welcome message with current sync state
+        # Get computer name for identification
+        computer_name = socket.gethostname()
+        
+        # Send welcome message with current sync state and computer name
         await websocket.send(json.dumps({
             "type": "connected",
             "message": "Connected to Voice Coding server",
-            "sync_enabled": state.sync_enabled
+            "sync_enabled": state.sync_enabled,
+            "computer_name": computer_name
         }))
         
         async for message in websocket:
@@ -517,6 +622,12 @@ def run_tray():
 # ============================================================
 def main():
     """Main entry point / 主入口"""
+    global HOTSPOT_IP
+    
+    # Detect hotspot IP at startup
+    HOTSPOT_IP = get_hotspot_ip()
+    print(f"Detected hotspot IP: {HOTSPOT_IP}")
+    
     # Start WebSocket server in background thread
     ws_thread = threading.Thread(target=run_server, daemon=True)
     ws_thread.start()
@@ -530,4 +641,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # Check single instance first
+    if not check_single_instance():
+        show_already_running_message()
+        sys.exit(0)
+    
     main()
