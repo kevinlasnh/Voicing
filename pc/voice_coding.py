@@ -14,6 +14,9 @@ import threading
 import winreg
 import json
 from typing import Optional
+from pathlib import Path
+from http.server import HTTPServer, SimpleHTTPRequestHandler
+import mimetypes
 
 # Third-party imports
 import websockets
@@ -28,7 +31,8 @@ from PIL import Image, ImageDraw
 # ============================================================
 APP_NAME = "VoiceCoding"
 APP_VERSION = "1.0.0"
-DEFAULT_PORT = 9527
+WS_PORT = 9527      # WebSocket port
+HTTP_PORT = 9528    # HTTP port for web UI
 STARTUP_REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # Disable pyautogui failsafe (moving to corner won't stop it)
@@ -48,7 +52,8 @@ class AppState:
         self.server = None
         self.tray_icon = None
         self.local_ip = ""
-        self.port = DEFAULT_PORT
+        self.ws_port = WS_PORT
+        self.http_port = HTTP_PORT
         self.connected_clients = set()
         
 state = AppState()
@@ -206,8 +211,8 @@ async def start_server():
     state.local_ip = get_local_ip()
     
     try:
-        async with serve(handle_client, "0.0.0.0", state.port):
-            print(f"Server started at ws://{state.local_ip}:{state.port}")
+        async with serve(handle_client, "0.0.0.0", state.ws_port):
+            print(f"Server started at ws://{state.local_ip}:{state.ws_port}")
             # Keep server running
             while state.running:
                 await asyncio.sleep(1)
@@ -220,6 +225,47 @@ def run_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start_server())
+
+
+# ============================================================
+# HTTP Server for Web UI / HTTP服务器提供网页界面
+# ============================================================
+def get_web_dir() -> Path:
+    """Get the web directory path / 获取网页目录路径"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe
+        return Path(sys._MEIPASS) / 'web'
+    else:
+        # Running as script
+        return Path(__file__).parent / 'web'
+
+
+class WebHandler(SimpleHTTPRequestHandler):
+    """Custom HTTP handler for serving web files / 自定义HTTP处理器"""
+    
+    def __init__(self, *args, **kwargs):
+        self.directory = str(get_web_dir())
+        super().__init__(*args, directory=self.directory, **kwargs)
+    
+    def log_message(self, format, *args):
+        # Suppress HTTP logs
+        pass
+    
+    def end_headers(self):
+        # Add CORS headers for WebSocket
+        self.send_header('Access-Control-Allow-Origin', '*')
+        super().end_headers()
+
+
+def run_http_server():
+    """Run HTTP server for web UI / 运行HTTP服务器提供网页界面"""
+    try:
+        server = HTTPServer(('0.0.0.0', state.http_port), WebHandler)
+        print(f"HTTP server started at http://{state.local_ip}:{state.http_port}")
+        while state.running:
+            server.handle_request()
+    except Exception as e:
+        print(f"HTTP server error: {e}")
 
 
 # ============================================================
@@ -273,14 +319,14 @@ def toggle_startup(icon, menu_item):
 
 def show_ip_address(icon, menu_item):
     """Show IP address notification / 显示IP地址通知"""
-    ip_info = f"{state.local_ip}:{state.port}"
+    web_url = f"http://{state.local_ip}:{state.http_port}"
     # Copy to clipboard
     try:
         import pyperclip
-        pyperclip.copy(ip_info)
-        icon.notify(f"IP: {ip_info}\n(Copied to clipboard)", "Voice Coding")
+        pyperclip.copy(web_url)
+        icon.notify(f"手机浏览器访问:\n{web_url}\n(已复制)", "Voice Coding")
     except:
-        icon.notify(f"IP: {ip_info}", "Voice Coding")
+        icon.notify(f"手机浏览器访问:\n{web_url}", "Voice Coding")
 
 
 def quit_app(icon, menu_item):
@@ -293,10 +339,10 @@ def update_tray_icon(icon):
     """Update tray icon based on state / 根据状态更新托盘图标"""
     if state.sync_enabled:
         icon.icon = create_icon_active()
-        icon.title = f"Voice Coding - Active\n{state.local_ip}:{state.port}"
+        icon.title = f"Voice Coding - Active\nhttp://{state.local_ip}:{state.http_port}"
     else:
         icon.icon = create_icon_paused()
-        icon.title = f"Voice Coding - Paused\n{state.local_ip}:{state.port}"
+        icon.title = f"Voice Coding - Paused\nhttp://{state.local_ip}:{state.http_port}"
 
 
 def get_sync_text(item):
@@ -338,14 +384,14 @@ def run_tray():
     icon = pystray.Icon(
         APP_NAME,
         create_icon_active(),
-        f"Voice Coding\n{state.local_ip}:{state.port}",
+        f"Voice Coding\nhttp://{state.local_ip}:{state.http_port}",
         menu=create_menu()
     )
     state.tray_icon = icon
     
     # Show notification on start
     icon.run_detached()
-    icon.notify(f"Server started!\nIP: {state.local_ip}:{state.port}", "Voice Coding")
+    icon.notify(f"已启动！手机浏览器访问:\nhttp://{state.local_ip}:{state.http_port}", "Voice Coding")
     
     # Keep main thread alive
     while state.running:
@@ -360,9 +406,16 @@ def run_tray():
 # ============================================================
 def main():
     """Main entry point / 主入口"""
+    # Get local IP
+    state.local_ip = get_local_ip()
+    
     # Start WebSocket server in background thread
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
+    ws_thread = threading.Thread(target=run_server, daemon=True)
+    ws_thread.start()
+    
+    # Start HTTP server in background thread
+    http_thread = threading.Thread(target=run_http_server, daemon=True)
+    http_thread.start()
     
     # Run tray icon in main thread
     run_tray()

@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#4CAF50">
+    <title>Voice Coding</title>
+    <link rel="manifest" href="/manifest.json">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #4CAF50;
+            margin-bottom: 8px;
+            font-size: 28px;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 24px;
+            font-size: 14px;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }
+        
+        .status.connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        
+        .status.disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .status.connecting {
+            background: #fff3e0;
+            color: #ef6c00;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 200px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 18px;
+            resize: none;
+            margin-bottom: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #4CAF50;
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+        
+        button {
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.1s, opacity 0.2s;
+        }
+        
+        button:active {
+            transform: scale(0.98);
+        }
+        
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .btn-clear {
+            background: #f5f5f5;
+            color: #666;
+        }
+        
+        .btn-paste {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        
+        .btn-send {
+            grid-column: span 2;
+            background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+            color: white;
+            padding: 20px;
+            font-size: 20px;
+        }
+        
+        .btn-send:disabled {
+            background: #ccc;
+        }
+        
+        .tip {
+            text-align: center;
+            color: #888;
+            font-size: 12px;
+            margin-top: 16px;
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 1000;
+        }
+        
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        /* Install prompt */
+        .install-prompt {
+            background: #fff3e0;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: none;
+        }
+        
+        .install-prompt.show {
+            display: block;
+        }
+        
+        .install-btn {
+            background: #ff9800;
+            color: white;
+            width: 100%;
+            margin-top: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⌨️ Voice Coding</h1>
+        <p class="subtitle">语音编程 - 手机输入，电脑显示</p>
+        
+        <div class="install-prompt" id="installPrompt">
+            <strong>💡 添加到主屏幕</strong>
+            <p style="font-size:12px;color:#666;margin-top:4px;">获得更好的使用体验</p>
+            <button class="btn-clear install-btn" onclick="installPWA()">添加到主屏幕</button>
+        </div>
+        
+        <div class="status disconnected" id="status">
+            未连接 / Disconnected
+        </div>
+        
+        <textarea 
+            id="textInput" 
+            placeholder="在这里输入文字，或使用语音输入...&#10;Type here or use voice input..."
+        ></textarea>
+        
+        <div class="buttons">
+            <button class="btn-clear" onclick="clearText()">🗑️ 清空</button>
+            <button class="btn-paste" onclick="pasteText()">📋 粘贴</button>
+            <button class="btn-send" id="sendBtn" onclick="sendText()" disabled>
+                📤 发送到电脑 / Send
+            </button>
+        </div>
+        
+        <p class="tip">💡 提示：使用手机键盘的语音输入功能，说话即可输入文字！</p>
+    </div>
+    
+    <div class="toast" id="toast"></div>
+
+    <script>
+        let ws = null;
+        let isConnected = false;
+        let deferredPrompt = null;
+        
+        const statusEl = document.getElementById('status');
+        const textInput = document.getElementById('textInput');
+        const sendBtn = document.getElementById('sendBtn');
+        const toastEl = document.getElementById('toast');
+        const installPrompt = document.getElementById('installPrompt');
+        
+        // Auto-connect on load
+        window.onload = function() {
+            connect();
+        };
+        
+        // PWA install prompt
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            installPrompt.classList.add('show');
+        });
+        
+        function installPWA() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((result) => {
+                    if (result.outcome === 'accepted') {
+                        showToast('已添加到主屏幕！');
+                    }
+                    deferredPrompt = null;
+                    installPrompt.classList.remove('show');
+                });
+            }
+        }
+        
+        function connect() {
+            // WebSocket connects to same host
+            const wsUrl = `ws://${window.location.hostname}:9527`;
+            
+            setStatus('connecting', '连接中... / Connecting...');
+            
+            try {
+                ws = new WebSocket(wsUrl);
+                
+                ws.onopen = function() {
+                    console.log('WebSocket connected');
+                };
+                
+                ws.onmessage = function(event) {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'connected') {
+                        isConnected = true;
+                        setStatus('connected', '✓ 已连接 / Connected');
+                        sendBtn.disabled = false;
+                    } else if (data.type === 'ack') {
+                        showToast('✓ 已发送！');
+                        textInput.value = '';
+                    }
+                };
+                
+                ws.onclose = function() {
+                    isConnected = false;
+                    setStatus('disconnected', '连接断开，点击重连 / Tap to reconnect');
+                    sendBtn.disabled = true;
+                    
+                    // Auto reconnect after 3 seconds
+                    setTimeout(connect, 3000);
+                };
+                
+                ws.onerror = function(err) {
+                    console.error('WebSocket error:', err);
+                    setStatus('disconnected', '连接失败 / Connection failed');
+                };
+                
+            } catch (e) {
+                setStatus('disconnected', '连接失败 / Connection failed');
+            }
+        }
+        
+        function setStatus(type, text) {
+            statusEl.className = 'status ' + type;
+            statusEl.textContent = text;
+            statusEl.onclick = type === 'disconnected' ? connect : null;
+        }
+        
+        function sendText() {
+            const text = textInput.value.trim();
+            
+            if (!text) {
+                showToast('请输入文字');
+                return;
+            }
+            
+            if (!isConnected || !ws) {
+                showToast('未连接到电脑');
+                return;
+            }
+            
+            try {
+                ws.send(JSON.stringify({
+                    type: 'text',
+                    content: text
+                }));
+            } catch (e) {
+                showToast('发送失败');
+            }
+        }
+        
+        function clearText() {
+            textInput.value = '';
+            textInput.focus();
+        }
+        
+        async function pasteText() {
+            try {
+                const text = await navigator.clipboard.readText();
+                textInput.value = text;
+                showToast('已粘贴');
+            } catch (e) {
+                showToast('无法访问剪贴板');
+            }
+        }
+        
+        function showToast(message) {
+            toastEl.textContent = message;
+            toastEl.classList.add('show');
+            setTimeout(() => {
+                toastEl.classList.remove('show');
+            }, 2000);
+        }
+        
+        // Enter key to send
+        textInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                sendText();
+            }
+        });
+    </script>
+</body>
+</html>

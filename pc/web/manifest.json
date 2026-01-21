@@ -1,0 +1,18 @@
+{
+    "name": "Voice Coding",
+    "short_name": "VoiceCoding",
+    "description": "手机输入，电脑显示 - Phone to PC text bridge",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#667eea",
+    "theme_color": "#4CAF50",
+    "orientation": "portrait",
+    "icons": [
+        {
+            "src": "/icon.svg",
+            "sizes": "any",
+            "type": "image/svg+xml",
+            "purpose": "any maskable"
+        }
+    ]
+}

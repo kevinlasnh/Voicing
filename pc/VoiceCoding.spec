@@ -4,7 +4,7 @@ a = Analysis(
     ['voice_coding.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('web', 'web')],  # Include web folder
     hiddenimports=[
         'pystray._win32',
         'PIL.Image',
