@@ -372,8 +372,9 @@ class _MainPageState extends State<MainPage> {
       child: TextField(
         controller: _textController,
         focusNode: _focusNode,
+        minLines: 5,
         maxLines: null,
-        expands: true,
+        textAlignVertical: TextAlignVertical.top,
         decoration: const InputDecoration(
           hintText: '输入文字或使用语音...',
           border: InputBorder.none,
