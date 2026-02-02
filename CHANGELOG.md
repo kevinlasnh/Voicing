@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-02-02
+
+### Added / 新增
+- 📄 **CLAUDE.md** - 开发规范文档
+
+### Changed / 变更
+- ✨ **输入框优化** - 文字靠上对齐，5行最小高度
+- 🧹 **仓库清理** - 移除 IDE 文件和生成产物
+- ⚙️ **Gradle 配置** - 升级到 8.11.1，配置代理支持
+
+### Fixed / 修复
+- 🐛 修复 Dart 编译错误（Uri.parse 和 FocusNode）
+- 🐛 配置 Java 21 解决 Gradle 兼容性问题
+
+---
+
 ## [1.3.0] - 2026-02-02
 
 ### Added / 新增
