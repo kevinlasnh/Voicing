@@ -62,6 +62,7 @@ class MainPage extends StatefulWidget {
 class _MainPageState extends State<MainPage> {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
 
   WebSocketChannel? _channel;
   ConnectionStatus _status = ConnectionStatus.disconnected;
@@ -83,6 +84,7 @@ class _MainPageState extends State<MainPage> {
     _channel?.sink.close();
     _textController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -91,7 +93,7 @@ class _MainPageState extends State<MainPage> {
 
     try {
       _channel = WebSocketChannel.connect(
-        'ws://$_serverIp:$_serverPort',
+        Uri.parse('ws://$_serverIp:$_serverPort'),
       );
 
       _channel!.stream.listen(
@@ -369,6 +371,7 @@ class _MainPageState extends State<MainPage> {
       padding: const EdgeInsets.all(14),
       child: TextField(
         controller: _textController,
+        focusNode: _focusNode,
         maxLines: null,
         expands: true,
         decoration: const InputDecoration(
@@ -417,7 +420,7 @@ class _MainPageState extends State<MainPage> {
           child: OutlinedButton(
             onPressed: () {
               _textController.clear();
-              _textController.requestFocus();
+              _focusNode.requestFocus();
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFFECECEC),
