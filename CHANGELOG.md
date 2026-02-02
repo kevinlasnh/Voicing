@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-02-02
+
+### Changed / 变更
+- ✨ **UI 简化** - 移除"发送到电脑"和"清空"按钮
+- ⌨️ **交互优化** - 使用回车键发送文本，底部显示提示
+
+---
+
 ## [1.3.3] - 2026-02-02
 
 ### Fixed / 修复

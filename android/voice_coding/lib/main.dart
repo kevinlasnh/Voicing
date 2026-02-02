@@ -205,8 +205,8 @@ class _MainPageState extends State<MainPage> {
               Expanded(
                 child: _buildInputArea(),
               ),
-              const SizedBox(height: 16),
-              _buildButtons(),
+              const SizedBox(height: 8),
+              _buildEnterHint(),
             ],
           ),
         ),
@@ -386,49 +386,15 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildButtons() {
-    return Column(
-      children: [
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: FilledButton(
-            onPressed: _status == ConnectionStatus.connected && _syncEnabled
-                ? _sendText
-                : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFFD97757),
-              disabledBackgroundColor: const Color(0xFF5C4A42),
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text(
-              '发送到电脑',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
+  Widget _buildEnterHint() {
+    return Center(
+      child: Text(
+        '按回车键发送',
+        style: TextStyle(
+          fontSize: 13,
+          color: Color(0xFF6B6B6B),
         ),
-        const SizedBox(height: 12),
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: OutlinedButton(
-            onPressed: () {
-              _textController.clear();
-            },
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFECECEC),
-              side: const BorderSide(color: Color(0xFF4A4844)),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('清空'),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
