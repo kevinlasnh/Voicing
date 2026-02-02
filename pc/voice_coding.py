@@ -16,6 +16,7 @@ import json
 import ctypes
 import ssl
 import shutil
+import ipaddress
 from typing import Optional
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -386,8 +387,11 @@ def generate_self_signed_cert():
     cert_dir = get_cert_dir()
     cert_file = cert_dir / 'server.pem'
     key_file = cert_dir / 'server.key'
+    combined_cert = cert_dir / 'server_combined.pem'
 
-    # If certificate already exists and is valid, return
+    # Check if any certificate file already exists
+    if combined_cert.exists():
+        return str(combined_cert), None
     if cert_file.exists() and key_file.exists():
         return str(cert_file), str(key_file)
 
@@ -432,11 +436,11 @@ def generate_self_signed_cert():
         ).add_extension(
             x509.SubjectAlternativeName([
                 x509.DNSName("localhost"),
-                x509.IPAddress(socket.inet_aton("127.0.0.1")),
-                x509.IPAddress(socket.inet_aton("192.168.137.1")),
-                x509.IPAddress(socket.inet_aton("192.168.0.1")),
-                x509.IPAddress(socket.inet_aton("192.168.1.1")),
-                x509.IPAddress(socket.inet_aton("10.0.0.1")),
+                x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
+                x509.IPAddress(ipaddress.IPv4Address("192.168.137.1")),
+                x509.IPAddress(ipaddress.IPv4Address("192.168.0.1")),
+                x509.IPAddress(ipaddress.IPv4Address("192.168.1.1")),
+                x509.IPAddress(ipaddress.IPv4Address("10.0.0.1")),
             ]),
             critical=False,
         ).sign(key, hashes.SHA256())
@@ -453,8 +457,17 @@ def generate_self_signed_cert():
                 encryption_algorithm=serialization.NoEncryption()
             ))
 
-        print(f"Certificate generated: {cert_file}")
-        return str(cert_file), str(key_file)
+        # Create combined file for easier use
+        with open(combined_cert, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+            f.write(key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+
+        print(f"Certificate generated: {combined_cert}")
+        return str(combined_cert), None
 
     except ImportError:
         # Fallback: use OpenSSL command if available
@@ -462,10 +475,7 @@ def generate_self_signed_cert():
         try:
             import subprocess
 
-            # Generate a combined PEM file (cert + key)
-            combined_cert = cert_dir / 'server_combined.pem'
-
-            # OpenSSL command to generate self-signed certificate
+            # OpenSSL command to generate self-signed certificate (directly to combined file)
             cmd = [
                 'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
                 '-keyout', str(key_file), '-out', str(cert_file),
@@ -495,27 +505,37 @@ def generate_self_signed_cert():
             print("  pip install cryptography")
             return None, None
 
+    except Exception as e:
+        print(f"Error generating certificate: {e}")
+        import traceback
+        traceback.print_exc()
+        return None, None
+
 
 def run_https_server():
     """Run HTTPS server for web UI / 运行HTTPS服务器提供网页界面"""
-    cert_file, key_file = generate_self_signed_cert()
-
-    if cert_file is None:
-        print("Failed to generate certificate. HTTPS server not started.")
-        print("PWA installation requires HTTPS. Install: pip install cryptography")
-        return
-
     try:
+        cert_file, key_file = generate_self_signed_cert()
+
+        if cert_file is None:
+            print("Failed to generate certificate. HTTPS server not started.")
+            print("PWA installation requires HTTPS. Install: pip install cryptography")
+            return
+
         httpd = HTTPServer(('0.0.0.0', state.https_port), WebHandler)
 
         # Create SSL context
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
+
+        # Load certificate - handle both separate files and combined file
         if key_file:
             # Separate cert and key files
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             context.load_cert_chain(certfile=cert_file, keyfile=key_file)
         else:
-            # Combined PEM file
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            # Combined PEM file - load same file for both (works because it contains both)
+            # Actually, for combined file we just need certfile parameter
             context.load_cert_chain(certfile=cert_file)
 
         # Wrap the socket with SSL
@@ -527,11 +547,13 @@ def run_https_server():
         print(f"  Certificate: {cert_file}")
         print(f"  Note: You'll need to accept the security warning in your browser")
 
-        while state.running:
-            httpd.handle_request()
+        # Use serve_forever for more stable operation
+        httpd.serve_forever()
 
     except Exception as e:
         print(f"HTTPS server error: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 # ============================================================
