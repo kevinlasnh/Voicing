@@ -46,7 +46,8 @@
       "Skill(pc-hot-restart)",
       "Skill(find-skills)",
       "Bash(npx skills find:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git tag:*)"
     ]
   }
 }
