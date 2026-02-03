@@ -390,31 +390,56 @@ async def handle_client(websocket):
                             "message": "Text received and typed"
                         }))
 
+                elif msg_type == "shadow_full_sync":
+                    # 影随模式 1:1 完全同步（全选+粘贴）
+                    if not state.sync_enabled:
+                        continue
+
+                    text = data.get("content", "")
+                    if text is not None:
+                        # 保存当前剪贴板
+                        try:
+                            old_clipboard = pyperclip.paste()
+                        except:
+                            old_clipboard = ""
+
+                        # 复制新文本到剪贴板
+                        pyperclip.copy(text)
+
+                        # 全选 + 粘贴（完全替换）
+                        pyautogui.hotkey('ctrl', 'a')
+                        time.sleep(0.01)
+                        pyautogui.hotkey('ctrl', 'v')
+
+                        # 恢复剪贴板
+                        time.sleep(0.05)
+                        try:
+                            pyperclip.copy(old_clipboard)
+                        except:
+                            pass
+
                 elif msg_type == "shadow_sync":
-                    # 影随模式：实时同步文字变化（追加）
+                    # 影随模式：实时同步文字变化（追加）- 保留兼容
                     if not state.sync_enabled:
                         continue
 
                     text = data.get("content", "")
                     if text:
-                        # 实时输入到光标位置
                         type_text(text)
 
                 elif msg_type == "shadow_replace":
-                    # 影随模式：替换文本（先删除旧的，再输入新的）
+                    # 影随模式：替换文本 - 保留兼容
                     if not state.sync_enabled:
                         continue
 
                     delete_length = data.get("delete_length", 0)
                     text = data.get("content", "")
 
-                    # 先按退格键删除旧文本
                     if delete_length > 0:
-                        for _ in range(min(delete_length, 100)):  # 限制最大删除数量
+                        for _ in range(min(delete_length, 100)):
                             pyautogui.press('backspace')
-                        time.sleep(0.05)  # 等待删除完成
+                        time.sleep(0.05)
 
-                    # 再输入新文本
                     if text:
                         type_text(text)
 

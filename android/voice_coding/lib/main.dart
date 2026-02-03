@@ -76,7 +76,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   bool _showMenu = false;  // 是否显示下拉菜单
   bool _shadowModeEnabled = false;  // 影随模式开关
   Timer? _shadowModeDebounce;  // 影随模式防抖定时器
-  String _lastShadowText = '';  // 影随模式上次的文本（用于计算差量）
   RawDatagramSocket? _udpSocket;  // UDP 监听套接字
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
@@ -278,83 +277,20 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     }
   }
 
-  /// 影随模式：实时同步文字变化到 PC 端
+  /// 影随模式：实时同步文字变化到 PC 端（1:1 完全同步）
   void _onTextChanged(String text) {
     if (!_shadowModeEnabled || _status != ConnectionStatus.connected || !_syncEnabled) {
       return;
     }
 
-    // 计算差量：只发送新增的字符
-    String newText = text;
-    String oldText = _lastShadowText;
-
-    // 如果文本变短了（删除操作），更新记录但不发送
-    if (newText.length < oldText.length) {
-      _lastShadowText = newText;
-      return;
-    }
-
-    // 找出新增加的部分
-    String delta = '';
-    bool isReplacement = false;
-    int replaceLength = 0;
-
-    if (newText.startsWith(oldText)) {
-      // 正常追加：新文本是旧文本的延续
-      delta = newText.substring(oldText.length);
-    } else if (oldText.isNotEmpty && newText.length > oldText.length) {
-      // 文本被替换（如输入法优化）：长度变长，但内容不同
-      // 检查是否有公共前缀
-      int commonPrefix = 0;
-      while (commonPrefix < oldText.length &&
-             commonPrefix < newText.length &&
-             oldText[commonPrefix] == newText[commonPrefix]) {
-        commonPrefix++;
-      }
-
-      if (commonPrefix < oldText.length) {
-        // 有替换发生：从 commonPrefix 位置开始不同
-        replaceLength = oldText.length - commonPrefix;
-        delta = newText.substring(commonPrefix);
-        isReplacement = true;
-      } else {
-        // 没有公共前缀，完全替换
-        replaceLength = oldText.length;
-        delta = newText;
-        isReplacement = true;
-      }
-    } else {
-      // 完全新文本
-      replaceLength = oldText.length;
-      delta = newText;
-      isReplacement = true;
-    }
-
-    if (delta.isEmpty) {
-      return;
-    }
-
-    // 更新上次文本
-    _lastShadowText = newText;
-
-    // 防抖：避免频繁发送，等待 50ms 后再发送
+    // 防抖：避免频繁发送
     _shadowModeDebounce?.cancel();
-    _shadowModeDebounce = Timer(const Duration(milliseconds: 50), () {
+    _shadowModeDebounce = Timer(const Duration(milliseconds: 100), () {
       try {
-        if (isReplacement) {
-          // 替换模式：先删除旧文本，再输入新文本
-          _channel!.sink.add(json.encode({
-            'type': 'shadow_replace',
-            'delete_length': replaceLength,
-            'content': delta,
-          }));
-        } else {
-          // 追加模式：只输入新字符
-          _channel!.sink.add(json.encode({
-            'type': 'shadow_sync',
-            'content': delta,
-          }));
-        }
+        _channel!.sink.add(json.encode({
+          'type': 'shadow_full_sync',
+          'content': text,
+        }));
       } catch (e) {
         print('影随模式同步失败: $e');
       }
