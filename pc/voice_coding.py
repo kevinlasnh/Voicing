@@ -397,26 +397,31 @@ async def handle_client(websocket):
 
                     text = data.get("content", "")
                     if text is not None:
-                        # 保存当前剪贴板
                         try:
-                            old_clipboard = pyperclip.paste()
-                        except:
+                            # 保存当前剪贴板
                             old_clipboard = ""
+                            try:
+                                old_clipboard = pyperclip.paste()
+                            except Exception as e:
+                                logging.warning(f"获取剪贴板失败: {e}")
+                                old_clipboard = ""
 
-                        # 复制新文本到剪贴板
-                        pyperclip.copy(text)
+                            # 复制新文本到剪贴板
+                            pyperclip.copy(text)
 
-                        # 全选 + 粘贴（完全替换）
-                        pyautogui.hotkey('ctrl', 'a')
-                        time.sleep(0.01)
-                        pyautogui.hotkey('ctrl', 'v')
+                            # 全选 + 粘贴（完全替换）
+                            pyautogui.hotkey('ctrl', 'a')
+                            time.sleep(0.01)
+                            pyautogui.hotkey('ctrl', 'v')
 
-                        # 恢复剪贴板
-                        time.sleep(0.05)
-                        try:
-                            pyperclip.copy(old_clipboard)
-                        except:
-                            pass
+                            # 恢复剪贴板
+                            time.sleep(0.05)
+                            try:
+                                pyperclip.copy(old_clipboard)
+                            except Exception as e:
+                                logging.warning(f"恢复剪贴板失败: {e}")
+                        except Exception as e:
+                            logging.error(f"影随模式同步失败: {e}")
 
                 elif msg_type == "shadow_sync":
                     # 影随模式：实时同步文字变化（追加）- 保留兼容
