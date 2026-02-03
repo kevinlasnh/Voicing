@@ -434,81 +434,83 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     final Offset offset = renderBox.localToGlobal(Offset.zero);
     final Size size = renderBox.size;
 
-    return FadeTransition(
-      opacity: _menuFadeAnimation,
-      child: GestureDetector(
-        onTap: () {
-          _menuAnimationController.reverse().then((_) {
-            setState(() => _showMenu = false);
-          });
-        },
-        behavior: HitTestBehavior.translucent,
-        child: Container(
-          color: Colors.black.withOpacity(0.3 * _menuFadeAnimation.value),  // 半透明遮罩
-          child: Stack(
-            children: [
-              // 下拉菜单
-              Positioned(
-                left: offset.dx,
-                top: offset.dy + size.height + 10,  // 按钮下方 + 间距
-                width: size.width,
-                child: AnimatedBuilder(
-                  animation: _menuSlideAnimation,
-                  builder: (context, child) {
-                    return Transform.translate(
-                      offset: Offset(0, -20 * (1 - _menuSlideAnimation.value)),  // 从上往下滑入
-                      child: Opacity(
-                        opacity: _menuSlideAnimation.value,
-                        child: child,
+    return SizedBox.expand(
+      child: FadeTransition(
+        opacity: _menuFadeAnimation,
+        child: GestureDetector(
+          onTap: () {
+            _menuAnimationController.reverse().then((_) {
+              setState(() => _showMenu = false);
+            });
+          },
+          behavior: HitTestBehavior.translucent,
+          child: Container(
+            color: Colors.black.withOpacity(0.5),  // 半透明遮罩
+            child: Stack(
+              children: [
+                // 下拉菜单
+                Positioned(
+                  left: offset.dx,
+                  top: offset.dy + size.height + 10,  // 按钮下方 + 间距
+                  width: size.width,
+                  child: AnimatedBuilder(
+                    animation: _menuSlideAnimation,
+                    builder: (context, child) {
+                      return Transform.translate(
+                        offset: Offset(0, -20 * (1 - _menuSlideAnimation.value)),  // 从上往下滑入
+                        child: Opacity(
+                          opacity: _menuSlideAnimation.value,
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 刷新连接
+                          _buildMenuItem(
+                            icon: Icons.refresh,
+                            text: '刷新连接',
+                            onTap: () {
+                              _menuAnimationController.reverse().then((_) {
+                                setState(() => _showMenu = false);
+                              });
+                              _refreshConnection();
+                            },
+                          ),
+                          // 间距
+                          const SizedBox(height: 10),
+                          // 撤回上次输入
+                          _buildMenuItem(
+                            icon: Icons.undo,
+                            text: '撤回上次输入',
+                            onTap: () {
+                              _menuAnimationController.reverse().then((_) {
+                                setState(() => _showMenu = false);
+                              });
+                              _recallLastText();
+                            },
+                          ),
+                          // 间距
+                          const SizedBox(height: 10),
+                          // 影随模式开关
+                          _buildSwitchMenuItem(
+                            icon: Icons.sync,
+                            text: '影随模式',
+                            value: _shadowModeEnabled,
+                            onChanged: (value) {
+                              setState(() => _shadowModeEnabled = value);
+                            },
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                  child: Material(
-                    color: Colors.transparent,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 刷新连接
-                        _buildMenuItem(
-                          icon: Icons.refresh,
-                          text: '刷新连接',
-                          onTap: () {
-                            _menuAnimationController.reverse().then((_) {
-                              setState(() => _showMenu = false);
-                            });
-                            _refreshConnection();
-                          },
-                        ),
-                        // 间距
-                        const SizedBox(height: 10),
-                        // 撤回上次输入
-                        _buildMenuItem(
-                          icon: Icons.undo,
-                          text: '撤回上次输入',
-                          onTap: () {
-                            _menuAnimationController.reverse().then((_) {
-                              setState(() => _showMenu = false);
-                            });
-                            _recallLastText();
-                          },
-                        ),
-                        // 间距
-                        const SizedBox(height: 10),
-                        // 影随模式开关
-                        _buildSwitchMenuItem(
-                          icon: Icons.sync,
-                          text: '影随模式',
-                          value: _shadowModeEnabled,
-                          onChanged: (value) {
-                            setState(() => _shadowModeEnabled = value);
-                          },
-                        ),
-                      ],
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
