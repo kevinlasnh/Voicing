@@ -73,3 +73,67 @@ flutter run
 - 正文: 16px
 - 状态文字: 15px, fontWeight 600
 - 提示文字: 13px
+
+---
+
+## 当前开发状态 (2026-02-03)
+
+### ✅ 已完成功能
+
+#### PC 端托盘菜单 (v1.8.0)
+- **Windows 11 Fluent Design 风格** - 完整实现
+- **悬停高亮效果** - 使用 `paintEvent` + `WA_TransparentForMouseEvents` 解决
+- **日志系统** - 日志文件位于 `%APPDATA%\VoiceCoding\logs\`
+- **菜单项**:
+  - 📡 同步输入（开关）
+  - 🚀 开机自启（开关）
+  - 📋 打开日志
+  - 🚪 退出应用
+
+#### 关键技术实现
+
+**PyQt5 悬停高亮解决方案** (重要！):
+```python
+# 问题：PyQt5 自定义 QWidget 的 :hover CSS 伪状态不工作
+# 解决方案：
+
+# 1. 使用 paintEvent 手动绘制背景
+def paintEvent(self, event):
+    painter = QPainter(self)
+    if self._hovered:
+        painter.setBrush(QColor(255, 255, 255, 15))
+    painter.drawRoundedRect(rect, 4, 4)
+
+# 2. 子控件必须设置鼠标事件穿透
+self.icon_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+self.text_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+# 3. 使用 enterEvent/leaveEvent 追踪悬停状态
+def enterEvent(self, event):
+    self._hovered = True
+    self.update()
+```
+
+### 📁 关键文件位置
+
+| 文件 | 说明 |
+|------|------|
+| `pc/voice_coding.py` | PC 端主程序 |
+| `pc/voice_coding.py:695-800` | `MenuItemWidget` 类 - 菜单项组件 |
+| `pc/voice_coding.py:802-970` | `ModernMenuWidget` 类 - 菜单容器 |
+| `pc/voice_coding.py:972-1070` | `ModernTrayIcon` 类 - 托盘图标 |
+| `pc/voice_coding.py:138-170` | `setup_logging()` 日志配置 |
+
+### 🔧 开发工具
+
+**PC 热重启命令**:
+```powershell
+powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_pc_dev.ps1"
+```
+
+### ⚠️ 注意事项
+
+1. **不要使用 QSS :hover** - PyQt5 自定义 QWidget 不支持
+2. **子控件必须穿透鼠标事件** - 否则 enterEvent/leaveEvent 不会触发
+3. **使用 state.tray_icon** - 不要传 None 给 update_tray_icon_pyqt()
+

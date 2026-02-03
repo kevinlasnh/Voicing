@@ -59,9 +59,10 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
+class _MainPageState extends State<MainPage> with WidgetsBindingObserver, TickerProviderStateMixin {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final GlobalKey _menuButtonKey = GlobalKey();  // 用于获取按钮位置
 
   WebSocketChannel? _channel;
   ConnectionStatus _status = ConnectionStatus.disconnected;
@@ -70,12 +71,33 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   Timer? _reconnectTimer;
   String _serverIp = '192.168.137.1';
   final int _serverPort = 9527;
+  String _lastSentText = '';  // 保存上次发送的文本
+  bool _showMenu = false;  // 是否显示下拉菜单
+
+  // 动画相关
+  late AnimationController _menuAnimationController;
+  late Animation<double> _menuSlideAnimation;
+  late Animation<double> _menuFadeAnimation;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _connect();
+
+    // 初始化菜单动画
+    _menuAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _menuSlideAnimation = CurvedAnimation(
+      parent: _menuAnimationController,
+      curve: Curves.easeOutCubic,
+    );
+    _menuFadeAnimation = CurvedAnimation(
+      parent: _menuAnimationController,
+      curve: Curves.easeOut,
+    );
   }
 
   @override
@@ -85,6 +107,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     _channel?.sink.close();
     _textController.dispose();
     _scrollController.dispose();
+    _menuAnimationController.dispose();
     super.dispose();
   }
 
@@ -173,6 +196,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
       return;
     }
 
+    // 保存文本用于撤回
+    _lastSentText = text;
+
     try {
       _channel!.sink.add(json.encode({
         'type': 'text',
@@ -186,21 +212,28 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              _buildHeader(),
-              const SizedBox(height: 16),
-              Expanded(
-                child: _buildInputArea(),
+      body: Stack(
+        children: [
+          // 主界面
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  SizedBox(height: 13.5),
+                  Expanded(
+                    child: _buildInputArea(),
+                  ),
+                  const SizedBox(height: 16),
+                  _buildEnterHint(),
+                ],
               ),
-              const SizedBox(height: 16),
-              _buildEnterHint(),
-            ],
+            ),
           ),
-        ),
+          // 下拉菜单（最顶层）
+          if (_showMenu) _buildDropdownMenuOverlay(),
+        ],
       ),
     );
   }
@@ -245,37 +278,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
             ),
           ),
         ),
-        const SizedBox(width: 12),
-        // 右侧：刷新按钮
+        SizedBox(width: 12.5),
+        // 右侧：更多菜单按钮
         Expanded(
-          child: GestureDetector(
-            onTap: _refreshConnection,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3D3B37),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.refresh,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    '刷新连接',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          child: _buildMenuButton(),
         ),
       ],
     );
@@ -285,9 +291,189 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
     // 关闭现有连接
     _reconnectTimer?.cancel();
     _channel?.sink.close();
-    
+
     // 重新连接
     _connect();
+  }
+
+  void _recallLastText() {
+    // 从本地恢复上次发送的文本
+    if (_lastSentText.isNotEmpty) {
+      _textController.text = _lastSentText;
+      // 移动光标到末尾
+      _textController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _lastSentText.length),
+      );
+    }
+  }
+
+  Widget _buildMenuButton() {
+    return GestureDetector(
+      key: _menuButtonKey,
+      onTap: () {
+        if (_showMenu) {
+          // 关闭菜单
+          _menuAnimationController.reverse().then((_) {
+            setState(() => _showMenu = false);
+          });
+        } else {
+          // 打开菜单
+          setState(() => _showMenu = true);
+          _menuAnimationController.forward();
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3D3B37),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            // 箭头图标（带旋转动画）
+            AnimatedBuilder(
+              animation: _menuAnimationController,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: _menuAnimationController.value * 1.5708,  // 90度 = π/2 ≈ 1.5708
+                  child: const Icon(
+                    Icons.chevron_right,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                );
+              },
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              '更多功能操作',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDropdownMenuOverlay() {
+    // 获取按钮位置和大小
+    final RenderBox? renderBox =
+        _menuButtonKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return const SizedBox.shrink();
+
+    final Offset offset = renderBox.localToGlobal(Offset.zero);
+    final Size size = renderBox.size;
+
+    return FadeTransition(
+      opacity: _menuFadeAnimation,
+      child: GestureDetector(
+        onTap: () {
+          _menuAnimationController.reverse().then((_) {
+            setState(() => _showMenu = false);
+          });
+        },
+        behavior: HitTestBehavior.translucent,
+        child: Container(
+          color: Colors.black.withOpacity(0.3 * _menuFadeAnimation.value),  // 半透明遮罩
+          child: Stack(
+            children: [
+              // 下拉菜单
+              Positioned(
+                left: offset.dx,
+                top: offset.dy + size.height + 10,  // 按钮下方 + 间距
+                width: size.width,
+                child: AnimatedBuilder(
+                  animation: _menuSlideAnimation,
+                  builder: (context, child) {
+                    return Transform.translate(
+                      offset: Offset(0, -20 * (1 - _menuSlideAnimation.value)),  // 从上往下滑入
+                      child: Opacity(
+                        opacity: _menuSlideAnimation.value,
+                        child: child,
+                      ),
+                    );
+                  },
+                  child: Material(
+                    color: Colors.transparent,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 刷新连接
+                        _buildMenuItem(
+                          icon: Icons.refresh,
+                          text: '刷新连接',
+                          onTap: () {
+                            _menuAnimationController.reverse().then((_) {
+                              setState(() => _showMenu = false);
+                            });
+                            _refreshConnection();
+                          },
+                        ),
+                        // 间距
+                        const SizedBox(height: 10),
+                        // 撤回上次输入
+                        _buildMenuItem(
+                          icon: Icons.undo,
+                          text: '撤回上次输入',
+                          onTap: () {
+                            _menuAnimationController.reverse().then((_) {
+                              setState(() => _showMenu = false);
+                            });
+                            _recallLastText();
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMenuItem({
+    required IconData icon,
+    required String text,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3D3B37),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildStatusDot(Color color) {

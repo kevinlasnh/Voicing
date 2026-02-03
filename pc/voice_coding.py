@@ -17,10 +17,22 @@ import ctypes
 import ssl
 import shutil
 import ipaddress
+import logging
+import subprocess
+from datetime import datetime
 from typing import Optional
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 import mimetypes
+
+# PyQt5 for modern tray menu
+from PyQt5.QtWidgets import (
+    QApplication, QSystemTrayIcon, QMenu, QAction,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+    QPushButton, QStyle, QGraphicsDropShadowEffect
+)
+from PyQt5.QtCore import Qt, QTimer, QPoint, pyqtSignal
+from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QCursor, QPen, QBrush
 
 # Third-party imports
 import websockets
@@ -115,8 +127,38 @@ class AppState:
         self.ngrok_tunnel = None
         self.ngrok_url = ""
         self.use_ngrok = False  # Whether to use ngrok URL for display
+        self.log_file = None  # 日志文件路径
 
 state = AppState()
+
+
+# ============================================================
+# Logging Setup / 日志配置
+# ============================================================
+def setup_logging():
+    """设置日志系统"""
+    # 日志文件保存在用户数据目录
+    log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'VoiceCoding' / 'logs'
+    log_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 使用日期作为文件名
+    from datetime import datetime
+    log_file = log_dir / f"voice_coding_{datetime.now().strftime('%Y%m%d')}.log"
+    state.log_file = log_file
+    
+    # 配置 logging
+    import logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout)  # 同时输出到控制台
+        ]
+    )
+    logging.info(f"=== Voice Coding 启动 ===")
+    logging.info(f"日志文件: {log_file}")
 
 
 # ============================================================
@@ -680,7 +722,396 @@ def run_http_server():
 
 
 # ============================================================
-# System Tray / 系统托盘
+# PyQt5 Modern Tray Menu / PyQt5 现代托盘菜单
+# ============================================================
+
+class MenuItemWidget(QWidget):
+    """单个菜单项 - Windows 11 Fluent Design 风格"""
+
+    clicked = pyqtSignal()
+
+    def __init__(self, icon_text, text, has_toggle=False, is_checked=False, parent=None):
+        super().__init__(parent)
+        self.has_toggle = has_toggle
+        self.is_checked = is_checked
+        self._hovered = False
+        self.setFixedHeight(36)  # Windows 11 标准高度
+        self.setMouseTracking(True)
+        self.setCursor(Qt.PointingHandCursor)
+
+        self.setup_ui(icon_text, text, has_toggle, is_checked)
+
+    def setup_ui(self, icon_text, text, has_toggle, is_checked):
+        """设置 UI"""
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 0, 12, 0)  # 更宽的水平内边距
+        layout.setSpacing(10)
+
+        # 图标 - 使用白色
+        self.icon_label = QLabel(icon_text)
+        self.icon_label.setFixedWidth(20)
+        self.icon_label.setStyleSheet("font-size: 14px; background: transparent; color: #FFFFFF;")
+        self.icon_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        # 文字 - 使用 Segoe UI 字体（Windows 11 默认字体）
+        self.text_label = QLabel(text)
+        self.text_label.setStyleSheet("""
+            QLabel {
+                color: #FFFFFF;
+                font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+                font-size: 13px;
+                font-weight: 400;
+                background: transparent;
+            }
+        """)
+        self.text_label.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.text_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+
+        layout.addWidget(self.icon_label)
+        layout.addWidget(self.text_label)
+        layout.addStretch()
+
+        # 开关项 - 显示简洁的状态
+        if has_toggle:
+            self.status_label = QLabel()
+            self.status_label.setFixedWidth(24)
+            self.status_label.setAttribute(Qt.WA_TransparentForMouseEvents)
+            self.update_toggle_status(is_checked)
+            layout.addWidget(self.status_label)
+
+    def paintEvent(self, event):
+        """自定义绘制背景 - Windows 11 风格"""
+        from PyQt5.QtGui import QPainter, QColor
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # 绘制圆角矩形背景
+        rect = self.rect().adjusted(4, 2, -4, -2)  # 内缩，留出边距
+
+        if self._hovered:
+            # 悬停状态 - 使用更亮的高亮色
+            painter.setBrush(QColor(255, 255, 255, 15))  # 白色 6% 透明度
+        else:
+            painter.setBrush(Qt.transparent)
+
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(rect, 4, 4)  # 4px 圆角
+
+    def enterEvent(self, event):
+        """鼠标进入 - 显示高亮"""
+        self._hovered = True
+        self.update()
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        """鼠标离开 - 恢复正常"""
+        self._hovered = False
+        self.update()
+        super().leaveEvent(event)
+
+    def update_toggle_status(self, checked):
+        """更新开关状态 - 使用现代化的开关指示器"""
+        self.is_checked = checked
+        if checked:
+            self.status_label.setText("✓")
+            self.status_label.setStyleSheet("""
+                QLabel {
+                    color: #60CDFF;
+                    font-family: 'Segoe UI', 'Microsoft YaHei UI', sans-serif;
+                    font-size: 14px;
+                    font-weight: bold;
+                    background: transparent;
+                }
+            """)
+        else:
+            self.status_label.setText("")
+            self.status_label.setStyleSheet("background: transparent;")
+
+    def mousePressEvent(self, event):
+        """鼠标点击事件"""
+        self.clicked.emit()
+        super().mousePressEvent(event)
+
+
+class ModernMenuWidget(QWidget):
+    """Windows 11 Fluent Design 风格的自定义菜单窗口"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.Popup | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+
+        # 动画相关
+        self.animation_step = 0
+        self.animation_max_steps = 10  # 约 160ms - 更快更流畅
+        self.animation_timer = QTimer()
+        self.animation_timer.timeout.connect(self.update_animation)
+
+        self.setup_ui()
+
+    def setup_ui(self):
+        """设置 UI - Windows 11 Fluent Design"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)  # 阴影边距
+        layout.setSpacing(0)
+
+        # 主容器 - 使用深色半透明背景
+        self.container = QWidget()
+        self.container.setObjectName("menuContainer")
+        self.container.setStyleSheet("""
+            #menuContainer {
+                background-color: rgba(32, 32, 32, 245);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+                border-radius: 8px;
+            }
+        """)
+        container_layout = QVBoxLayout(self.container)
+        container_layout.setContentsMargins(4, 6, 4, 6)  # 内边距
+        container_layout.setSpacing(2)  # 项间距
+
+        # 同步输入
+        self.sync_btn = MenuItemWidget("📡", "同步输入", has_toggle=True, is_checked=True)
+        self.sync_btn.clicked.connect(self.toggle_sync)
+        container_layout.addWidget(self.sync_btn)
+
+        # 开机自启
+        self.startup_btn = MenuItemWidget("🚀", "开机自启", has_toggle=True, is_checked=False)
+        self.startup_btn.clicked.connect(self.toggle_startup)
+        container_layout.addWidget(self.startup_btn)
+
+        # 分隔线
+        separator1 = QWidget()
+        separator1.setFixedHeight(1)
+        separator1.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
+        container_layout.addWidget(separator1)
+
+        # 打开日志
+        log_btn = MenuItemWidget("📋", "打开日志")
+        log_btn.clicked.connect(self.open_log)
+        container_layout.addWidget(log_btn)
+
+        # 分隔线
+        separator2 = QWidget()
+        separator2.setFixedHeight(1)
+        separator2.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
+        container_layout.addWidget(separator2)
+
+        # 退出应用
+        quit_btn = MenuItemWidget("🚪", "退出应用")
+        quit_btn.clicked.connect(self.quit_app)
+        container_layout.addWidget(quit_btn)
+
+        layout.addWidget(self.container)
+
+        # 设置阴影
+        self.set_shadow_effect()
+
+        # 更新初始状态
+        QTimer.singleShot(0, self.update_state)
+
+    def set_shadow_effect(self):
+        """设置阴影效果 - Windows 11 风格的柔和阴影"""
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(24)
+        shadow.setColor(QColor(0, 0, 0, 100))
+        shadow.setOffset(0, 4)
+        self.container.setGraphicsEffect(shadow)
+
+    def show_at_position(self, tray_pos):
+        """在指定位置显示菜单（菜单左下角对齐鼠标点击位置）"""
+        # 获取菜单尺寸
+        self.adjustSize()
+        menu_height = self.height()
+
+        # 菜单左下角对齐鼠标点击位置
+        x = tray_pos.x() - 8  # 向左偏移一点，让菜单边缘靠近鼠标
+        y = tray_pos.y() - menu_height  # 菜单底部对齐鼠标位置
+
+        self.target_y = y
+        self.move(x, y)
+
+        # 从下往上滑出的动画
+        self.animation_step = 0
+        self.move(x, y + 16)  # 从下方开始
+        self.setWindowOpacity(0.0)
+        self.show()
+        self.animation_timer.start(16)  # 60fps
+
+    def update_animation(self):
+        """更新滑入动画"""
+        self.animation_step += 1
+
+        if self.animation_step >= self.animation_max_steps:
+            # 动画结束
+            self.animation_timer.stop()
+            self.move(self.pos().x(), self.target_y)
+            self.setWindowOpacity(1.0)
+        else:
+            # 缓动
+            progress = self.animation_step / self.animation_max_steps
+            eased = 1 - pow(1 - progress, 2)  # easeOutQuad
+
+            # 从下往上滑
+            current_y = self.target_y + 16 * (1 - eased)
+            self.move(self.pos().x(), int(current_y))
+
+            # 淡入
+            self.setWindowOpacity(min(1.0, eased * 1.5))
+
+    def update_state(self):
+        """更新菜单状态"""
+        self.sync_btn.update_toggle_status(state.sync_enabled)
+        self.startup_btn.update_toggle_status(is_startup_enabled())
+
+    def toggle_sync(self):
+        """切换同步状态"""
+        new_state = not self.sync_btn.is_checked
+        state.sync_enabled = new_state
+        self.sync_btn.update_toggle_status(new_state)
+        # 更新托盘图标
+        if state.tray_icon:
+            update_tray_icon_pyqt(state.tray_icon)
+        self.close_with_animation()
+        # 广播同步状态
+        def send_sync_state():
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(broadcast_sync_state())
+            loop.close()
+        threading.Thread(target=send_sync_state, daemon=True).start()
+
+    def toggle_startup(self):
+        """切换开机自启"""
+        new_state = not self.startup_btn.is_checked
+        set_startup_enabled(new_state)
+        self.startup_btn.update_toggle_status(new_state)
+        self.close_with_animation()
+
+    def open_log(self):
+        """打开日志文件"""
+        self.close_with_animation()
+        if state.log_file and state.log_file.exists():
+            # 用默认文本编辑器打开日志文件
+            subprocess.Popen(['notepad.exe', str(state.log_file)])
+        else:
+            # 打开日志目录
+            log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'VoiceCoding' / 'logs'
+            log_dir.mkdir(parents=True, exist_ok=True)
+            os.startfile(str(log_dir))
+
+    def quit_app(self):
+        """退出应用"""
+        state.running = False
+        if state.ngrok_tunnel:
+            stop_ngrok_tunnel()
+        QApplication.quit()
+
+    def close_with_animation(self):
+        """关闭动画"""
+        self.animation_timer.stop()
+        self.close()
+
+
+class ModernTrayIcon(QSystemTrayIcon):
+    """现代托盘图标"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.menu_widget = None
+        self.setup_icon()
+        self.setup_menu()
+
+    def setup_icon(self):
+        """设置图标"""
+        # 使用 PIL 创建图标并转换为 QPixmap
+        from PIL import Image, ImageDraw
+        import io
+
+        size = 32
+        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+
+        # 蓝色背景圆
+        draw.ellipse([2, 2, size-2, size-2], fill='#2196F3')
+
+        # 白色 "V"
+        draw.polygon([
+            (8, 10), (16, 22), (24, 10),
+            (21, 10), (16, 18), (11, 10)
+        ], fill='white')
+
+        # 转换为 QPixmap
+        byte_data = io.BytesIO()
+        image.save(byte_data, format='PNG')
+        byte_data.seek(0)
+        qpix = QPixmap()
+        qpix.loadFromData(byte_data.getvalue())
+
+        self.setIcon(QIcon(qpix))
+
+    def setup_menu(self):
+        """设置菜单"""
+        # 不使用 QMenu，而是自定义菜单
+        self.activated.connect(self.on_tray_activated)
+
+    def on_tray_activated(self, reason):
+        """托盘图标激活事件"""
+        if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.Context:
+            # 左键或右键点击显示自定义菜单
+            self.show_custom_menu()
+
+    def show_custom_menu(self):
+        """显示自定义菜单"""
+        if self.menu_widget is None:
+            self.menu_widget = ModernMenuWidget()
+
+        # 更新状态
+        self.menu_widget.update_state()
+
+        # 获取托盘图标位置并显示菜单（带动画）
+        pos = QCursor.pos()
+        self.menu_widget.show_at_position(pos)
+
+    def update_icon(self, status):
+        """更新图标状态"""
+        from PIL import Image, ImageDraw
+        import io
+
+        size = 32
+        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(image)
+
+        if not state.sync_enabled:
+            # 灰色 - 暂停
+            bg_color = '#9E9E9E'
+        elif len(state.connected_clients) > 0:
+            # 绿色 - 已连接
+            bg_color = '#4CAF50'
+        else:
+            # 蓝色 - 等待连接
+            bg_color = '#2196F3'
+
+        # 背景圆
+        draw.ellipse([2, 2, size-2, size-2], fill=bg_color)
+
+        # 白色 "V"
+        draw.polygon([
+            (8, 10), (16, 22), (24, 10),
+            (21, 10), (16, 18), (11, 10)
+        ], fill='white')
+
+        # 转换为 QPixmap
+        byte_data = io.BytesIO()
+        image.save(byte_data, format='PNG')
+        byte_data.seek(0)
+        qpix = QPixmap()
+        qpix.loadFromData(byte_data.getvalue())
+
+        self.setIcon(QIcon(qpix))
+
+
+# ============================================================
+# System Tray / 系统托盘 (保留兼容函数)
 # ============================================================
 def create_icon_connected() -> Image.Image:
     """Create connected state tray icon (green) / 创建已连接状态托盘图标（绿色）"""
@@ -937,30 +1368,59 @@ def create_menu():
 
 
 def run_tray():
-    """Run the system tray application / 运行系统托盘应用"""
-    icon = pystray.Icon(
-        APP_NAME,
-        create_icon_waiting(),  # Start with waiting icon / 启动时显示等待图标
-        f"Voice Coding - Waiting\nhttp://{HOTSPOT_IP}:{state.http_port}",
-        menu=create_menu()
-    )
-    state.tray_icon = icon
-    
-    # Show notification on start
-    icon.run_detached()
-    icon.notify(f"已启动！\n1. 开启电脑热点\n2. 手机连接热点\n3. 访问 http://{HOTSPOT_IP}:{state.http_port}", "Voice Coding")
-    
-    # Start blinking after icon is running
-    import time
-    time.sleep(0.5)  # Wait for icon to initialize
-    update_tray_icon(icon)  # This will start the blinking
-    
-    # Keep main thread alive
-    while state.running:
-        time.sleep(0.5)
-    
+    """Run the system tray application with PyQt5 / 使用PyQt5运行系统托盘应用"""
+    # 创建 QApplication（如果不存在）
+    if QApplication.instance() is None:
+        app = QApplication(sys.argv)
+    else:
+        app = QApplication.instance()
+
+    app.setQuitOnLastWindowClosed(False)
+
+    # 创建现代托盘图标
+    tray_icon = ModernTrayIcon()
+    tray_icon.show()
+
+    # 更新初始状态
+    update_tray_icon_pyqt(tray_icon)
+
+    # 保存到状态
+    state.tray_icon = tray_icon
+
+    # 定时更新图标状态
+    update_timer = QTimer()
+    update_timer.timeout.connect(lambda: update_tray_icon_pyqt(tray_icon))
+    update_timer.start(1000)  # 每秒更新
+
+    # 运行应用
+    app.exec()
+
+
+def update_tray_icon_pyqt(tray_icon):
+    """更新 PyQt5 托盘图标状态"""
+    # 更新图标
+    tray_icon.update_icon(None)
+
+
+# 保留兼容的 update_tray_icon 函数
+def update_tray_icon(icon=None):
+    """Update tray icon based on state / 根据状态更新托盘图标（兼容函数）"""
+    if icon is None:
+        # 如果没有传入 icon，跳过（PyQt5 模式）
+        return
+    # 原 pystray 逻辑保留
     stop_blink_timer()
-    icon.stop()
+
+    if not state.sync_enabled:
+        icon.icon = create_icon_paused()
+        icon.title = f"Voice Coding - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
+    elif len(state.connected_clients) > 0:
+        icon.icon = create_icon_connected()
+        client_count = len(state.connected_clients)
+        icon.title = f"Voice Coding - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
+    else:
+        icon.title = f"Voice Coding - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
+        start_blink_timer(icon)
 
 
 # ============================================================
@@ -970,9 +1430,12 @@ def main():
     """Main entry point / 主入口"""
     global HOTSPOT_IP
 
+    # 初始化日志系统
+    setup_logging()
+
     # Detect hotspot IP at startup
     HOTSPOT_IP = get_hotspot_ip()
-    print(f"Detected hotspot IP: {HOTSPOT_IP}")
+    logging.info(f"检测到热点 IP: {HOTSPOT_IP}")
 
     # Start WebSocket server in background thread
     ws_thread = threading.Thread(target=run_server, daemon=True)
@@ -987,7 +1450,7 @@ def main():
         https_thread = threading.Thread(target=run_https_server, daemon=True)
         https_thread.start()
 
-    # Run tray icon in main thread
+    # Run tray icon with PyQt5 in main thread
     run_tray()
 
 

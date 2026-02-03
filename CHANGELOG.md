@@ -5,6 +5,82 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-02-03
+
+### Added / 新增
+- ✅ **PC 端悬停高亮效果已修复** - 使用 `paintEvent` + `WA_TransparentForMouseEvents` 实现
+- 🎨 **Windows 11 Fluent Design 风格菜单** - 完整实现现代化 UI
+  - 深色半透明背景 `rgba(32, 32, 32, 245)`
+  - 8px 圆角容器，4px 圆角菜单项
+  - 柔和阴影效果（24px 模糊半径）
+  - 从下往上滑出动画 + 淡入效果
+  - Segoe UI 字体（Windows 11 默认字体）
+  - 统一白色图标和文字
+- 📋 **日志系统** - 完整实现日志功能
+  - 日志文件位置：`%APPDATA%\VoiceCoding\logs\voice_coding_YYYYMMDD.log`
+  - 点击"打开日志"用记事本打开当天日志
+
+### Changed / 变更
+- 🚪 退出按钮图标从 ⏻ 改为 🚪
+- 🗑️ 移除"显示 IP 地址"菜单选项
+- 🗑️ 移除 `is_danger` 红色危险样式
+
+### Fixed / 修复
+- ✅ **悬停高亮效果** - PyQt5 自定义 QWidget 的 `:hover` 伪状态不工作
+  - 解决方案：使用 `paintEvent` 手动绘制背景
+  - 子控件添加 `setAttribute(Qt.WA_TransparentForMouseEvents)` 让鼠标事件穿透
+- ✅ **菜单点击崩溃** - `toggle_sync` 调用 `update_tray_icon_pyqt(None)` 导致 NoneType 错误
+  - 解决方案：改用 `state.tray_icon` 获取正确的托盘图标实例
+- ✅ **菜单位置** - 菜单左下角现在正确对齐鼠标点击位置
+- ✅ **状态标签背景** - 添加 `background: transparent` 修复高亮被截断问题
+
+### Technical / 技术
+- `MenuItemWidget` 类使用 `enterEvent`/`leaveEvent` 追踪悬停状态
+- `paintEvent` 绘制 4px 圆角矩形背景
+- 所有子 QLabel 设置 `WA_TransparentForMouseEvents` 让鼠标事件穿透
+- 使用 Python `logging` 模块记录日志到文件
+
+---
+
+## [1.7.0] - 2026-02-03 (Deprecated - 已废弃)
+
+### Added / 新增
+- 🎨 **PC 端 Windows 11 风格托盘菜单** - 使用 PyQt5 实现现代化 UI
+  - 圆角浮窗菜单设计
+  - 流畅的悬停效果
+  - 实时状态指示（● ON / ○ OFF）
+  - 阴影效果提升层次感
+- 📋 **打开日志功能** - 便捷查看应用日志
+- 🔄 **箭头旋转动画** - Android 端菜单箭头随状态旋转
+
+### Changed / 变更
+- 🎨 **Android 端菜单优化**
+  - "刷新连接" → "更多功能操作"下拉菜单
+  - 使用 `→` 箭头图标，展开时旋转为 `↓`
+  - 滑入 + 淡入动画效果
+- 📐 **UI 间距微调** - Header 与输入框间距调整为 13.5px
+
+### Technical / 技术
+- 新增 PyQt5 依赖用于现代化托盘菜单
+
+---
+
+## [1.7.0] - 2026-02-03
+
+### Added / 新增
+- 🔄 **撤回功能** - Android 端新增"更多"菜单，支持撤回上次输入的文本
+  - 点击菜单中的"撤回上次输入"，可将文本恢复到手机输入框
+  - PC 端自动保存最近发送的文本
+  - 解决光标位置错误导致文本丢失的问题
+- 📋 **弹出菜单** - Android 端刷新按钮改为"更多"菜单
+  - 刷新连接：手动重连
+  - 撤回上次输入：恢复最近发送的文本
+
+### Changed / 变更
+- 🎨 **UI 间距微调** - Header 与输入框间距从 16px 调整为 14px
+
+---
+
 ## [1.6.0] - 2026-02-02
 
 ### Added / 新增
@@ -200,16 +276,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] 历史记录功能
 - [ ] 剪贴板同步
 - [ ] macOS 支持
-
-### Added / 新增
-- 🛠️ **PC 端热重启脚本 Skill** - 新增脚本用于杀进程并重启 `voice_coding.py`，便于快速迭代
-
-### Changed / 变更
-- 🎯 **UI Automation 焦点检测** - 使用 Windows UI Automation API 精确检测输入焦点
-  - 正确识别 VS Code、Chrome、Edge 等现代应用的输入框
-  - 检测 Edit、Document、ComboBox 等控件类型
-  - 支持 ValuePattern/TextPattern 模式检测
-
-### Fixed / 修复
-- 🐛 **输入焦点检测失效** - 修复错误加载 `gui.dll` 导致焦点检测始终失败
-- 🚫 **移除焦点阻断** - 焦点状态仅用于 UI 提示，不再阻止文本发送
