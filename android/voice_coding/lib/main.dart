@@ -296,13 +296,38 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
 
     // 找出新增加的部分
     String delta = '';
+    bool isReplacement = false;
+    int replaceLength = 0;
+
     if (newText.startsWith(oldText)) {
       // 正常追加：新文本是旧文本的延续
       delta = newText.substring(oldText.length);
+    } else if (oldText.isNotEmpty && newText.length > oldText.length) {
+      // 文本被替换（如输入法优化）：长度变长，但内容不同
+      // 检查是否有公共前缀
+      int commonPrefix = 0;
+      while (commonPrefix < oldText.length &&
+             commonPrefix < newText.length &&
+             oldText[commonPrefix] == newText[commonPrefix]) {
+        commonPrefix++;
+      }
+
+      if (commonPrefix < oldText.length) {
+        // 有替换发生：从 commonPrefix 位置开始不同
+        replaceLength = oldText.length - commonPrefix;
+        delta = newText.substring(commonPrefix);
+        isReplacement = true;
+      } else {
+        // 没有公共前缀，完全替换
+        replaceLength = oldText.length;
+        delta = newText;
+        isReplacement = true;
+      }
     } else {
-      // 文本被完全替换或中间修改（如输入法优化）
-      // 发送全部新文本
+      // 完全新文本
+      replaceLength = oldText.length;
       delta = newText;
+      isReplacement = true;
     }
 
     if (delta.isEmpty) {
@@ -316,10 +341,20 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     _shadowModeDebounce?.cancel();
     _shadowModeDebounce = Timer(const Duration(milliseconds: 50), () {
       try {
-        _channel!.sink.add(json.encode({
-          'type': 'shadow_sync',
-          'content': delta,
-        }));
+        if (isReplacement) {
+          // 替换模式：先删除旧文本，再输入新文本
+          _channel!.sink.add(json.encode({
+            'type': 'shadow_replace',
+            'delete_length': replaceLength,
+            'content': delta,
+          }));
+        } else {
+          // 追加模式：只输入新字符
+          _channel!.sink.add(json.encode({
+            'type': 'shadow_sync',
+            'content': delta,
+          }));
+        }
       } catch (e) {
         print('影随模式同步失败: $e');
       }

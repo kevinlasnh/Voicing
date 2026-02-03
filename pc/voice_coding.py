@@ -391,13 +391,31 @@ async def handle_client(websocket):
                         }))
 
                 elif msg_type == "shadow_sync":
-                    # 影随模式：实时同步文字变化
+                    # 影随模式：实时同步文字变化（追加）
                     if not state.sync_enabled:
                         continue
 
                     text = data.get("content", "")
                     if text:
-                        # 实时输入到光标位置（不清空输入）
+                        # 实时输入到光标位置
+                        type_text(text)
+
+                elif msg_type == "shadow_replace":
+                    # 影随模式：替换文本（先删除旧的，再输入新的）
+                    if not state.sync_enabled:
+                        continue
+
+                    delete_length = data.get("delete_length", 0)
+                    text = data.get("content", "")
+
+                    # 先按退格键删除旧文本
+                    if delete_length > 0:
+                        for _ in range(min(delete_length, 100)):  # 限制最大删除数量
+                            pyautogui.press('backspace')
+                        time.sleep(0.05)  # 等待删除完成
+
+                    # 再输入新文本
+                    if text:
                         type_text(text)
 
                 elif msg_type == "ping":
