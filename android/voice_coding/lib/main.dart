@@ -74,6 +74,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   int _serverPort = 9527;
   String _lastSentText = '';  // 保存上次发送的文本
   bool _showMenu = false;  // 是否显示下拉菜单
+  bool _shadowModeEnabled = false;  // 影随模式开关
   RawDatagramSocket? _udpSocket;  // UDP 监听套接字
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
@@ -491,6 +492,17 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
                             _recallLastText();
                           },
                         ),
+                        // 间距
+                        const SizedBox(height: 10),
+                        // 影随模式开关
+                        _buildSwitchMenuItem(
+                          icon: Icons.sync,
+                          text: '影随模式',
+                          value: _shadowModeEnabled,
+                          onChanged: (value) {
+                            setState(() => _shadowModeEnabled = value);
+                          },
+                        ),
                       ],
                     ),
                   ),
@@ -537,6 +549,78 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSwitchMenuItem({
+    required IconData icon,
+    required String text,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF3D3B37),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white, size: 18),
+          const SizedBox(width: 8),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
+          const Spacer(),
+          // 滑动开关
+          GestureDetector(
+            onTap: () => onChanged(!value),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 48,
+              height: 28,
+              decoration: BoxDecoration(
+                color: value ? const Color(0xFFD97757) : const Color(0xFF6B6B6B),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: AnimatedAlign(
+                  duration: const Duration(milliseconds: 200),
+                  alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
