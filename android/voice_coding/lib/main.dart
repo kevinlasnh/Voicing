@@ -279,7 +279,19 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
 
   /// 影随模式：实时同步文字变化到 PC 端
   void _onTextChanged(String text) {
-    if (!_shadowModeEnabled || _status != ConnectionStatus.connected || !_syncEnabled) {
+    // 调试日志
+    print('影随模式: onChanged触发 - text="$text", enabled=$_shadowModeEnabled, status=$_status, syncEnabled=$_syncEnabled');
+
+    if (!_shadowModeEnabled) {
+      print('影随模式未开启');
+      return;
+    }
+    if (_status != ConnectionStatus.connected) {
+      print('未连接到 PC');
+      return;
+    }
+    if (!_syncEnabled) {
+      print('PC 端同步已禁用');
       return;
     }
 
@@ -287,6 +299,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     _shadowModeDebounce?.cancel();
     _shadowModeDebounce = Timer(const Duration(milliseconds: 100), () {
       try {
+        print('影随模式发送: "$text"');
         _channel!.sink.add(json.encode({
           'type': 'shadow_sync',
           'content': text,
