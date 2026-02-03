@@ -76,6 +76,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   bool _showMenu = false;  // 是否显示下拉菜单
   bool _shadowModeEnabled = false;  // 影随模式开关
   Timer? _shadowModeDebounce;  // 影随模式防抖定时器
+  String _lastShadowText = '';  // 影随模式上次的文本（用于计算差量）
   RawDatagramSocket? _udpSocket;  // UDP 监听套接字
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
@@ -279,30 +280,45 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
 
   /// 影随模式：实时同步文字变化到 PC 端
   void _onTextChanged(String text) {
-    // 调试日志
-    print('影随模式: onChanged触发 - text="$text", enabled=$_shadowModeEnabled, status=$_status, syncEnabled=$_syncEnabled');
-
-    if (!_shadowModeEnabled) {
-      print('影随模式未开启');
-      return;
-    }
-    if (_status != ConnectionStatus.connected) {
-      print('未连接到 PC');
-      return;
-    }
-    if (!_syncEnabled) {
-      print('PC 端同步已禁用');
+    if (!_shadowModeEnabled || _status != ConnectionStatus.connected || !_syncEnabled) {
       return;
     }
 
-    // 防抖：避免频繁发送，等待 100ms 后再发送
+    // 计算差量：只发送新增的字符
+    String newText = text;
+    String oldText = _lastShadowText;
+
+    // 如果文本变短了（删除操作），更新记录但不发送
+    if (newText.length < oldText.length) {
+      _lastShadowText = newText;
+      return;
+    }
+
+    // 找出新增加的部分
+    String delta = '';
+    if (newText.startsWith(oldText)) {
+      // 正常追加：新文本是旧文本的延续
+      delta = newText.substring(oldText.length);
+    } else {
+      // 文本被完全替换或中间修改（如输入法优化）
+      // 发送全部新文本
+      delta = newText;
+    }
+
+    if (delta.isEmpty) {
+      return;
+    }
+
+    // 更新上次文本
+    _lastShadowText = newText;
+
+    // 防抖：避免频繁发送，等待 50ms 后再发送
     _shadowModeDebounce?.cancel();
-    _shadowModeDebounce = Timer(const Duration(milliseconds: 100), () {
+    _shadowModeDebounce = Timer(const Duration(milliseconds: 50), () {
       try {
-        print('影随模式发送: "$text"');
         _channel!.sink.add(json.encode({
           'type': 'shadow_sync',
-          'content': text,
+          'content': delta,
         }));
       } catch (e) {
         print('影随模式同步失败: $e');
