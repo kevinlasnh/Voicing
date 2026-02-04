@@ -2,32 +2,30 @@
 
 <div align="center">
 
-**手机语音输入，电脑光标输出** 📱💻
+**和 AI 吵架，嘴比手快** 🎤💬
 
-将手机变成电脑的无线语音输入设备
+用手机语音输入，让文字直接出现在电脑光标处
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voice-Coding)](https://github.com/kevinlasnh/Voice-Coding/releases/latest)
+[![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 
-[功能特性](#-功能特性) • [快速开始](#-快速开始) • [下载](#-下载) • [常见问题](#-常见问题)
+[为什么需要](#-为什么需要) • [快速开始](#-快速开始) • [下载](#-下载)
 
 </div>
 
 ---
 
-## ✨ 功能特性
+## 💡 为什么需要
 
-| 功能 | 说明 |
-|------|------|
-| 📡 **UDP 自动发现** | 手机自动发现并连接电脑，无需配置 IP |
-| 📱 **手机输入** | 支持文字输入、语音输入、撤回功能 |
-| 🎯 **自动发送** | 语音输入实时同步到电脑，下划线消失自动发送 |
-| 💻 **电脑输出** | 文本瞬间出现在电脑光标处 |
-| 🔗 **局域网直连** | 无需云端、无需服务器，端对端直连 |
-| 🖥️ **系统托盘** | Windows 11 Fluent Design 风格托盘菜单 |
-| 📋 **日志系统** | 完整的运行日志，方便排查问题 |
-| 🔄 **自动重连** | 断线自动重连，稳定可靠 |
-| 🚀 **开机自启** | 支持设置开机自动启动 |
+和 AI 对话时，打字太慢？思路被键盘打断？
+
+**Voicing** 让你用手机语音输入，文字实时出现在电脑的任意光标位置。
+
+- 在 Claude Code 里用语音写 prompt
+- 在 ChatGPT 网页里用语音提问
+- 在任何需要打字的地方，用嘴代替手
+
+手机语音输入法（讯飞、搜狗、百度）的识别准确率已经很高了，为什么不用起来？
 
 ---
 
@@ -35,7 +33,7 @@
 
 ### 1️⃣ 下载安装
 
-从 [GitHub Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) 下载：
+从 [GitHub Releases](https://github.com/kevinlasnh/Voicing/releases/latest) 下载：
 
 - **Windows 电脑端**: `voicing.exe`
 - **Android 手机端**: `voicing.apk`
@@ -67,27 +65,40 @@
 
 | 平台 | 文件 | 下载 |
 |------|------|------|
-| Windows | voicing.exe | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
-| Android | voicing.apk | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
+| Windows | voicing.exe | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
+| Android | voicing.apk | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
 
 ---
 
-## 📸 使用界面
+## 📱 手机端使用
 
-### 电脑端托盘菜单
+1. 打开 App，等待自动连接电脑（状态栏显示"已连接"）
+2. 点击输入框，切换到语音输入法
+3. 说话，文字会出现在输入框中
+4. **自动发送模式**：语音输入完成后自动发送到电脑
+5. **手动发送模式**：按回车键发送
 
-- 📡 同步输入 - 开关同步功能
-- 🚀 开机自启 - 设置开机启动
-- 📋 打开日志 - 查看运行日志
-- 🚪 退出应用 - 关闭程序
+**菜单功能**（点击右上角"更多功能操作"）：
+- 刷新连接 - 重新连接电脑
+- 撤回上次输入 - 恢复刚才发送的文字
+- 自动发送 - 开关自动发送模式
 
-### 手机端功能
+---
 
-- 自动连接电脑（UDP 发现）
-- 文字输入 + 回车发送
-- 🎯 **自动发送** - 语音输入实时同步
-- 撤回上次输入
-- 刷新连接
+## 💻 电脑端使用
+
+运行 `voicing.exe` 后，程序在系统托盘运行。
+
+**右键托盘图标**：
+- 同步输入 - 开关接收手机文字
+- 开机自启 - 设置开机自动启动
+- 打开日志 - 查看运行日志
+- 退出应用 - 关闭程序
+
+**图标状态**：
+- 🔵 闪烁 = 等待手机连接
+- 🟢 常亮 = 已连接
+- ⚫ 灰色 = 同步已关闭
 
 ---
 
@@ -95,10 +106,9 @@
 
 | 场景 | 说明 |
 |------|------|
-| 🎤 **语音编程** | 用手机语音输入写代码注释、文档 |
+| 🤖 **和 AI 对话** | Claude、ChatGPT、Copilot...用嘴比用手快 |
+| 💻 **写代码注释** | 语音输入比打字轻松多了 |
 | 📝 **长文输入** | 躺在沙发上用手机给电脑打字 |
-| 🌍 **多语言输入** | 利用手机更好的输入法输入各种语言 |
-| 🎮 **游戏聊天** | 全屏游戏时用手机打字 |
 
 ---
 
@@ -139,8 +149,8 @@ Voicing/
 
 ```bash
 # 克隆仓库
-git clone https://github.com/kevinlasnh/Voice-Coding.git
-cd Voice-Coding
+git clone https://github.com/kevinlasnh/Voicing.git
+cd Voicing
 
 # PC 端
 cd pc

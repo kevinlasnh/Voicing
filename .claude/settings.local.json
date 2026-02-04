@@ -53,7 +53,11 @@
       "Bash(netstat:*)",
       "Bash(\"C:/dev/java21/jdk-21.0.2/bin/java.exe\" -version)",
       "Skill(crafting-effective-readmes)",
-      "Skill(release-skills)"
+      "Skill(release-skills)",
+      "Bash(gh run watch:*)",
+      "Bash(gh repo rename:*)",
+      "Bash(gh repo view:*)",
+      "Bash(git remote set-url:*)"
     ]
   }
 }

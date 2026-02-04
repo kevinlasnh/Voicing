@@ -171,8 +171,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 📦 下载
 
-- [Android APK](https://github.com/kevinlasnh/Voice-Coding/releases/latest) - 安装到手机
-- [Windows EXE](https://github.com/kevinlasnh/Voice-Coding/releases/latest) - 电脑端运行
+- [Android APK](https://github.com/kevinlasnh/Voicing/releases/latest) - 安装到手机
+- [Windows EXE](https://github.com/kevinlasnh/Voicing/releases/latest) - 电脑端运行
 
 ---
 

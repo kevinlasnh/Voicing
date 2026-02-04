@@ -109,10 +109,14 @@ jobs:
         working-directory: android/voice_coding
         run: flutter build apk --release
 
+      - name: Rename APK
+        run: |
+          mv android/voice_coding/build/app/outputs/flutter-apk/app-release.apk android/voice_coding/build/app/outputs/flutter-apk/voicing.apk
+
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: android/voice_coding/build/app/outputs/flutter-apk/app-release.apk
+          files: android/voice_coding/build/app/outputs/flutter-apk/voicing.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

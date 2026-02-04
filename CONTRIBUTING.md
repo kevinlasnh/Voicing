@@ -6,7 +6,7 @@
 
 ### 报告 Bug
 
-1. 在 [Issues](https://github.com/kevinlasnh/Voice-Coding/issues) 中搜索是否已有相同问题
+1. 在 [Issues](https://github.com/kevinlasnh/Voicing/issues) 中搜索是否已有相同问题
 2. 如果没有，创建新 Issue，包含：
    - 问题描述
    - 复现步骤
@@ -38,7 +38,7 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/kevinlasnh/Voice-Coding.git
+git clone https://github.com/kevinlasnh/Voicing.git
 cd Voice-Coding/pc
 
 # 安装依赖

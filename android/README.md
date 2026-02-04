@@ -14,7 +14,7 @@ Android 原生应用，用于将手机输入的文字发送到电脑。
 
 ### 方式一：下载 APK（推荐）
 
-1. 访问 [GitHub Releases](https://github.com/kevinlasnh/Voice-Coding/releases)
+1. 访问 [GitHub Releases](https://github.com/kevinlasnh/Voicing/releases)
 2. 下载最新的 `voicing.apk` 文件
 3. 传输到 Android 手机并安装
 

@@ -6,7 +6,7 @@
 
 ## 🎉 v2.3.0 开发完成！
 
-**最新 Release**: [v2.0.1](https://github.com/kevinlasnh/Voice-Coding/releases/tag/v2.0.1)
+**最新 Release**: [v2.0.1](https://github.com/kevinlasnh/Voicing/releases/tag/v2.0.1)
 
 包含文件：
 - ✅ `voicing.apk` - Android 安装包（含自定义图标）
