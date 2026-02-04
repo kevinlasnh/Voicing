@@ -2,9 +2,9 @@
 
 # Voicing
 
-<img src="android/voice_coding/assets/icons/icon_1024.png" width="160" alt="Voicing App Icon">
+<img src="android/voice_coding/assets/icons/icon_1024.png" width="180" alt="Voicing App Icon">
 
-<br>
+<br><br>
 
 **和 AI 吵架，嘴比手快**
 
