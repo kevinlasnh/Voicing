@@ -1,10 +1,10 @@
 <div align="center">
 
-# Voicing
+<h1>Voicing</h1>
 
 <img src="android/voice_coding/assets/icons/icon_1024.png" width="180" alt="Voicing App Icon">
 
-<br><br>
+<br>
 
 **和 AI 吵架，嘴比手快**
 
@@ -16,8 +16,6 @@
 [为什么需要](#-为什么需要) • [快速开始](#-快速开始) • [下载](#-下载)
 
 </div>
-
----
 
 ## 💡 为什么需要
 
