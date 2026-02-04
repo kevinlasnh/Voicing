@@ -1,8 +1,10 @@
-# Voicing
-
 <div align="center">
 
-<img src="android/voice_coding/assets/icons/icon_1024.png" width="128" alt="Voicing App Icon">
+# Voicing
+
+<img src="android/voice_coding/assets/icons/icon_1024.png" width="160" alt="Voicing App Icon">
+
+<br>
 
 **和 AI 吵架，嘴比手快**
 
