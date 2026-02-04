@@ -137,11 +137,6 @@ jobs:
         working-directory: pc
         run: pip install -r requirements.txt
 
-      - name: Convert PNG to ICO
-        working-directory: pc
-        run: |
-          python -c "from PIL import Image; img = Image.open('assets/icon_1024.png'); img.save('assets/icon.ico', format='ICO', sizes=[(256, 256), (128, 128), (64, 64), (48, 48), (32, 32), (16, 16)])"
-
       - name: Build EXE with PyInstaller
         working-directory: pc
         run: |
