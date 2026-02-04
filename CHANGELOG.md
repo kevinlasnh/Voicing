@@ -30,6 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 解决：在 `gradle.properties` 中指定 Java 21 路径
   - 新增规则到 `CLAUDE.md` 防止再次发生
 
+- **Windows EXE 图标修复** 🎯
+  - 问题：GitHub Actions 构建的 EXE 缺少图标资源
+  - 表现：EXE 文件图标为默认图标，托盘图标显示为纯蓝色
+  - 解决：PyInstaller 添加 `--icon` 和 `--add-data` 参数
+  - 新增 PNG 转 ICO 步骤
+
 ### 🎯 PC 端托盘图标优化
 
 - **圆形图标**：托盘图标改为圆形外轮廓，与微信等主流应用风格一致
