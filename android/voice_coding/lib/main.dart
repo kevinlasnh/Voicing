@@ -1,10 +1,38 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// ============================================================
+// Design Tokens - 4px grid system
+// ============================================================
+class AppSpacing {
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 16;
+  static const double lg = 24;
+  static const double xl = 32;
+  static const double componentPadding = 14;
+  static const double componentGap = 12;
+  static const double borderRadius = 12;
+}
+
+class AppColors {
+  static const Color surface = Color(0xFF3D3B37);
+  static const Color background = Color(0xFF000000);
+  static const Color inputFill = Color(0xFF2D2B28);
+  static const Color textPrimary = Color(0xFFECECEC);
+  static const Color textHint = Color(0xFF6B6B6B);
+  static const Color primary = Color(0xFFD97757);
+  static const Color success = Color(0xFF5CB87A);
+  static const Color warning = Color(0xFFE5A84B);
+  static const Color error = Color(0xFFE85C4A);
+  static const Color divider = Color(0x14FFFFFF); // white 8% opacity
+}
 
 void main() {
   runApp(const VoiceCodingApp());
@@ -438,15 +466,15 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
           // 主界面
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
                 children: [
                   _buildHeader(),
-                  SizedBox(height: 13.5),
+                  const SizedBox(height: AppSpacing.componentGap),
                   Expanded(
                     child: _buildInputArea(),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: AppSpacing.md),
                   _buildEnterHint(),
                 ],
               ),
@@ -466,10 +494,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     final bool showSyncWarning = _status == ConnectionStatus.connected && !_syncEnabled;
 
     if (_status == ConnectionStatus.connected) {
-      connectionDotColor = showSyncWarning ? const Color(0xFFE5A84B) : const Color(0xFF5CB87A);
+      connectionDotColor = showSyncWarning ? AppColors.warning : AppColors.success;
       connectionText = showSyncWarning ? '同步关闭' : '已连接';
     } else {
-      connectionDotColor = const Color(0xFFE85C4A);
+      connectionDotColor = AppColors.error;
       connectionText = '未连接';
     }
 
@@ -478,15 +506,16 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
         // 左侧：连接状态
         Expanded(
           child: Container(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(AppSpacing.componentPadding),
+            constraints: const BoxConstraints(minHeight: 44),
             decoration: BoxDecoration(
-              color: const Color(0xFF3D3B37),
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
             ),
             child: Row(
               children: [
                 _buildStatusDot(connectionDotColor),
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpacing.sm),
                 Text(
                   connectionText,
                   style: TextStyle(
@@ -499,7 +528,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
             ),
           ),
         ),
-        SizedBox(width: 12.5),
+        const SizedBox(width: AppSpacing.componentGap),
         // 右侧：更多菜单按钮
         Expanded(
           child: _buildMenuButton(),
@@ -529,52 +558,52 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   }
 
   Widget _buildMenuButton() {
-    return GestureDetector(
+    return Material(
       key: _menuButtonKey,
-      onTap: () {
-        if (_showMenu) {
-          // 关闭菜单
-          _menuAnimationController.reverse().then((_) {
-            setState(() => _showMenu = false);
-          });
-        } else {
-          // 打开菜单
-          setState(() => _showMenu = true);
-          _menuAnimationController.forward();
-        }
-      },
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3D3B37),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Row(
-          children: [
-            // 箭头图标（带旋转动画）
-            AnimatedBuilder(
-              animation: _menuAnimationController,
-              builder: (context, child) {
-                return Transform.rotate(
-                  angle: _menuAnimationController.value * 1.5708,  // 90度 = π/2 ≈ 1.5708
-                  child: const Icon(
-                    Icons.chevron_right,
-                    color: Colors.white,
-                    size: 18,
-                  ),
-                );
-              },
-            ),
-            const SizedBox(width: 8),
-            const Text(
-              '更多功能操作',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: Colors.white,
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+        onTap: () {
+          if (_showMenu) {
+            _menuAnimationController.reverse().then((_) {
+              setState(() => _showMenu = false);
+            });
+          } else {
+            setState(() => _showMenu = true);
+            _menuAnimationController.forward();
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            children: [
+              // 箭头图标（带旋转动画）
+              AnimatedBuilder(
+                animation: _menuAnimationController,
+                builder: (context, child) {
+                  return Transform.rotate(
+                    angle: _menuAnimationController.value * (pi / 2),
+                    child: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  );
+                },
               ),
-            ),
-          ],
+              const SizedBox(width: AppSpacing.sm),
+              const Text(
+                '更多功能操作',
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -600,19 +629,19 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
           },
           behavior: HitTestBehavior.translucent,
           child: Container(
-            color: Colors.black.withOpacity(0.5),  // 半透明遮罩
+            color: Colors.black54,
             child: Stack(
               children: [
                 // 下拉菜单
                 Positioned(
                   left: offset.dx,
-                  top: offset.dy + size.height + 10,  // 按钮下方 + 间距
+                  top: offset.dy + size.height + AppSpacing.sm,
                   width: size.width,
                   child: AnimatedBuilder(
                     animation: _menuSlideAnimation,
                     builder: (context, child) {
                       return Transform.translate(
-                        offset: Offset(0, -20 * (1 - _menuSlideAnimation.value)),  // 从上往下滑入
+                        offset: Offset(0, -20 * (1 - _menuSlideAnimation.value)),
                         child: Opacity(
                           opacity: _menuSlideAnimation.value,
                           child: child,
@@ -621,57 +650,59 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
                     },
                     child: Material(
                       color: Colors.transparent,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          // 刷新连接
-                          _buildMenuItem(
-                            icon: Icons.refresh,
-                            text: '刷新连接',
-                            onTap: () {
-                              _menuAnimationController.reverse().then((_) {
-                                setState(() => _showMenu = false);
-                              });
-                              _refreshConnection();
-                            },
-                          ),
-                          // 间距
-                          const SizedBox(height: 10),
-                          // 撤回上次输入
-                          _buildMenuItem(
-                            icon: Icons.undo,
-                            text: '撤回上次输入',
-                            onTap: () {
-                              _menuAnimationController.reverse().then((_) {
-                                setState(() => _showMenu = false);
-                              });
-                              _recallLastText();
-                            },
-                          ),
-                          // 间距
-                          const SizedBox(height: 10),
-                          // 自动发送开关
-                          _buildSwitchMenuItem(
-                            icon: Icons.send,
-                            text: '自动发送',
-                            value: _shadowModeEnabled,
-                            onChanged: (value) {
-                              setState(() {
-                                _shadowModeEnabled = value;
-                                if (value) {
-                                  // 开启时，从当前文本长度开始
-                                  _lastSentLength = _textController.text.length;
-                                  _wasComposing = false;
-                                } else {
-                                  _lastSentLength = 0;
-                                  _wasComposing = false;
-                                }
-                              });
-                              // 保存用户偏好
-                              _saveAutoSendPreference(value);
-                            },
-                          ),
-                        ],
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 4),
+                            ),
+                          ],
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _buildMenuItem(
+                              icon: Icons.refresh,
+                              text: '刷新连接',
+                              onTap: () {
+                                _closeMenu();
+                                _refreshConnection();
+                              },
+                            ),
+                            const Divider(height: 1, color: AppColors.divider, indent: AppSpacing.md, endIndent: AppSpacing.md),
+                            _buildMenuItem(
+                              icon: Icons.undo,
+                              text: '撤回上次输入',
+                              onTap: () {
+                                _closeMenu();
+                                _recallLastText();
+                              },
+                            ),
+                            const Divider(height: 1, color: AppColors.divider, indent: AppSpacing.md, endIndent: AppSpacing.md),
+                            _buildSwitchMenuItem(
+                              icon: Icons.send,
+                              text: '自动发送',
+                              value: _shadowModeEnabled,
+                              onChanged: (value) {
+                                setState(() {
+                                  _shadowModeEnabled = value;
+                                  if (value) {
+                                    _lastSentLength = _textController.text.length;
+                                    _wasComposing = false;
+                                  } else {
+                                    _lastSentLength = 0;
+                                    _wasComposing = false;
+                                  }
+                                });
+                                _saveAutoSendPreference(value);
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -684,30 +715,25 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  void _closeMenu() {
+    _menuAnimationController.reverse().then((_) {
+      setState(() => _showMenu = false);
+    });
+  }
+
   Widget _buildMenuItem({
     required IconData icon,
     required String text,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3D3B37),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.componentPadding),
         child: Row(
           children: [
             Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Text(
               text,
               style: const TextStyle(
@@ -728,27 +754,14 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return GestureDetector(
-      // 阻止事件冒泡到外层遮罩
-      behavior: HitTestBehavior.opaque,
+    return InkWell(
       onTap: () => onChanged(!value),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: const Color(0xFF3D3B37),
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.componentPadding),
         child: Row(
           children: [
             Icon(icon, color: Colors.white, size: 18),
-            const SizedBox(width: 8),
+            const SizedBox(width: AppSpacing.sm),
             Text(
               text,
               style: const TextStyle(
@@ -760,17 +773,17 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
             const Spacer(),
             // 滑动开关
             AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
+              duration: const Duration(milliseconds: 250),
               width: 42,
               height: 24,
               decoration: BoxDecoration(
-                color: value ? const Color(0xFF5CB87A) : const Color(0xFF6B6B6B),
-                borderRadius: BorderRadius.circular(12),
+                color: value ? AppColors.success : AppColors.textHint,
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(2),
                 child: AnimatedAlign(
-                  duration: const Duration(milliseconds: 200),
+                  duration: const Duration(milliseconds: 250),
                   alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
                     width: 20,
@@ -798,7 +811,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
 
   Widget _buildStatusDot(Color color) {
     return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
       width: 10,
       height: 10,
       decoration: BoxDecoration(
@@ -818,10 +831,10 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   Widget _buildInputArea() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF3D3B37),
-        borderRadius: BorderRadius.circular(12),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
       ),
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(AppSpacing.componentPadding),
       child: TextField(
         controller: _textController,
         maxLines: null,
@@ -834,13 +847,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
           filled: false,
           contentPadding: EdgeInsets.zero,
           isDense: true,
-          hintStyle: TextStyle(color: Color(0xFF6B6B6B)),
+          hintStyle: TextStyle(color: AppColors.textHint),
         ),
         style: const TextStyle(
           fontSize: 16,
-          color: Color(0xFFECECEC),
+          color: AppColors.textPrimary,
         ),
-        cursorColor: const Color(0xFFD97757),
+        cursorColor: AppColors.primary,
         textInputAction: TextInputAction.send,
         onSubmitted: (_) => _sendText(),
       ),
@@ -848,14 +861,24 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   }
 
   Widget _buildEnterHint() {
-    return Center(
-      child: Text(
-        '按回车键发送',
-        style: TextStyle(
-          fontSize: 13,
-          color: Color(0xFF6B6B6B),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          height: 1,
+          color: AppColors.divider,
         ),
-      ),
+        const SizedBox(height: AppSpacing.sm),
+        const Center(
+          child: Text(
+            '按回车键发送',
+            style: TextStyle(
+              fontSize: 13,
+              color: AppColors.textHint,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

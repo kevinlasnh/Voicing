@@ -453,6 +453,7 @@ class MenuItemWidget(QWidget):
         self.has_toggle = has_toggle
         self.is_checked = is_checked
         self._hovered = False
+        self._pressed = False
         self.setFixedHeight(36)  # Windows 11 标准高度
         self.setMouseTracking(True)
         self.setCursor(Qt.PointingHandCursor)
@@ -506,8 +507,11 @@ class MenuItemWidget(QWidget):
         # 绘制圆角矩形背景
         rect = self.rect().adjusted(4, 2, -4, -2)  # 内缩，留出边距
 
-        if self._hovered:
-            # 悬停状态 - 使用更亮的高亮色
+        if self._pressed:
+            # 按下状态 - 更亮的背景
+            painter.setBrush(QColor(255, 255, 255, 25))  # 白色 10% 透明度
+        elif self._hovered:
+            # 悬停状态
             painter.setBrush(QColor(255, 255, 255, 15))  # 白色 6% 透明度
         else:
             painter.setBrush(Qt.transparent)
@@ -546,9 +550,18 @@ class MenuItemWidget(QWidget):
             self.status_label.setStyleSheet("background: transparent;")
 
     def mousePressEvent(self, event):
-        """鼠标点击事件"""
-        self.clicked.emit()
+        """鼠标按下 - 显示按压反馈"""
+        self._pressed = True
+        self.update()
         super().mousePressEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        """鼠标释放 - 恢复状态并触发点击"""
+        self._pressed = False
+        self.update()
+        if self.rect().contains(event.pos()):
+            self.clicked.emit()
+        super().mouseReleaseEvent(event)
 
 
 class ModernMenuWidget(QWidget):
@@ -585,7 +598,7 @@ class ModernMenuWidget(QWidget):
         """)
         container_layout = QVBoxLayout(self.container)
         container_layout.setContentsMargins(4, 6, 4, 6)  # 内边距
-        container_layout.setSpacing(2)  # 项间距
+        container_layout.setSpacing(4)  # 项间距（4px 网格）
 
         # 同步输入
         self.sync_btn = MenuItemWidget("📡", "同步输入", has_toggle=True, is_checked=True)
@@ -727,6 +740,13 @@ class ModernMenuWidget(QWidget):
         """关闭动画"""
         self.animation_timer.stop()
         self.close()
+
+    def keyPressEvent(self, event):
+        """键盘事件 - Escape 关闭菜单"""
+        if event.key() == Qt.Key_Escape:
+            self.close_with_animation()
+        else:
+            super().keyPressEvent(event)
 
 
 class ModernTrayIcon(QSystemTrayIcon):

@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.1] - 2026-04-08
+
+### 改进
+
+- **Android UI 优化（基于 UI Skill 规范）**
+  - 提取 AppSpacing/AppColors 设计常量，消除全文硬编码的 magic numbers
+  - 间距对齐 4px 网格系统（13.5→12, 12.5→12）
+  - 触摸目标添加 minHeight: 44pt（符合移动端最低标准）
+  - GestureDetector 替换为 InkWell，添加 Material 涟漪触摸反馈
+  - 下拉菜单从 3 个独立浮动卡片改为单一分组卡片 + Divider 分隔（iOS grouped list 风格）
+  - 动画时长统一为 250ms（原 200/250/300ms 混用）
+  - 底部提示添加细分隔线
+  - 菜单关闭逻辑提取为 _closeMenu() 方法
+
+- **PC 端托盘菜单 UI 优化**
+  - 菜单项添加按压视觉反馈（pressed state: white 10% 背景）
+  - 添加 Escape 键关闭菜单（Windows 11 Fluent Design 标准行为）
+  - 菜单项间距从 2px 调整为 4px（更舒适的视觉间距）
+
+---
+
 ## [2.4.0] - 2026-04-08
 
 ### 修复
