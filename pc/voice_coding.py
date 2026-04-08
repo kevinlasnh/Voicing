@@ -34,8 +34,6 @@ from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QFont, QCursor, QPen, 
 import websockets
 from websockets.server import serve
 import pyautogui
-import pystray
-from pystray import MenuItem as item
 from PIL import Image, ImageDraw
 import pyperclip
 
@@ -105,6 +103,8 @@ class AppState:
         self.blink_state = False  # For icon blinking / 图标闪烁状态
         self.blink_timer: Optional[threading.Timer] = None
         self.log_file = None  # 日志文件路径
+        self.lock = threading.Lock()  # 保护共享状态
+        self.shutdown_event = threading.Event()  # 用于优雅退出
 
 state = AppState()
 
@@ -183,7 +183,7 @@ def get_all_local_ips() -> list:
             ip = info[4][0]
             if ip not in ips and not ip.startswith("127."):
                 ips.append(ip)
-    except:
+    except Exception:
         pass
     
     # Also try to get IPs from network interfaces directly
@@ -198,7 +198,7 @@ def get_all_local_ips() -> list:
             ip = line.strip()
             if ip and not ip.startswith("127.") and ip not in ips:
                 ips.append(ip)
-    except:
+    except Exception:
         pass
     
     return ips
@@ -239,10 +239,8 @@ def start_udp_broadcast():
                 logging.debug(f"UDP 广播发送失败: {e}")
 
             # Wait before next broadcast / 等待下次广播
-            for _ in range(UDP_BROADCAST_INTERVAL * 10):
-                if not state.running:
-                    break
-                time.sleep(0.1)
+            if state.shutdown_event.wait(UDP_BROADCAST_INTERVAL):
+                break  # shutdown_event 被 set，退出循环
 
     except Exception as e:
         logging.error(f"UDP 广播服务错误: {e}")
@@ -315,7 +313,7 @@ def type_text(text: str):
         # Save current clipboard
         try:
             old_clipboard = pyperclip.paste()
-        except:
+        except Exception:
             old_clipboard = ""
         
         # Copy new text and paste
@@ -327,7 +325,7 @@ def type_text(text: str):
         time.sleep(0.1)
         try:
             pyperclip.copy(old_clipboard)
-        except:
+        except Exception:
             pass
             
     except Exception as e:
@@ -345,15 +343,9 @@ def type_text(text: str):
 async def handle_client(websocket):
     """Handle incoming WebSocket connections / 处理传入的WebSocket连接"""
     client_addr = websocket.remote_address
-    state.connected_clients.add(websocket)
+    with state.lock:
+        state.connected_clients.add(websocket)
     print(f"Client connected: {client_addr}")
-
-    # Update tray icon when client connects
-    if state.tray_icon:
-        try:
-            update_tray_icon(state.tray_icon)
-        except Exception as e:
-            print(f"Error updating tray icon: {e}")
 
     try:
         # Get computer name for identification
@@ -383,8 +375,8 @@ async def handle_client(websocket):
 
                     text = data.get("content", "")
                     if text:
-                        # Type the received text
-                        type_text(text)
+                        # Type the received text (run in thread to avoid blocking event loop)
+                        await asyncio.to_thread(type_text, text)
                         # Send acknowledgment
                         await websocket.send(json.dumps({
                             "type": "ack",
@@ -401,17 +393,14 @@ async def handle_client(websocket):
             except json.JSONDecodeError:
                 # If not JSON, treat as plain text
                 if message.strip() and state.sync_enabled:
-                    type_text(message)
+                    await asyncio.to_thread(type_text, message)
                     
     except websockets.exceptions.ConnectionClosed:
         pass
     finally:
-        state.connected_clients.discard(websocket)
+        with state.lock:
+            state.connected_clients.discard(websocket)
         print(f"Client disconnected: {client_addr}")
-        
-        # Update tray icon when client disconnects
-        if state.tray_icon:
-            update_tray_icon(state.tray_icon)
 
 
 async def broadcast_sync_state():
@@ -424,10 +413,10 @@ async def broadcast_sync_state():
         "sync_enabled": state.sync_enabled
     })
     
-    for client in state.connected_clients.copy():
+    for client in state.connected_clients.copy():  # copy() 避免迭代时修改
         try:
             await client.send(message)
-        except:
+        except Exception:
             pass
 
 
@@ -731,6 +720,7 @@ class ModernMenuWidget(QWidget):
     def quit_app(self):
         """退出应用"""
         state.running = False
+        state.shutdown_event.set()
         QApplication.quit()
 
     def close_with_animation(self):
@@ -882,143 +872,6 @@ def load_base_icon(size: int = 64) -> Image.Image:
         return fallback
 
 
-def apply_color_tint(image: Image.Image, color: tuple) -> Image.Image:
-    """应用颜色蒙版到图标（保留透明度）"""
-    # 创建颜色蒙版
-    tinted = Image.new('RGBA', image.size, color)
-    # 使用原图的 alpha 通道作为蒙版
-    result = Image.composite(tinted, Image.new('RGBA', image.size, (0, 0, 0, 0)), image.split()[3])
-    return result
-
-
-def add_status_border(image: Image.Image, color: str, width: int = 4) -> Image.Image:
-    """给图标添加状态边框"""
-    size = image.size[0]
-    result = image.copy()
-    draw = ImageDraw.Draw(result)
-    # 绘制圆形边框
-    draw.ellipse([0, 0, size-1, size-1], outline=color, width=width)
-    return result
-
-
-def create_icon_connected() -> Image.Image:
-    """创建已连接状态托盘图标（正常彩色） / Create connected state tray icon (normal color)"""
-    size = 64
-    icon = load_base_icon(size)
-    # 直接返回原图，不加边框
-    return icon
-
-
-def create_icon_waiting() -> Image.Image:
-    """创建等待连接状态托盘图标（正常） / Create waiting state tray icon (normal)"""
-    size = 64
-    icon = load_base_icon(size)
-    return icon
-
-
-def create_icon_waiting_dim() -> Image.Image:
-    """创建暗淡等待状态托盘图标（低透明度） / Create dim waiting state tray icon (low opacity)"""
-    size = 64
-    icon = load_base_icon(size)
-    # 降低透明度实现闪烁效果
-    alpha = icon.split()[3]
-    alpha = alpha.point(lambda x: int(x * 0.4))  # 40% 透明度
-    icon.putalpha(alpha)
-    return icon
-
-
-def create_icon_paused() -> Image.Image:
-    """创建暂停状态托盘图标（灰度） / Create paused state tray icon (grayscale)"""
-    size = 64
-    icon = load_base_icon(size)
-
-    # 转换为灰度，保留透明度
-    # 分离通道
-    r, g, b, a = icon.split()
-    # 转灰度
-    gray = icon.convert('L')
-    # 重新组合，使用原始 alpha 通道
-    result = Image.merge('RGBA', (gray, gray, gray, a))
-
-    return result
-
-
-def toggle_sync(icon, menu_item):
-    """Toggle sync on/off / 切换同步开关"""
-    state.sync_enabled = not state.sync_enabled
-    update_tray_icon(icon)
-    
-    # Broadcast sync state to all connected clients
-    def send_sync_state():
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        loop.run_until_complete(broadcast_sync_state())
-        loop.close()
-    
-    threading.Thread(target=send_sync_state, daemon=True).start()
-
-
-def toggle_startup(icon, menu_item):
-    """Toggle startup with Windows / 切换开机启动"""
-    current = is_startup_enabled()
-    set_startup_enabled(not current)
-
-
-def quit_app(icon, menu_item):
-    """Quit the application / 退出应用"""
-    state.running = False
-    stop_blink_timer()
-    icon.stop()
-
-
-def stop_blink_timer():
-    """Stop the blink timer / 停止闪烁定时器"""
-    if state.blink_timer:
-        state.blink_timer.cancel()
-        state.blink_timer = None
-
-
-def start_blink_timer(icon):
-    """Start the icon blink timer / 启动图标闪烁定时器"""
-    stop_blink_timer()
-    
-    def blink():
-        if not state.running:
-            return
-        if len(state.connected_clients) == 0 and state.sync_enabled:
-            # Toggle blink state
-            state.blink_state = not state.blink_state
-            if state.blink_state:
-                icon.icon = create_icon_waiting()
-            else:
-                icon.icon = create_icon_waiting_dim()
-            # Schedule next blink
-            state.blink_timer = threading.Timer(0.5, blink)
-            state.blink_timer.daemon = True
-            state.blink_timer.start()
-    
-    blink()
-
-
-def update_tray_icon(icon):
-    """Update tray icon based on state / 根据状态更新托盘图标"""
-    stop_blink_timer()
-
-    if not state.sync_enabled:
-        # Sync disabled - gray icon
-        icon.icon = create_icon_paused()
-        icon.title = f"Voicing - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
-    elif len(state.connected_clients) > 0:
-        # Has connected clients - green icon
-        icon.icon = create_icon_connected()
-        client_count = len(state.connected_clients)
-        icon.title = f"Voicing - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
-    else:
-        # Waiting for connection - blue blinking icon
-        icon.title = f"Voicing - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
-        start_blink_timer(icon)
-
-
 def run_tray():
     """Run the system tray application with PyQt5 / 使用PyQt5运行系统托盘应用"""
     # 创建 QApplication（如果不存在）
@@ -1058,27 +911,6 @@ def update_tray_icon_pyqt(tray_icon):
     else:
         # 其他状态 - 正常更新
         tray_icon.update_icon(None, dim=False)
-
-
-# 保留兼容的 update_tray_icon 函数
-def update_tray_icon(icon=None):
-    """Update tray icon based on state / 根据状态更新托盘图标（兼容函数）"""
-    if icon is None:
-        # 如果没有传入 icon，跳过（PyQt5 模式）
-        return
-    # 原 pystray 逻辑保留
-    stop_blink_timer()
-
-    if not state.sync_enabled:
-        icon.icon = create_icon_paused()
-        icon.title = f"Voicing - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
-    elif len(state.connected_clients) > 0:
-        icon.icon = create_icon_connected()
-        client_count = len(state.connected_clients)
-        icon.title = f"Voicing - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
-    else:
-        icon.title = f"Voicing - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
-        start_blink_timer(icon)
 
 
 # ============================================================

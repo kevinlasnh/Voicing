@@ -92,3 +92,9 @@ android/voice_coding/.dart_tool/
 android/voice_coding/.idea/
 android/voice_coding/android/.gradle/
 android/voice_coding/android/app/build/
+
+# Signing keys
+*.jks
+*.keystore
+*.key
+*.pem

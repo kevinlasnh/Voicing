@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.4.0] - 2026-04-08
+
+### 修复
+
+- **Android 待机断连问题**
+  - 根因：App 不处理 `paused` 生命周期，无心跳机制，息屏后 WebSocket 静默死亡
+  - 新增心跳机制：每 15 秒发送 ping，30 秒无响应判定连接死亡
+  - 完善生命周期处理：息屏时停止心跳省电，亮屏时立即验证连接有效性
+  - 改进重连策略：指数退避（3s → 6s → 12s → 最大 30s），替代固定 3 秒重试
+  - 发送失败时立即触发断连处理
+
+- **PC 端异步阻塞**
+  - 问题：`type_text()` 在 async WebSocket handler 中同步调用，阻塞整个事件循环
+  - 修复：使用 `asyncio.to_thread()` 将阻塞操作放入线程池
+
+### 改进
+
+- **EXE 图标裁剪为圆形**
+  - 将正方形图标裁剪为圆形，与 Android 端统一风格
+  - 重新生成多尺寸 ICO 文件（256/128/64/48/32/16px）
+
+- **PC 端代码质量**
+  - 5 处裸 `except:` 改为 `except Exception:`，避免吞掉所有异常
+  - `AppState` 添加 `threading.Lock` 保护 `connected_clients` 等共享状态
+  - UDP 广播轮询从 `time.sleep` 循环改为 `threading.Event.wait`，退出更优雅
+  - 删除未使用的 pystray 兼容代码（~120 行），项目已完全使用 PyQt5
+
+- **依赖优化**
+  - 移除 `pystray` 依赖（不再使用）
+  - `requirements.txt` 版本约束从 `>=` 改为 `~=`，防止跨大版本升级
+
+- **CI/CD**
+  - Python 构建版本从 3.14（未稳定）改为 3.12
+  - `.gitignore` 添加签名密钥模式（`*.jks`, `*.keystore`, `*.key`, `*.pem`）
+
+---
+
 ## [2.3.1] - 2026-02-04
 
 ### 🔥 关键修复

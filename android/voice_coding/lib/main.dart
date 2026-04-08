@@ -82,6 +82,16 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
 
+  // 心跳机制
+  Timer? _heartbeatTimer;
+  DateTime? _lastPong;
+  static const int _heartbeatIntervalSec = 15;
+  static const int _heartbeatTimeoutSec = 30;
+
+  // 重连策略
+  int _reconnectAttempt = 0;
+  static const int _maxReconnectDelaySec = 30;
+
   // 动画相关
   late AnimationController _menuAnimationController;
   late Animation<double> _menuSlideAnimation;
@@ -137,6 +147,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _reconnectTimer?.cancel();
+    _heartbeatTimer?.cancel();
     _textController.removeListener(_onTextControllerChanged);
     _channel?.sink.close();
     _textController.dispose();
@@ -149,10 +160,18 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // When app returns to foreground, cancel pending reconnect and try immediately
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.paused) {
+      // 进入后台/息屏：停止心跳省电
+      _stopHeartbeat();
+    } else if (state == AppLifecycleState.resumed) {
+      // 回到前台：验证连接或重连
       _reconnectTimer?.cancel();
-      if (_status != ConnectionStatus.connected) {
+      if (_status == ConnectionStatus.connected) {
+        // 连接可能已静默死亡，发 ping 验证
+        _sendPing();
+        _startHeartbeat();
+      } else {
+        _reconnectAttempt = 0;  // 用户主动回来，重置退避
         _connect();
       }
     }
@@ -162,6 +181,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     setState(() => _status = ConnectionStatus.connecting);
 
     // Close old connection if exists
+    _stopHeartbeat();
     _channel?.sink.close();
 
     try {
@@ -198,9 +218,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
           _syncEnabled = data['sync_enabled'] ?? true;
           _deviceName = data['computer_name'] ?? '';
         });
+        _reconnectAttempt = 0;
+        _lastPong = DateTime.now();
+        _startHeartbeat();
       } else if (type == 'ack') {
         _textController.clear();
       } else if (type == 'sync_state' || type == 'pong') {
+        _lastPong = DateTime.now();
         setState(() {
           _syncEnabled = data['sync_enabled'] ?? true;
         });
@@ -211,19 +235,73 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   }
 
   void _handleDisconnect() {
+    _stopHeartbeat();
+
+    if (_status == ConnectionStatus.disconnected) return;  // 防止重复触发
+
     setState(() {
       _status = ConnectionStatus.disconnected;
       _syncEnabled = true;
       _deviceName = '';
     });
 
-    // Reconnect after 3 seconds
+    // 指数退避重连：3s → 6s → 12s → 24s → 30s(上限)
+    final delaySec = (_reconnectAttempt < 5)
+        ? 3 * (1 << _reconnectAttempt)
+        : _maxReconnectDelaySec;
+    _reconnectAttempt++;
+
     _reconnectTimer?.cancel();
-    _reconnectTimer = Timer(const Duration(seconds: 3), () {
+    _reconnectTimer = Timer(Duration(seconds: delaySec.clamp(3, _maxReconnectDelaySec)), () {
       if (_status == ConnectionStatus.disconnected) {
         _connect();
       }
     });
+  }
+
+  /// 启动心跳定时器
+  void _startHeartbeat() {
+    _stopHeartbeat();
+    _heartbeatTimer = Timer.periodic(
+      Duration(seconds: _heartbeatIntervalSec),
+      (_) => _checkHeartbeat(),
+    );
+  }
+
+  /// 停止心跳定时器
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// 心跳检测：发 ping 并检查超时
+  void _checkHeartbeat() {
+    if (_status != ConnectionStatus.connected) {
+      _stopHeartbeat();
+      return;
+    }
+
+    // 检查上次 pong 是否超时
+    if (_lastPong != null) {
+      final elapsed = DateTime.now().difference(_lastPong!).inSeconds;
+      if (elapsed > _heartbeatTimeoutSec) {
+        print('心跳超时 (${elapsed}s)，判定连接死亡');
+        _handleDisconnect();
+        return;
+      }
+    }
+
+    _sendPing();
+  }
+
+  /// 发送 ping 消息
+  void _sendPing() {
+    try {
+      _channel?.sink.add(json.encode({'type': 'ping'}));
+    } catch (e) {
+      print('Ping 发送失败: $e');
+      _handleDisconnect();
+    }
   }
 
   /// 启动 UDP 发现监听
@@ -294,10 +372,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
       }));
       // 保存文本用于撤回
       _lastSentText = text;
-      // 重置自动发送已发送长度（因为文本框会被清空）
+      // 重置自动发送已发送长度（因为文本框会被清空���
       _lastSentLength = 0;
     } catch (e) {
-      // 发送失败，不保存文本
+      print('发送失败: $e');
+      _handleDisconnect();
     }
   }
 
