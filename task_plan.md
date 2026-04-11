@@ -9,7 +9,7 @@
 
 **核心功能**：让用户用手机语音输入，文字实时出现在电脑光标处
 
-**当前版本**：v2.4.2 (修复完成，待推送 GitHub Actions 发布)
+**当前版本**：v2.4.2 (已发布)
 
 ---
 
@@ -45,9 +45,7 @@
 
 ### 待完成任务 🚧
 
-- [ ] 推送 `main` 和 `v2.4.2` 标签
-- [ ] 等待 GitHub Actions 构建 `voicing.apk` / `voicing.exe`
-- [ ] 确认 GitHub Release `v2.4.2` 创建成功
+**当前无待完成任务 — v2.4.2 已发布**
 
 ### 最近完成
 
@@ -92,11 +90,11 @@
 - [x] 新增 Android / PC 连接恢复测试脚本
 - [x] 更新 README / DEV_STATUS / llmdoc / CHANGELOG
 
-### Phase 5: GitHub Actions 发布 ⏳
-- [ ] 提交 `v2.4.2` 修复与文档更新
-- [ ] 推送 `main`
-- [ ] 推送 `v2.4.2` 标签
-- [ ] 等待 GitHub Actions 自动构建并创建 Release
+### Phase 5: GitHub Actions 发布 ✅
+- [x] 提交 `v2.4.2` 修复与文档更新
+- [x] 推送 `main`
+- [x] 推送 `v2.4.2` 标签
+- [x] 等待 GitHub Actions 自动构建并创建 Release
 
 ---
 
@@ -129,4 +127,4 @@
 
 ## 下一步
 
-**下一步：推送 `main` 和 `v2.4.2` 标签，等待 GitHub Actions 自动构建发布**
+**项目已稳定，v2.4.2 已发布，等待用户下一步需求**

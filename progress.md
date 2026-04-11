@@ -42,7 +42,10 @@
 - 代码修复完成
 - 推送前测试完成
 - 文档已同步
-- 待执行：提交、打 `v2.4.2` 标签、推送 GitHub Actions 发布
+- Git 提交：`577c573 fix: 修复息屏唤醒后的连接恢复并补充测试`
+- 标签：`v2.4.2`
+- GitHub Actions：`Create Release` run `24280956312` 全部成功
+- Release: https://github.com/kevinlasnh/Voicing/releases/tag/v2.4.2
 
 ---
 

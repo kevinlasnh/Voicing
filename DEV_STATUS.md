@@ -2,11 +2,11 @@
 
 > 最后更新：2026-04-11
 
-## v2.4.2 准备发布
+## v2.4.2 已发布
 
-**目标 Release**: [v2.4.2](https://github.com/kevinlasnh/Voicing/releases/tag/v2.4.2)
+**最新 Release**: [v2.4.2](https://github.com/kevinlasnh/Voicing/releases/tag/v2.4.2)
 
-计划包含文件：
+已发布文件：
 - `voicing.apk` - Android 安装包
 - `voicing.exe` - Windows 电脑端
 
@@ -72,6 +72,13 @@ git push origin v2.4.2
 ```
 
 标签推送后由 `.github/workflows/release.yml` 自动构建 APK 和 EXE，并创建 GitHub Release。
+
+本次发布结果：
+- Workflow: `Create Release`
+- Run: `24280956312`
+- Build Windows EXE: success
+- Build Android APK: success
+- Release: success
 
 ---
 
