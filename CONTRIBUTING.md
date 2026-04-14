@@ -39,13 +39,17 @@
 ```bash
 # 克隆仓库
 git clone https://github.com/kevinlasnh/Voicing.git
-cd Voice-Coding/pc
+cd Voicing
 
-# 安装依赖
+# PC 端
+cd pc
 pip install -r requirements.txt
+python voice_coding.py --dev
 
-# 运行
-python voice_coding.py
+# Android 端
+cd android/voice_coding
+flutter pub get
+flutter run
 ```
 
 ## 测试

@@ -4,7 +4,53 @@
 
 ---
 
-## 2026-04-14 会话
+## 2026-04-14 会话（下午）
+
+### 会话目标
+移除自动发送开关、UI 优化、PC 菜单首次右键修复、CI 修复、README 全面优化
+
+### 执行步骤
+
+#### Step 1: 移除自动发送开关，硬编码为始终启用 ✅
+- Controller 删除 SharedPreferences 依赖、setShadowModeEnabled()、偏好存取方法
+- `_shadowModeEnabled` 硬编码为 `true`（`final`）
+- UI 删除菜单中的自动发送开关项和 `_buildSwitchMenuItem()` 方法
+- pubspec.yaml 移除 `shared_preferences: ^2.5.3`，净减 15 个传递依赖
+
+#### Step 2: Android UI 优化 ✅
+- 新增"连接中..."状态显示（橙色圆点 + 文字）
+- 底部提示改为"语音自动发送 · 回车手动发送"
+- 硬编码 `Colors.white` 替换为 `AppColors.textPrimary` 主题 token
+- 新增 `AppTextStyles` 常量（label/body/hint），消除重复文字样式
+- 菜单项和菜单按钮添加显式涟漪反馈色（splashColor/highlightColor）
+
+#### Step 3: PC 端托盘菜单首次右键卡顿修复 ✅
+- 问题：Qt 延迟渲染，首次 show() 才编译 stylesheet/计算布局
+- 修复：`ModernTrayIcon.__init__()` 中添加菜单预热渲染（屏幕外 show + 50ms 后 hide）
+
+#### Step 4: CI 修复（阿里云 maven 镜像 502）✅
+- 移除 `build.gradle` 中的阿里云镜像配置
+- 移除 `settings.gradle` 中 `pluginManagement.repositories` 的阿里云配置
+- CI 现在直接使用 Google/Maven Central 官方源
+
+#### Step 5: README 全面优化 ✅
+- 安装 `crafting-effective-readmes` 和 `readme-blueprint-generator` 全局 skill
+- 按 OSS 最佳实践全面重写 README
+- 新增 ASCII 架构图、功能表格、FAQ 按频率排列
+
+### 验证结果
+- Android: `flutter analyze` 0 issues, `flutter test` 9/9 通过
+- PC: `py_compile` 通过, `unittest` 7/7 通过
+- GitHub Actions: v2.5.1 构建成功（APK 20MB + EXE 49MB）
+
+### 当前状态
+- 代码：v2.5.1 已发布
+- Git：main 与 origin/main 同步
+- Release: https://github.com/kevinlasnh/Voicing/releases/tag/v2.5.1
+
+---
+
+## 2026-04-14 会话（上午）
 
 ### 会话目标
 全面检查仓库当前内容是否仍然最新，核对 Android APK 与 Windows EXE 源码是否保持稳定耦合，并基于实际代码与测试结果给出优化建议
