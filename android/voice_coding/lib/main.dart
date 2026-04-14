@@ -285,13 +285,19 @@ class _MainPageState extends State<MainPage>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _buildMenuItem(
-                              icon: Icons.refresh,
-                              text: '刷新连接',
-                              onTap: () {
-                                _closeMenu();
-                                _refreshConnection();
-                              },
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                topLeft: Radius.circular(AppSpacing.borderRadius),
+                                topRight: Radius.circular(AppSpacing.borderRadius),
+                              ),
+                              child: _buildMenuItem(
+                                icon: Icons.refresh,
+                                text: '刷新连接',
+                                onTap: () {
+                                  _closeMenu();
+                                  _refreshConnection();
+                                },
+                              ),
                             ),
                             const Divider(
                               height: 1,
@@ -313,13 +319,19 @@ class _MainPageState extends State<MainPage>
                               indent: AppSpacing.md,
                               endIndent: AppSpacing.md,
                             ),
-                            _buildToggleMenuItem(
-                              icon: Icons.keyboard_return,
-                              text: '自动 Enter',
-                              isEnabled: _controller.autoEnterEnabled,
-                              onTap: () {
-                                _controller.toggleAutoEnter();
-                              },
+                            ClipRRect(
+                              borderRadius: const BorderRadius.only(
+                                bottomLeft: Radius.circular(AppSpacing.borderRadius),
+                                bottomRight: Radius.circular(AppSpacing.borderRadius),
+                              ),
+                              child: _buildToggleMenuItem(
+                                icon: Icons.keyboard_return,
+                                text: '自动 Enter',
+                                isEnabled: _controller.autoEnterEnabled,
+                                onTap: () {
+                                  _controller.toggleAutoEnter();
+                                },
+                              ),
                             ),
                           ],
                         ),
