@@ -1,142 +1,103 @@
 <div align="center">
 
-<h1>Voicing</h1>
+<img src="android/voice_coding/assets/icons/icon_1024.png" width="120" alt="Voicing" style="border-radius: 50%;">
 
-<img src="android/voice_coding/assets/icons/icon_1024.png" width="180" alt="Voicing App Icon">
+# Voicing
 
-<br>
-
-**和 AI 吵架，嘴比手快**
-
-用手机语音输入，让文字直接出现在电脑光标处
+**手机语音输入，直接打到电脑上**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Android-blueviolet)](#)
 
-[为什么需要](#-为什么需要) • [快速开始](#-快速开始) • [下载](#-下载)
+和 AI 对话时打字太慢？Voicing 让你用嘴代替手。
 
 </div>
 
-## 💡 为什么需要
+---
 
-和 AI 对话时，打字太慢？思路被键盘打断？
+## 它能做什么
 
-**Voicing** 让你用手机语音输入，文字实时出现在电脑的任意光标位置。
+Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说话，文字直接出现在电脑光标处。
 
-- 在 Claude Code 里用语音写 prompt
-- 在 ChatGPT 网页里用语音提问
-- 在任何需要打字的地方，用嘴代替手
+- **零配置连接** — 手机连电脑热点，打开 App，自动连接
+- **语音自动发送** — 说完话文字自动打过去，不需要手动操作
+- **手动发送也行** — 按回车手动发送，适合需要编辑的场景
+- **撤回支持** — 发错了？一键撤回上次输入
+- **断线自动恢复** — 手机息屏再亮屏，连接自动重建
+- **体积小巧** — APK 20MB，EXE 49MB，无运行时依赖
 
-手机语音输入法（讯飞、搜狗、百度）的识别准确率已经很高了，为什么不用起来？
+## 快速开始
 
-## 🚀 快速开始
+### 1. 下载
 
-### 1️⃣ 下载安装
+从 [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) 下载对应平台文件：
 
-从 [GitHub Releases](https://github.com/kevinlasnh/Voicing/releases/latest) 下载：
-
-- **Windows 电脑端**: `voicing.exe`
-- **Android 手机端**: `voicing.apk`
-
-### 2️⃣ 启动电脑端
-
-1. 双击运行 `voicing.exe`
-2. 系统托盘出现 Voicing 图标 ✅
-3. 程序自动启动 UDP 广播服务
-
-### 3️⃣ 安装手机端
-
-1. 将 `voicing.apk` 传输到 Android 手机
-2. 安装 APK
-3. **开启 Windows 移动热点**
-4. 手机连接电脑热点
-5. 打开 Voicing App → **自动连接** ✅
-6. 手机息屏后再次亮屏时，App 会主动重建与电脑的连接
-
-### 4️⃣ 开始使用
-
-1. 在电脑上点击输入位置（VS Code、Word、浏览器等）
-2. 在手机 App 中输入文字
-3. 按回车键发送
-4. 文字自动出现在电脑光标处！
-
-## 📥 下载
-
-| 平台 | 文件 | 下载 |
+| 平台 | 文件 | 要求 |
 |------|------|------|
-| Windows | voicing.exe | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
-| Android | voicing.apk | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
+| Windows | `voicing.exe` | Win 10/11 (64-bit) |
+| Android | `voicing.apk` | Android 5.0+ |
 
-## 📱 手机端使用
+### 2. 连接
 
-1. 打开 App，等待自动连接电脑（状态栏显示"已连接"）
-2. 点击输入框，切换到语音输入法
-3. 说话，文字会出现在输入框中
-4. **自动发送模式**：语音输入完成后自动发送到电脑
-5. **手动发送模式**：按回车键发送
-6. **休眠恢复**：回到前台后会自动重建连接，无需手动开关 WiFi
+```
+电脑运行 voicing.exe → 开启移动热点 → 手机连热点 → 打开 voicing.apk
+```
 
-**菜单功能**（点击右上角"更多功能操作"）：
-- 刷新连接 - 重新连接电脑
-- 撤回上次输入 - 恢复刚才发送的文字
-- 自动发送 - 开关自动发送模式
+状态栏显示"已连接"就说明连上了。
 
-## 💻 电脑端使用
+### 3. 使用
 
-运行 `voicing.exe` 后，程序在系统托盘运行。
+1. 电脑上把光标点到要输入的位置
+2. 手机上切换到语音输入法，开始说话
+3. 文字自动出现在电脑上
 
-**右键托盘图标**：
-- 同步输入 - 开关接收手机文字
-- 开机自启 - 设置开机自动启动
-- 打开日志 - 查看运行日志
-- 退出应用 - 关闭程序
-
-**图标状态**：
-- 🔵 闪烁 = 等待手机连接
-- 🟢 常亮 = 已连接
-- ⚫ 灰色 = 同步已关闭
-
-## 🎯 使用场景
-
-| 场景 | 说明 |
-|------|------|
-| 🤖 **和 AI 对话** | Claude、ChatGPT、Copilot...用嘴比用手快 |
-| 💻 **写代码注释** | 语音输入比打字轻松多了 |
-| 📝 **长文输入** | 躺在沙发上用手机给电脑打字 |
-
-## 🔧 系统要求
-
-### 电脑端
-- Windows 10/11 (64位)
-- 无需安装额外运行时
+## 功能一览
 
 ### 手机端
-- Android 5.0+ (API 21+)
-- 与电脑在同一移动热点下
 
-## 📁 项目结构
+- 语音输入完成后自动发送到电脑
+- 按回车手动发送
+- "撤回上次输入"恢复刚才的文本
+- "刷新连接"手动重连
+
+### 电脑端
+
+右键托盘图标：
+
+| 菜单项 | 功能 |
+|--------|------|
+| 同步输入 | 开关是否接收手机文字 |
+| 开机自启 | 注册表方式，开机自动启动 |
+| 打开日志 | 用记事本打开当天日志 |
+| 退出应用 | 关闭程序 |
+
+托盘图标状态：
+- 闪烁 = 等待手机连接
+- 常亮 = 已连接
+- 灰色 = 同步已关闭
+
+## 工作原理
 
 ```
-Voicing/
-├── pc/                     # PC 端源码 (Python)
-│   ├── voice_coding.py     # 主程序
-│   └── requirements.txt    # Python 依赖
-├── android/voice_coding/   # Android 端 (Flutter)
-│   ├── lib/main.dart       # 主程序
-│   └── pubspec.yaml        # Flutter 依赖
-├── .github/workflows/      # GitHub Actions CI/CD
-│   └── release.yml         # 自动构建发布
-├── CHANGELOG.md            # 更新日志
-├── LICENSE                 # MIT 许可证
-└── README.md               # 本文件
+┌─────────┐    WiFi 热点    ┌─────────┐
+│  手机    │ ◄────────────► │  电脑    │
+│  (APK)  │   UDP 发现      │  (EXE)  │
+│         │   WebSocket     │         │
+│ 语音输入 │ ──── 文字 ────► │ 打字输出 │
+└─────────┘                 └─────────┘
 ```
 
-## 🛠️ 开发
+1. PC 端通过 UDP 广播（端口 9530）宣告自己的存在
+2. 手机监听广播，发现 PC 后通过 WebSocket（端口 9527）建立连接
+3. 手机上的文字（语音输入或手动输入）实时发送到 PC
+4. PC 通过剪贴板 + Ctrl+V 把文字粘贴到当前光标位置
+
+## 开发
 
 ### 环境准备
 
 ```bash
-# 克隆仓库
 git clone https://github.com/kevinlasnh/Voicing.git
 cd Voicing
 
@@ -151,65 +112,70 @@ flutter pub get
 flutter run
 ```
 
+### 项目结构
+
+```
+Voicing/
+├── pc/                          # PC 端 (Python + PyQt5)
+│   ├── voice_coding.py          # 主程序
+│   ├── voicing_protocol.py      # 协议常量
+│   ├── network_recovery.py      # UDP 广播恢复逻辑
+│   └── requirements.txt         # Python 依赖
+├── android/voice_coding/        # Android 端 (Flutter)
+│   ├── lib/
+│   │   ├── main.dart            # UI 层
+│   │   ├── voicing_connection_controller.dart  # 连接状态机
+│   │   ├── voicing_protocol.dart               # 协议常量
+│   │   ├── app_theme.dart       # 主题与设计 token
+│   │   └── app_logger.dart      # 日志封装
+│   └── pubspec.yaml             # Flutter 依赖
+├── protocol/                    # 双端共享协议契约
+│   └── voicing_protocol_contract.json
+├── .github/workflows/
+│   └── release.yml              # 自动构建发布
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+└── LICENSE
+```
+
 ### 打包发布
 
-正式发布建议使用 GitHub Actions：
+正式发布通过 GitHub Actions 自动构建：
 
 ```bash
-git add .
-git commit -m "chore: release v2.5.0"
-git tag v2.5.0
-git push origin main
-git push origin v2.5.0
+git tag v2.5.1
+git push origin v2.5.1
 ```
 
-推送标签后会自动构建 `voicing.apk` 和 `voicing.exe` 并创建 Release。
-
-本地命令仅用于开发调试：
+本地调试用：
 
 ```bash
-# PC 端打包
-cd pc
-pyinstaller --onefile --windowed --name=VoiceCoding --icon=assets/icon.ico --add-data "assets;assets" voice_coding.py
+# PC
+cd pc && pyinstaller --onefile --windowed --name=VoiceCoding \
+  --icon=assets/icon.ico --add-data "assets;assets" voice_coding.py
 
-# Android 端打包
-cd android/voice_coding
-flutter build apk --release
+# Android
+cd android/voice_coding && flutter build apk --release
 ```
 
-如本机 Flutter/Gradle 的 Java 版本不兼容，请在本地未跟踪的 `android/voice_coding/android/local.properties` 中设置 `org.gradle.java.home=...`。
+## 常见问题
 
-## ❓ 常见问题
+**手机无法连接电脑？**
+1. 确认电脑和手机在同一个 WiFi 热点下
+2. 检查电脑防火墙是否放行 UDP 9530 端口
+3. 手机息屏恢复后等几秒，App 会自动重连
+4. 仍然不行就点手机端"刷新连接"
 
-### Q: 手机无法自动连接电脑？
+**文字打到了错误位置？**
+发送前确保电脑光标在正确的输入框里。
 
-1. 确保电脑和手机在**同一移动热点**下
-2. 检查电脑防火墙是否允许 UDP 端口 9530
-3. 手机从息屏恢复后，等待数秒让 App 自动重建连接
-4. 如果仍未恢复，再点击手机端"刷新连接"手动重试
+**日志在哪？**
+右键托盘图标 → "打开日志"，或在 `%APPDATA%\Voicing\logs\` 下查看。
 
-### Q: 如何查看日志？
+## 贡献
 
-右键托盘图标 → 点击"打开日志" → 自动打开当天日志文件
+欢迎提交 Issue 和 Pull Request，请看 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
-日志位置：`%APPDATA%\Voicing\logs\`
-
-### Q: 文字输入到了错误的位置？
-
-确保在按回车发送前，电脑上的光标已经在正确的输入位置。
-
-## 📝 更新日志
-
-查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史。
-
-## 🤝 贡献
-
-欢迎提交 Issue 和 Pull Request！
-
-## 📄 许可证
+## 许可证
 
 [MIT License](LICENSE)
-
-<div align="center">
-  Made with ❤️ by <a href="https://github.com/kevinlasnh">kevinlasnh</a>
-</div>
