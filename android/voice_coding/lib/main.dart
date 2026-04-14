@@ -285,18 +285,16 @@ class _MainPageState extends State<MainPage>
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            ClipRRect(
+                            _buildMenuItem(
+                              icon: Icons.refresh,
+                              text: '刷新连接',
+                              onTap: () {
+                                _closeMenu();
+                                _refreshConnection();
+                              },
                               borderRadius: const BorderRadius.only(
                                 topLeft: Radius.circular(AppSpacing.borderRadius),
                                 topRight: Radius.circular(AppSpacing.borderRadius),
-                              ),
-                              child: _buildMenuItem(
-                                icon: Icons.refresh,
-                                text: '刷新连接',
-                                onTap: () {
-                                  _closeMenu();
-                                  _refreshConnection();
-                                },
                               ),
                             ),
                             const Divider(
@@ -319,19 +317,13 @@ class _MainPageState extends State<MainPage>
                               indent: AppSpacing.md,
                               endIndent: AppSpacing.md,
                             ),
-                            ClipRRect(
-                              borderRadius: const BorderRadius.only(
-                                bottomLeft: Radius.circular(AppSpacing.borderRadius),
-                                bottomRight: Radius.circular(AppSpacing.borderRadius),
-                              ),
-                              child: _buildToggleMenuItem(
-                                icon: Icons.keyboard_return,
-                                text: '自动 Enter',
-                                isEnabled: _controller.autoEnterEnabled,
-                                onTap: () {
-                                  _controller.toggleAutoEnter();
-                                },
-                              ),
+                            _buildToggleMenuItem(
+                              icon: Icons.keyboard_return,
+                              text: '自动 Enter',
+                              isEnabled: _controller.autoEnterEnabled,
+                              onTap: () {
+                                _controller.toggleAutoEnter();
+                              },
                             ),
                           ],
                         ),
@@ -351,24 +343,31 @@ class _MainPageState extends State<MainPage>
     required IconData icon,
     required String text,
     required VoidCallback onTap,
+    BorderRadius? borderRadius,
   }) {
-    return InkWell(
-      onTap: onTap,
-      splashColor: const Color(0x1AFFFFFF),
-      highlightColor: const Color(0x0DFFFFFF),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.componentPadding),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.textPrimary, size: 18),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                text,
-                style: AppTextStyles.label,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: const Color(0x1AFFFFFF),
+        highlightColor: const Color(0x0DFFFFFF),
+        customBorder: borderRadius != null
+            ? RoundedRectangleBorder(borderRadius: borderRadius)
+            : null,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.textPrimary, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: AppTextStyles.label,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -380,25 +379,34 @@ class _MainPageState extends State<MainPage>
     required bool isEnabled,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      splashColor: const Color(0x1AFFFFFF),
-      highlightColor: const Color(0x0DFFFFFF),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.componentPadding),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.textPrimary, size: 18),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(
-                text,
-                style: AppTextStyles.label,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: const Color(0x1AFFFFFF),
+        highlightColor: const Color(0x0DFFFFFF),
+        customBorder: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(AppSpacing.borderRadius),
+            bottomRight: Radius.circular(AppSpacing.borderRadius),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.textPrimary, size: 18),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  text,
+                  style: AppTextStyles.label,
+                ),
               ),
-            ),
-            const SizedBox(width: AppSpacing.sm),
-            _buildToggleIcon(isEnabled),
-          ],
+              const SizedBox(width: AppSpacing.sm),
+              _buildToggleIcon(isEnabled),
+            ],
+          ),
         ),
       ),
     );
