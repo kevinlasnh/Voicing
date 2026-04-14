@@ -99,3 +99,8 @@ android/voice_coding/android/local.properties
 *.keystore
 *.key
 *.pem
+
+# Local dev docs (not for GitHub)
+findings.md
+progress.md
+task_plan.md
