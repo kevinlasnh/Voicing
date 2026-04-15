@@ -1,5 +1,15 @@
 # Voicing 开发规范
 
+## 当前状态（2026-04-15）
+
+- 当前版本：`v2.6.2`
+- 最新 Release：`https://github.com/kevinlasnh/Voicing/releases/tag/v2.6.2`
+- 最新构建产物：
+  - `voicing.apk`（21.0 MB）
+  - `voicing.exe`（49.4 MB）
+- Android 息屏亮屏恢复：前台恢复窗口 + UDP 监听重建 + 快速重连
+- 自动 Enter：`submit / shadow / commit` 三段式协议，避免语音分段时多次回车
+
 ## ⚠️ 强制规则
 
 ### 每次代码修改后必须更新 CHANGELOG
@@ -39,20 +49,22 @@ Error resolving plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0
 ```
 这里的 `25.0.1` 是 Java 版本号，说明使用了不兼容的 Java 版本。
 
-**解决方案**：在 `android/voice_coding/android/local.properties` 中指定 Java 路径（此文件不提交到 Git）：
+**当前现状**：
+- 本机 `flutter doctor --verbose` 显示 Android toolchain 正在使用 Java 25
+- 本地 `flutter build apk --release` 会因 Java 25 / Gradle 兼容性失败
+- GitHub Actions 发布环境使用 Java 17，`v2.6.2` APK 已成功构建
+
+**解决方案**：安装兼容的 JDK 17/21，并在 `android/voice_coding/android/local.properties` 中指定 Java 路径（此文件不提交到 Git）：
 ```properties
-org.gradle.java.home=C:\\dev\\java21\\jdk-21.0.2
+org.gradle.java.home=C:\\path\\to\\jdk-17-or-21
 ```
 
 **注意**：不要在 `gradle.properties` 中设置本地路径，否则会导致 CI 构建失败。
 
-**本机 Java 路径**：
-- Java 21: `C:\dev\java21\jdk-21.0.2`
-
 **Flutter 启动命令（PowerShell）**：
 ```powershell
-cd C:\Zero\Doc\Cloud\GitHub\Voice-Coding\android\voice_coding
-C:\dev\flutter\bin\flutter.bat run -d 0B221FDD40005P
+cd C:\Zero\Doc\Cloud\GitHub\Voicing\android\voice_coding
+flutter run
 ```
 
 ---
@@ -65,6 +77,9 @@ C:\dev\flutter\bin\flutter.bat run -d 0B221FDD40005P
 
 ### Android 端 (Flutter)
 - **主程序**: `android/voice_coding/lib/main.dart`
+- **连接状态机**: `android/voice_coding/lib/voicing_connection_controller.dart`
+- **恢复策略**: `android/voice_coding/lib/connection_recovery_policy.dart`
+- **协议常量**: `android/voice_coding/lib/voicing_protocol.dart`
 - **依赖**: `android/voice_coding/pubspec.yaml`
 
 ---
@@ -87,6 +102,32 @@ pyinstaller --onefile --windowed --name=VoiceCoding voice_coding.py
 cd android/voice_coding
 flutter run
 ```
+
+### Android 端验证
+```bash
+cd android/voice_coding
+flutter test
+flutter analyze --no-fatal-infos --no-fatal-warnings
+```
+
+### PC 端验证
+```bash
+cd pc
+python -m unittest discover -s tests
+python -m py_compile voice_coding.py network_recovery.py voicing_protocol.py
+```
+
+---
+
+## 当前协议约束（v2.6.2）
+
+- `TYPE_TEXT` 现在带 `send_mode`
+  - `submit`：普通手动发送，可选 `auto_enter`
+  - `shadow`：语音分段增量发送，不直接触发 Enter
+  - `commit`：只提交 Enter，不重复输入文本
+- `ack` 现在带 `clear_input`
+  - 仅 `submit` 由服务端确认后清空输入框
+  - `shadow / commit` 改为客户端自己控制 finalize 与清空时机
 
 ---
 
@@ -164,7 +205,7 @@ flutter run
 
 ---
 
-## 当前开发状态 (2026-02-04)
+## 历史开发状态 (2026-02-04)
 
 ### ✅ 已完成功能
 
