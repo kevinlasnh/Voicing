@@ -14,13 +14,13 @@ import android.os.Looper
 import android.provider.Settings
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
 class ClassicBluetoothManager(
-    private val activity: FlutterActivity,
+    private val activity: FlutterFragmentActivity,
     private val emitEvent: (Map<String, Any?>) -> Unit,
 ) {
     private val mainHandler = Handler(Looper.getMainLooper())
