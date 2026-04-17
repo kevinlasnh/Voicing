@@ -4,7 +4,7 @@
 
 # Voicing
 
-**手机语音输入，直接打到电脑上**
+**把手机语音输入法的输出结果塞进电脑 Agent 的嘴里**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
