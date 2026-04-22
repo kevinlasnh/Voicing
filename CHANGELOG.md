@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.8.0] - 2026-04-22
+
+### 新增
+
+- **Android: 手动输入服务器 IP 连接**
+  - 菜单新增"手动连接 IP"入口，可直接输入 PC 端 IP 建立 WebSocket，绕过 UDP 广播发现
+  - 解决企业 WiFi / 跨 VLAN 场景下，手机与 PC 在同 SSID 但不同子网时 UDP 广播被网关阻断、导致手机无法发现服务的问题
+  - 手动 IP 通过 `shared_preferences` 持久化（key: `manual_server_ip` / `manual_server_port`），重启自动沿用
+  - 手动模式下不启动 UDP 发现监听，避免误被广播覆盖；菜单项可一键清除回到自动发现
+  - 状态栏底部提示同步显示当前使用的手动 IP
+
+### 关键文件
+
+- `android/voice_coding/lib/voicing_connection_controller.dart`：新增 `manualMode` / `setManualServer()` / `clearManualServer()`，以及 `_loadManualServerPreference()`
+- `android/voice_coding/lib/main.dart`：菜单加入"手动连接 IP"项与 Dialog
+
+### 测试
+
+- Android:
+  - `cd android/voice_coding && flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `cd android/voice_coding && flutter test`
+  - 真机验证：在企业 WiFi 下输入 PC IP 可成功连接，清除后切回 UDP 自动发现
+
+---
+
 ## [2.7.2] - 2026-04-17
 
 ### 修复

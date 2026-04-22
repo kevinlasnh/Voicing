@@ -1,0 +1,67 @@
+name: Debug APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'android/voice_coding/**'
+      - '.github/workflows/debug-apk.yml'
+  pull_request:
+    paths:
+      - 'android/voice_coding/**'
+      - '.github/workflows/debug-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-debug-apk:
+    name: Build Debug APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: zulu
+          java-version: "17"
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2
+        with:
+          channel: stable
+          flutter-version: 3.27.0
+          cache: true
+
+      - name: Get dependencies
+        working-directory: android/voice_coding
+        run: flutter pub get
+
+      - name: Run Flutter analyze
+        working-directory: android/voice_coding
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Run Flutter tests
+        working-directory: android/voice_coding
+        run: flutter test
+
+      - name: Build debug APK
+        working-directory: android/voice_coding
+        run: flutter build apk --debug
+
+      - name: Rename APK
+        run: mv android/voice_coding/build/app/outputs/flutter-apk/app-debug.apk android/voice_coding/build/app/outputs/flutter-apk/voicing-debug.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: voicing-debug-apk
+          path: android/voice_coding/build/app/outputs/flutter-apk/voicing-debug.apk
+          retention-days: 14

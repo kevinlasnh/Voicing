@@ -36,6 +36,9 @@ class VoicingConnectionController extends ChangeNotifier {
   final TextEditingController textController = TextEditingController();
   final ConnectionRecoveryPolicy _recoveryPolicy;
 
+  static const String _prefKeyManualIp = 'manual_server_ip';
+  static const String _prefKeyManualPort = 'manual_server_port';
+
   WebSocketChannel? _channel;
   ConnectionStatus _status = ConnectionStatus.disconnected;
   bool _syncEnabled = true;
@@ -43,6 +46,7 @@ class VoicingConnectionController extends ChangeNotifier {
   Timer? _reconnectTimer;
   String _serverIp = VoicingProtocol.defaultServerIp;
   int _serverPort = VoicingProtocol.websocketPort;
+  bool _manualMode = false;
   String _lastSentText = '';
   final bool _shadowModeEnabled = true;
   int _lastSentLength = 0;
@@ -67,11 +71,17 @@ class VoicingConnectionController extends ChangeNotifier {
   bool get autoEnterEnabled => _autoEnterEnabled;
   String get serverIp => _serverIp;
   int get serverPort => _serverPort;
+  bool get manualMode => _manualMode;
   String get lastSentText => _lastSentText;
 
   Future<void> initialize() async {
     await _loadAutoEnterPreference();
-    await _restartUdpDiscovery(reason: 'init');
+    await _loadManualServerPreference();
+    if (_manualMode) {
+      AppLogger.info('手动服务器模式已启用: $_serverIp:$_serverPort');
+    } else {
+      await _restartUdpDiscovery(reason: 'init');
+    }
     _forceReconnect(resetBackoff: true, reason: 'init');
   }
 
@@ -81,7 +91,9 @@ class VoicingConnectionController extends ChangeNotifier {
     } else if (state == AppLifecycleState.resumed &&
         _recoveryPolicy.shouldForceReconnectOnResume()) {
       _beginForegroundRecovery();
-      await _restartUdpDiscovery(reason: 'app resumed');
+      if (!_manualMode) {
+        await _restartUdpDiscovery(reason: 'app resumed');
+      }
       _forceReconnect(resetBackoff: true, reason: 'app resumed');
     }
   }
@@ -379,6 +391,9 @@ class VoicingConnectionController extends ChangeNotifier {
   }
 
   void _handleUdpDiscovery(String message, String sourceIp) {
+    if (_manualMode) {
+      return;
+    }
     try {
       final announcement = VoicingProtocol.parseUdpDiscoveryMessage(message);
       if (announcement == null) {
@@ -572,6 +587,63 @@ class VoicingConnectionController extends ChangeNotifier {
     } catch (error, stackTrace) {
       AppLogger.warning('保存自动 Enter 设置失败', error: error, stackTrace: stackTrace);
     }
+  }
+
+  Future<void> _loadManualServerPreference() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final ip = prefs.getString(_prefKeyManualIp);
+      final port = prefs.getInt(_prefKeyManualPort);
+      if (ip != null && ip.isNotEmpty) {
+        _manualMode = true;
+        _serverIp = ip;
+        _serverPort = port ?? VoicingProtocol.websocketPort;
+      }
+    } catch (error, stackTrace) {
+      AppLogger.warning('加载手动服务器设置失败', error: error, stackTrace: stackTrace);
+    }
+  }
+
+  Future<void> setManualServer(String ip, {int? port}) async {
+    final trimmed = ip.trim();
+    if (trimmed.isEmpty) {
+      return;
+    }
+    final resolvedPort = port ?? VoicingProtocol.websocketPort;
+    _manualMode = true;
+    _serverIp = trimmed;
+    _serverPort = resolvedPort;
+    await _stopUdpDiscovery();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_prefKeyManualIp, trimmed);
+      await prefs.setInt(_prefKeyManualPort, resolvedPort);
+    } catch (error, stackTrace) {
+      AppLogger.warning('保存手动服务器设置失败', error: error, stackTrace: stackTrace);
+    }
+    AppLogger.info('切换到手动服务器: $trimmed:$resolvedPort');
+    notifyListeners();
+    _forceReconnect(resetBackoff: true, reason: 'manual server set');
+  }
+
+  Future<void> clearManualServer() async {
+    if (!_manualMode) {
+      return;
+    }
+    _manualMode = false;
+    _serverIp = VoicingProtocol.defaultServerIp;
+    _serverPort = VoicingProtocol.websocketPort;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_prefKeyManualIp);
+      await prefs.remove(_prefKeyManualPort);
+    } catch (error, stackTrace) {
+      AppLogger.warning('清除手动服务器设置失败', error: error, stackTrace: stackTrace);
+    }
+    AppLogger.info('清除手动服务器，切回 UDP 自动发现');
+    notifyListeners();
+    await _restartUdpDiscovery(reason: 'manual server cleared');
+    _forceReconnect(resetBackoff: true, reason: 'manual server cleared');
   }
 
   void _setStatus(ConnectionStatus status) {

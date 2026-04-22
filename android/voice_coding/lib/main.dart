@@ -112,6 +112,77 @@ class _MainPageState extends State<MainPage>
     _controller.recallLastText();
   }
 
+  Future<void> _showManualServerDialog() async {
+    final initial = _controller.manualMode ? _controller.serverIp : '';
+    final textCtrl = TextEditingController(text: initial);
+    final result = await showDialog<_ManualServerDialogResult>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppColors.surface,
+          title: const Text('手动连接服务器', style: AppTextStyles.label),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '企业 WiFi 或跨子网环境下，UDP 广播可能无法到达本机。输入 PC 端显示的 IP 可直连。',
+                style: TextStyle(color: AppColors.textHint, fontSize: 13),
+              ),
+              const SizedBox(height: AppSpacing.sm),
+              TextField(
+                controller: textCtrl,
+                autofocus: true,
+                keyboardType: TextInputType.text,
+                style: const TextStyle(color: AppColors.textPrimary),
+                decoration: InputDecoration(
+                  hintText: '例如 172.23.190.24',
+                  hintStyle: const TextStyle(color: AppColors.textHint),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            if (_controller.manualMode)
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(
+                  _ManualServerDialogResult.clear,
+                ),
+                child: const Text('清除（回到自动发现）',
+                    style: TextStyle(color: AppColors.error)),
+              ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(null),
+              child: const Text('取消',
+                  style: TextStyle(color: AppColors.textHint)),
+            ),
+            TextButton(
+              onPressed: () {
+                final ip = textCtrl.text.trim();
+                if (ip.isEmpty) return;
+                Navigator.of(context).pop(
+                  _ManualServerDialogResult.save(ip),
+                );
+              },
+              child: const Text('连接',
+                  style: TextStyle(color: AppColors.success)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted || result == null) return;
+    if (result.isClear) {
+      await _controller.clearManualServer();
+    } else if (result.ip != null) {
+      await _controller.setManualServer(result.ip!);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -296,6 +367,22 @@ class _MainPageState extends State<MainPage>
                                 topLeft: Radius.circular(AppSpacing.borderRadius),
                                 topRight: Radius.circular(AppSpacing.borderRadius),
                               ),
+                            ),
+                            const Divider(
+                              height: 1,
+                              color: AppColors.divider,
+                              indent: AppSpacing.md,
+                              endIndent: AppSpacing.md,
+                            ),
+                            _buildMenuItem(
+                              icon: Icons.lan_outlined,
+                              text: _controller.manualMode
+                                  ? '手动 IP: ${_controller.serverIp}'
+                                  : '手动连接 IP',
+                              onTap: () {
+                                _closeMenu();
+                                _showManualServerDialog();
+                              },
                             ),
                             const Divider(
                               height: 1,
@@ -499,10 +586,12 @@ class _MainPageState extends State<MainPage>
       children: [
         Container(height: 1, color: AppColors.divider),
         const SizedBox(height: AppSpacing.sm),
-        const Center(
+        Center(
           child: Text(
-            '语音自动发送 · 回车手动发送',
-            style: TextStyle(
+            _controller.manualMode
+                ? '语音自动发送 · 回车手动发送 · 手动连接 ${_controller.serverIp}'
+                : '语音自动发送 · 回车手动发送',
+            style: const TextStyle(
               fontSize: 13,
               color: AppColors.textHint,
             ),
@@ -511,4 +600,17 @@ class _MainPageState extends State<MainPage>
       ],
     );
   }
+}
+
+class _ManualServerDialogResult {
+  const _ManualServerDialogResult._({this.ip, this.isClear = false});
+
+  factory _ManualServerDialogResult.save(String ip) =>
+      _ManualServerDialogResult._(ip: ip);
+
+  static const _ManualServerDialogResult clear =
+      _ManualServerDialogResult._(isClear: true);
+
+  final String? ip;
+  final bool isClear;
 }
