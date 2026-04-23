@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.7.3] - 2026-04-23
+
+### 修复
+
+- **PC: 托盘菜单视觉边缘精确对齐鼠标**
+  - 之前菜单左下角与鼠标点击位置仍有 ~8px 偏移，原因是外层 `QVBoxLayout` 留了 8px 阴影边距
+  - 现在按 `layout().contentsMargins()` 动态补偿（X 减 `shadow.left()`，Windows 上 Y 加 `shadow.bottom()`），让视觉菜单边缘而非 widget 外框对齐鼠标
+  - macOS / Linux 同步按 `shadow.top()` 补偿向下展开方向
+
+- **PC: 连续右键托盘图标可反复弹出菜单**
+  - 修复 `Qt.Popup` 在 Windows 上"吃掉"第二次右键点击导致菜单无法再次弹出的问题
+  - 在 `mousePressEvent` 中检测外部右键点击是否落在托盘图标矩形内，是则 `QTimer.singleShot(0)` 立刻在新位置重开菜单
+  - 左键点击托盘图标不再触发菜单（仅右键响应）
+  - 点击菜单外部区域仍正常关闭菜单（`Qt.Popup` 内建行为保留）
+
+### 文档
+
+- **新增"开发联调工作流"章节到 CLAUDE.md**
+  - 记录已注册测试设备（Pixel 5 / Windows）
+  - 标准启动序列（PC 热重启 + Flutter run）
+  - 双端改动后的迭代规则（热重载 vs 热重启）
+  - 触发词规范（"启动开发环境" / "启动联调"）
+
+### 测试
+
+- PC：
+  - `python -m py_compile pc/voice_coding.py`
+  - Windows 本地手动验证：右键托盘图标，菜单视觉左下角精确贴合鼠标点击位置
+
+---
+
 ## [2.7.2] - 2026-04-17
 
 ### 修复

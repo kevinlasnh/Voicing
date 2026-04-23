@@ -862,19 +862,20 @@ class ModernMenuWidget(QWidget):
         self.container.setGraphicsEffect(shadow)
 
     def show_at_position(self, tray_pos):
-        """在指定位置显示菜单"""
+        """在指定位置显示菜单，视觉左下角对齐鼠标点击位置"""
         self.adjustSize()
         menu_width = self.width()
         menu_height = self.height()
         screen = QApplication.primaryScreen()
         available_geometry = screen.availableGeometry() if screen else None
 
-        x = tray_pos.x()
+        shadow = self.layout().contentsMargins()
+        x = tray_pos.x() - shadow.left()
         if get_platform() == "windows":
-            target_y = tray_pos.y() - menu_height
+            target_y = tray_pos.y() - menu_height + shadow.bottom()
             animation_start_y = target_y + 16
         else:
-            target_y = tray_pos.y()
+            target_y = tray_pos.y() - shadow.top()
             animation_start_y = target_y - 16
 
         if available_geometry:
@@ -978,6 +979,22 @@ class ModernMenuWidget(QWidget):
         else:
             super().keyPressEvent(event)
 
+    def mousePressEvent(self, event):
+        """Popup 模式下，点击菜单外部的事件会发到这里。
+        若点击落在托盘图标矩形内 → 关闭自身并在新位置立刻重开（修复"连续右键第二次不弹"）。
+        """
+        # Qt.Popup 行为：点击外部时坐标是相对于 Popup 窗口的，转全局坐标再判断
+        global_pos = event.globalPos() if hasattr(event, 'globalPos') else self.mapToGlobal(event.pos())
+        if event.button() == Qt.RightButton and state.tray_icon is not None:
+            tray_rect = state.tray_icon.geometry()
+            if tray_rect.isValid() and tray_rect.contains(global_pos):
+                # 关掉自己，延迟一下在新位置重开
+                self.close_with_animation()
+                QTimer.singleShot(0, lambda: state.tray_icon.show_custom_menu())
+                event.accept()
+                return
+        super().mousePressEvent(event)
+
 
 class ModernTrayIcon(QSystemTrayIcon):
     """现代托盘图标"""
@@ -1062,8 +1079,8 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.activated.connect(self.on_tray_activated)
 
     def on_tray_activated(self, reason):
-        """托盘图标激活事件"""
-        if reason in (QSystemTrayIcon.Context, QSystemTrayIcon.Trigger):
+        """托盘图标激活事件 - 仅响应右键"""
+        if reason == QSystemTrayIcon.Context:
             self.show_custom_menu()
 
     def show_custom_menu(self):

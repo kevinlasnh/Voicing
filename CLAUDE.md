@@ -1,5 +1,61 @@
 # Voicing 开发规范
 
+## 开发联调工作流（双端实时调试）
+
+### 已注册测试设备
+
+| 类型 | 名称 | Flutter ID | 平台 |
+|------|------|------------|------|
+| 手机 | Pixel 5 | `0B221FDD40005P` | android-arm64 / Android 14 |
+| 电脑 | 本机 Windows | `windows` | windows-x64 |
+
+> 新增设备时直接更新这张表。Agent 应优先用表里的 ID 跑 `flutter run -d <id>`，避免选错设备。
+
+### 触发词
+
+当用户说"**启动开发环境**" / "**启动联调**" / "**开始热重启测试**"时，agent 必须按下方"标准启动序列"执行，**不要询问、不要逐项确认**，直接连续跑完。
+
+### 标准启动序列
+
+```bash
+# Step 1: 检查 Pixel 5 是否在线（必须先做）
+flutter devices --machine | grep -q "0B221FDD40005P" || echo "❌ Pixel 5 未连接"
+
+# Step 2: PC 端热重启（脚本会自动 kill 旧进程再启动新进程）
+powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_pc_dev.ps1"
+
+# Step 3: Flutter 后台运行到 Pixel 5（保留 hot reload 能力）
+cd android/voice_coding && flutter run -d 0B221FDD40005P
+```
+
+### 双端改动后的迭代规则
+
+| 改动位置 | 生效方式 | 命令 |
+|----------|---------|------|
+| `pc/voice_coding.py` 等 PC 端 Python | **必须 PC 热重启**（Python 长进程不会自动重载） | `powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_pc_dev.ps1"` |
+| `android/voice_coding/lib/**.dart` UI / 业务逻辑 | **Flutter 热重载**（`r` 键，毫秒级） | 在 `flutter run` 终端按 `r` |
+| Dart 状态/类结构改动 / 新增 import | **Flutter 热重启**（`R` 键，约 1-2s） | 在 `flutter run` 终端按 `R` |
+| `pubspec.yaml` 依赖变更 | 必须停掉 flutter run，`flutter pub get`，再 `flutter run` | — |
+
+### 设备连接自检
+
+每次开始联调前 agent 自动跑一次：
+
+```bash
+flutter devices --machine
+```
+
+并解析 JSON 检查 Pixel 5 (`0B221FDD40005P`) 在线。**不在线就直接报告用户**"Pixel 5 未检测到，请检查 USB 连接 / 是否解锁屏幕 / 是否信任本电脑"，**不要继续后续步骤**。
+
+### 关键约束
+
+- **Flutter run 必须用 `run_in_background: true` 启动**，否则会阻塞 agent 后续工具调用
+- **PC 热重启脚本是同步的**（kill + start 即返回），不需要后台
+- **手机端 UI 改动优先用热重载（`r`）**，只有改了状态机 / 类结构才用热重启（`R`）
+- **每次关键改动后必须更新 CHANGELOG.md**（参见下方"强制规则"）
+
+---
+
 ## 当前状态（2026-04-17）
 
 - 当前版本：`v2.7.2`
