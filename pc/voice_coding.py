@@ -862,19 +862,20 @@ class ModernMenuWidget(QWidget):
         self.container.setGraphicsEffect(shadow)
 
     def show_at_position(self, tray_pos):
-        """在指定位置显示菜单"""
+        """在指定位置显示菜单，视觉左下角对齐鼠标点击位置"""
         self.adjustSize()
         menu_width = self.width()
         menu_height = self.height()
         screen = QApplication.primaryScreen()
         available_geometry = screen.availableGeometry() if screen else None
 
-        x = tray_pos.x()
+        shadow = self.layout().contentsMargins()
+        x = tray_pos.x() - shadow.left()
         if get_platform() == "windows":
-            target_y = tray_pos.y() - menu_height
+            target_y = tray_pos.y() - menu_height + shadow.bottom()
             animation_start_y = target_y + 16
         else:
-            target_y = tray_pos.y()
+            target_y = tray_pos.y() - shadow.top()
             animation_start_y = target_y - 16
 
         if available_geometry:
