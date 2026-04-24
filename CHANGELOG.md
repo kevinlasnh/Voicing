@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.1] - 2026-04-24
+
+### 修复
+
+- **Android: QR-only 连接路径**
+  - 手机端启动、恢复前台和手动刷新时不再依赖 UDP 广播发现
+  - 已保存设备会直接按 IP 池逐个尝试连接，适配热点、学校/公司局域网等多网络切换场景
+  - 无保存设备时保持未连接，引导用户通过“更多功能操作 → 扫码连接”完成首次配对
+
+- **PC: 停止运行时 UDP 广播**
+  - 桌面端不再启动 UDP 广播线程
+  - 保留物理网卡枚举，用于 QR payload 的主 IP 和候选 IP 列表
+
+- **Android: 键盘和扫码 UI**
+  - 修复键盘打开时点击“扫码连接”导致二维码区域先出现在上方、再跟随输入区下移的问题
+  - 改用 Android 原生 `WindowInsetsAnimationCompat` 逐帧键盘高度驱动输入区，键盘展开/收起时输入框高度更实时
+  - 修复 App 首次点击“更多功能操作”时菜单冷绘制卡顿
+  - 微调顶部“已连接/未连接/连接中”和“更多功能操作”文字位置
+
+### 文档
+
+- README 更新为 2.9.1 QR-only 当前行为：首次扫码配对，后续按保存的 IP 池自动重连，不再描述 UDP 优先发现路径
+
+### 测试
+
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
+  - `JAVA_HOME=C:\dev\java21\jdk-21.0.2 flutter build apk --debug`
+- PC:
+  - `python -m py_compile pc/voice_coding.py pc/voicing_protocol.py pc/device_identity.py pc/network_recovery.py`
+  - `python -m unittest discover -s pc/tests`
+
+---
+
 ## [2.9.0] - 2026-04-24
 
 ### 新增
