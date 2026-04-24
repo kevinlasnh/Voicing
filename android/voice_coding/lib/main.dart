@@ -40,7 +40,7 @@ class _MainPageState extends State<MainPage>
     with WidgetsBindingObserver, TickerProviderStateMixin {
   static const double _headerControlHeight = 48;
   static const double _statusTextHorizontalOffset = 2;
-  static const double _headerTextVerticalOffset = -0.5;
+  static const double _headerTextVerticalOffset = 0;
   static const double _menuWarmupOpacity = 0.001;
   static const Duration _qrOpenAfterKeyboardDelay = Duration(milliseconds: 280);
   static const EventChannel _keyboardInsetsChannel =

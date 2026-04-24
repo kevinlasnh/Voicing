@@ -107,6 +107,8 @@ android/voice_coding/android/local.properties
 findings.md
 progress.md
 task_plan.md
+CLAUDE.md
+AGENTS.md
 
 # Local agent memory / investigation artifacts
 .brv/

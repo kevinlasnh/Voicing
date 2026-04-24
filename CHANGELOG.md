@@ -9,10 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### 改进
+
+- 微调 Android 顶部状态文字和“更多功能操作”文字的纵向位置
+
 ### 文档
 
 - 同步 README、Android README 和项目开发规范到 v2.9.1 QR-only 连接策略
 - 统一文档中的“QR 码”写法，移除字母间错误空格
+- 优化精简 `AGENTS.md` / `CLAUDE.md`，保持两份仓库级 agent 规则完全一致
+- 停止跟踪本地 agent 规则文件 `AGENTS.md` / `CLAUDE.md`，并加入 `.gitignore`
 
 ---
 
