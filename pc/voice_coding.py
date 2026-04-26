@@ -48,6 +48,11 @@ from websockets.server import serve
 from PIL import Image, ImageDraw
 import pyperclip
 
+try:
+    import psutil
+except Exception:
+    psutil = None
+
 from device_identity import get_or_create_device_identity
 from platform_autostart import is_startup_enabled, set_startup_enabled
 from platform_instance import check_single_instance, show_already_running_message
@@ -83,10 +88,11 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.1"
+APP_VERSION = "2.9.2"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.15
 NATIVE_FONT_FAMILY = get_native_font_family()
+NETWORK_INTERFACE_REFRESH_SEC = 1
 
 
 # ============================================================
@@ -224,6 +230,54 @@ def get_all_local_ips() -> list:
 def get_all_network_candidates() -> list[NetworkInterfaceCandidate]:
     """Return physical-ish private IPv4 interfaces sorted by connection priority."""
     platform_name = get_platform()
+    candidates = get_psutil_network_candidates(platform_name)
+    if candidates:
+        return candidates
+    return get_command_network_candidates(platform_name)
+
+
+def get_psutil_network_candidates(
+    platform_name: str,
+) -> list[NetworkInterfaceCandidate]:
+    """Fast in-process interface discovery used for runtime QR/WS refresh."""
+    if psutil is None:
+        return []
+
+    try:
+        adapters = psutil.net_if_addrs()
+    except Exception as exc:
+        logging.debug(f"psutil 网络接口探测失败: {exc}")
+        return []
+
+    interfaces: list[NetworkInterfaceCandidate] = []
+    seen: set[tuple[str, int]] = set()
+    for interface_name, addresses in adapters.items():
+        for address in addresses:
+            if address.family != socket.AF_INET:
+                continue
+            prefix_length = _prefix_length_from_netmask(address.netmask)
+            candidate = _build_network_interface_candidate(
+                platform_name,
+                address.address,
+                prefix_length,
+                interface_name,
+            )
+            if candidate is None:
+                continue
+            key = (candidate.ip, candidate.prefix_length)
+            if key in seen:
+                continue
+            seen.add(key)
+            interfaces.append(candidate)
+
+    return _sort_interface_candidates(interfaces, platform_name)
+
+
+def get_command_network_candidates(
+    platform_name: str | None = None,
+) -> list[NetworkInterfaceCandidate]:
+    """Slower command-based fallback for platforms without psutil."""
+    platform_name = platform_name or get_platform()
     interface_discovery_commands = {
         "windows": [
             "powershell",
@@ -303,6 +357,38 @@ def extract_command_interfaces(platform_name: str, command_output: str) -> list[
     ]
 
 
+def _prefix_length_from_netmask(netmask: str | None) -> Optional[int]:
+    if not netmask:
+        return None
+    try:
+        return ipaddress.IPv4Network(f"0.0.0.0/{netmask}").prefixlen
+    except ValueError:
+        return None
+
+
+def _build_network_interface_candidate(
+    platform_name: str,
+    ip: str,
+    prefix_length: Optional[int],
+    name: str = "",
+) -> Optional[NetworkInterfaceCandidate]:
+    try:
+        normalized_prefix = int(prefix_length)
+    except (TypeError, ValueError):
+        return None
+    if not _is_discoverable_private_ip(ip, normalized_prefix):
+        return None
+    normalized_name = str(name or "").strip()
+    if _is_vpn_or_virtual_interface(platform_name, normalized_name):
+        return None
+    return NetworkInterfaceCandidate(
+        ip=ip,
+        prefix_length=normalized_prefix,
+        name=normalized_name,
+        interface_type=_classify_interface_type(platform_name, normalized_name),
+    )
+
+
 def extract_command_interface_candidates(
     platform_name: str,
     command_output: str,
@@ -315,28 +401,19 @@ def extract_command_interface_candidates(
     seen: set[tuple[str, int]] = set()
 
     def add_interface(ip: str, prefix_length: int, name: str = "") -> None:
-        try:
-            normalized_prefix = int(prefix_length)
-        except (TypeError, ValueError):
+        interface = _build_network_interface_candidate(
+            platform_name,
+            ip,
+            prefix_length,
+            name,
+        )
+        if interface is None:
             return
-        candidate = (ip, normalized_prefix)
+        candidate = (interface.ip, interface.prefix_length)
         if candidate in seen:
             return
-        if not _is_discoverable_private_ip(ip, normalized_prefix):
-            return
-        normalized_name = str(name or "").strip()
-        if _is_vpn_or_virtual_interface(platform_name, normalized_name):
-            return
-        interface_type = _classify_interface_type(platform_name, normalized_name)
         seen.add(candidate)
-        interfaces.append(
-            NetworkInterfaceCandidate(
-                ip=ip,
-                prefix_length=normalized_prefix,
-                name=normalized_name,
-                interface_type=interface_type,
-            )
-        )
+        interfaces.append(interface)
 
     if platform_name == "windows":
         try:
@@ -579,15 +656,56 @@ def _ip_sort_key(ip: str) -> tuple[int, str]:
     return (2, ip)
 
 
-def get_primary_server_ip() -> str:
-    if SERVER_INTERFACES:
-        return SERVER_INTERFACES[0][0]
+def refresh_server_interfaces(*, log_changes: bool = True) -> list[tuple[str, str]]:
+    """Refresh the QR/WS interface snapshot from the current OS network state."""
+    global SERVER_INTERFACES, SERVER_INTERFACES_INITIALIZED
+
+    discovered_interfaces = get_all_network_candidates()
+    latest_interfaces = calculate_broadcast_addresses(
+        [(candidate.ip, candidate.prefix_length) for candidate in discovered_interfaces]
+    )
+
+    with SERVER_INTERFACES_LOCK:
+        was_initialized = SERVER_INTERFACES_INITIALIZED
+        previous_interfaces = list(SERVER_INTERFACES)
+        changed = latest_interfaces != SERVER_INTERFACES
+        if changed:
+            SERVER_INTERFACES = latest_interfaces
+        SERVER_INTERFACES_INITIALIZED = True
+        snapshot = list(SERVER_INTERFACES)
+
+    if log_changes and (changed or not was_initialized):
+        logging.info(
+            "QR/WS 网络接口刷新: "
+            f"{_format_server_interface_ips(previous_interfaces)} -> "
+            f"{_format_server_interface_ips(snapshot)}"
+        )
+        log_detected_network_interfaces(discovered_interfaces)
+
+    return snapshot
+
+
+def get_server_interfaces(*, refresh: bool = False) -> list[tuple[str, str]]:
+    if refresh:
+        return refresh_server_interfaces()
+    with SERVER_INTERFACES_LOCK:
+        return list(SERVER_INTERFACES)
+
+
+def _format_server_interface_ips(interfaces: list[tuple[str, str]]) -> str:
+    return ", ".join(ip for ip, _broadcast in interfaces) or "none"
+
+
+def get_primary_server_ip(*, refresh: bool = False) -> str:
+    server_interfaces = get_server_interfaces(refresh=refresh)
+    if server_interfaces:
+        return server_interfaces[0][0]
     return get_hotspot_ip()
 
 
-def get_advertised_server_ips() -> list[str]:
+def get_advertised_server_ips(*, refresh: bool = False) -> list[str]:
     ips: list[str] = []
-    for ip, _broadcast in SERVER_INTERFACES:
+    for ip, _broadcast in get_server_interfaces(refresh=refresh):
         if ip not in ips:
             ips.append(ip)
     if not ips:
@@ -613,6 +731,8 @@ def log_detected_network_interfaces(interfaces: list[NetworkInterfaceCandidate])
 
 # Will be set at runtime / 运行时设置
 SERVER_INTERFACES: list[tuple[str, str]] = []
+SERVER_INTERFACES_LOCK = threading.Lock()
+SERVER_INTERFACES_INITIALIZED = False
 
 
 # ============================================================
@@ -756,7 +876,7 @@ async def broadcast_sync_state():
 async def start_server():
     """Start the WebSocket server / 启动WebSocket服务器"""
     while state.running:
-        bind_hosts = get_advertised_server_ips()
+        bind_hosts = get_advertised_server_ips(refresh=True)
         servers = []
         bound_hosts = []
         try:
@@ -783,8 +903,8 @@ async def start_server():
                 f"{', '.join(f'{host}:{state.ws_port}' for host in bound_hosts)}"
             )
             while state.running:
-                await asyncio.sleep(1)
-                latest_hosts = get_advertised_server_ips()
+                await asyncio.sleep(NETWORK_INTERFACE_REFRESH_SEC)
+                latest_hosts = get_advertised_server_ips(refresh=True)
                 if set(latest_hosts) != set(bound_hosts):
                     old_hosts = ", ".join(bound_hosts) or "none"
                     new_hosts = ", ".join(latest_hosts) or "none"
@@ -1381,7 +1501,7 @@ class QRCodeDialog(QWidget):
         self._animation_content_rect = QRect()
         self._animation_pixmap = QPixmap()
 
-        # 5 秒刷新 QR（stub：仅日志，未来接 IP 变化检测）
+        # Keep QR payload aligned with runtime IP changes.
         self._refresh_timer = QTimer(self)
         self._refresh_timer.timeout.connect(self._refresh_qr)
 
@@ -1498,18 +1618,20 @@ class QRCodeDialog(QWidget):
         return pix
 
     def _refresh_qr(self):
-        """5s timer：实际只是 stub 日志，IP 文字模拟刷新"""
+        """Refresh QR payload from the current interface snapshot."""
         self._populate_content()
 
     def _build_qr_payload(self):
         device_identity = get_or_create_device_identity()
+        advertised_ips = get_advertised_server_ips(refresh=True)
+        primary_ip = advertised_ips[0] if advertised_ips else get_primary_server_ip()
         payload = build_qr_payload(
             device_id=device_identity.device_id,
-            ip=get_primary_server_ip(),
+            ip=primary_ip,
             port=state.ws_port,
             name=device_identity.name,
             os_name=device_identity.os,
-            ips=get_advertised_server_ips(),
+            ips=advertised_ips,
         )
         return json.dumps(payload, separators=(",", ":"))
 
@@ -2026,8 +2148,6 @@ def update_tray_icon_pyqt(tray_icon):
 # ============================================================
 def main():
     """Main entry point / 主入口"""
-    global SERVER_INTERFACES
-
     # 初始化日志系统
     setup_logging()
     try:
@@ -2037,12 +2157,9 @@ def main():
         show_fatal_message("Voicing 无法启动", str(exc))
         return
 
-    # Detect QR-advertisable interfaces at startup
-    discovered_interfaces = get_all_network_candidates()
-    log_detected_network_interfaces(discovered_interfaces)
-    SERVER_INTERFACES = calculate_broadcast_addresses(
-        [(candidate.ip, candidate.prefix_length) for candidate in discovered_interfaces]
-    )
+    # Detect QR-advertisable interfaces at startup; the server thread refreshes
+    # this snapshot at runtime for network changes.
+    refresh_server_interfaces(log_changes=True)
     logging.info(f"当前首选服务地址: {get_primary_server_ip()}")
 
     # Start WebSocket server in background thread

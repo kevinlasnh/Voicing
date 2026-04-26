@@ -9,16 +9,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+_暂无。_
+
+---
+
+## [2.9.2] - 2026-04-26
+
+### 修复
+
+- **PC: 运行时网络切换后 QR/监听刷新**
+  - 修复 PC 端和 Android 端都不重启、只一起切换到新局域网后，手机扫描 PC QR 码爆红的问题
+  - PC 端不再只使用启动时缓存的 `SERVER_INTERFACES`
+  - WebSocket server 会在运行时刷新物理 IPv4 地址快照，发现地址池变化后关闭旧监听并重新绑定当前局域网 IP
+  - QR 弹窗打开和 5 秒刷新时重新生成当前 `ip/ips` payload，重新扫码即可更新 Android 保存的候选 IP 池
+
 ### 改进
 
-- 微调 Android 顶部状态文字和“更多功能操作”文字的纵向位置
+- **PC: 快速网卡枚举**
+  - 新增 `psutil` 作为桌面端运行时网卡枚举主路径，避免 QR 打开或 server 后台循环高频启动 PowerShell
+  - 保留原有命令行网卡枚举作为 fallback，确保缺少 `psutil` 时仍可启动
 
 ### 文档
 
-- 同步 README、Android README 和项目开发规范到 v2.9.1 QR-only 连接策略
-- 统一文档中的“QR 码”写法，移除字母间错误空格
-- 优化精简 `AGENTS.md` / `CLAUDE.md`，保持两份仓库级 agent 规则完全一致
-- 停止跟踪本地 agent 规则文件 `AGENTS.md` / `CLAUDE.md`，并加入 `.gitignore`
+- README 和 Android README 补充 v2.9.2 网络切换行为：PC 端运行中刷新 QR 码与 WebSocket 监听地址，切换局域网后无需重启 PC 端软件
+
+### 测试
+
+- PC:
+  - `python -m py_compile pc/voice_coding.py pc/voicing_protocol.py pc/device_identity.py pc/network_recovery.py`
+  - `python -m unittest discover -s pc/tests`
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
 
 ---
 

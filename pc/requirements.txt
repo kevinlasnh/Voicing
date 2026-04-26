@@ -5,3 +5,4 @@ pyperclip~=1.11.0
 pyinstaller~=6.19.0
 PyQt5~=5.15.11
 qrcode~=8.0
+psutil~=7.2.0
