@@ -1,19 +1,47 @@
-# Changelog
+# Changelog / 更新日志
 
 All notable changes to this project will be documented in this file.
+本文件记录本项目所有重要变更。
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)，版本号遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
+
+> **Bilingual policy / 双语说明**: From v2.9.3 onward, each release block is written bilingually (English first, 中文 second). Older release blocks below remain in their original Chinese to preserve linguistic accuracy of historical records. / 自 v2.9.3 起，每个版本块按英文 + 中文双语并排维护；以下早期版本块保留原始中文以确保历史准确性。
 
 ---
 
 ## [Unreleased]
 
-_暂无。_
+_None yet. / 暂无。_
 
 ---
 
 ## [2.9.3] - 2026-04-26
+
+### Fixed
+
+- **Android: preserve the same PC's old-LAN candidate IPs after re-scan**
+  - Fixed: after switching both ends from LAN A to LAN B and re-scanning successfully, switching back to LAN A failed to auto-reconnect
+  - When the QR scan saves a PC with the same `device_id`, the new QR's `ip/ips` are now merged into the existing `saved_server.candidateIps`
+  - The newly connected IP is still promoted to primary, but old LAN / hotspot IPs are no longer overwritten
+  - When the user confirms replacing the PC with a different one, the old candidate pool is **not** merged, preventing cross-device IP bleed
+
+### Docs
+
+- README and Android README updated: re-scanning the same PC keeps historical LAN candidate IPs, so switching back to an older network still auto-reconnects
+
+### Tests
+
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
+  - `flutter build apk --debug`
+- PC:
+  - `python -m py_compile pc/voice_coding.py pc/voicing_protocol.py pc/device_identity.py pc/network_recovery.py`
+  - `python -m unittest discover -s pc/tests`
+- General:
+  - `git diff --check`
 
 ### 修复
 
