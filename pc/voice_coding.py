@@ -24,7 +24,7 @@ from typing import NamedTuple, Optional
 from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMessageBox,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect, QMenu, QAction,
 )
 from PyQt5.QtCore import (
     QObject,
@@ -1302,9 +1302,7 @@ class ModernMenuWidget(QWidget):
         """显示 QR 码弹窗"""
         anchor = QCursor.pos()
         self.close_with_animation()
-        if not hasattr(state, 'qr_dialog') or state.qr_dialog is None:
-            state.qr_dialog = QRCodeDialog()
-        state.qr_dialog.show_from(anchor)
+        show_qr_dialog_at(anchor, close_on_focus_loss=True)
 
     def quit_app(self):
         """退出应用"""
@@ -1511,6 +1509,7 @@ class QRCodeDialog(QWidget):
         self._scan_success_shown = False
         self._closing_after_success = False
         self._success_generation = 0
+        self._close_on_focus_loss = True
 
         self.setup_ui()
 
@@ -1645,8 +1644,9 @@ class QRCodeDialog(QWidget):
         pix = self._cached_qr_pixmap
         self.qr_label.setPixmap(pix)
 
-    def show_from(self, anchor_global_pos):
+    def show_from(self, anchor_global_pos, close_on_focus_loss=True):
         """弹出动画：从鼠标点击位置缩放 + 位移到屏幕中心（所有平台统一行为）"""
+        self._close_on_focus_loss = close_on_focus_loss
         self._populate_content()
         self.success_overlay.reset()
         self._scan_success_shown = False
@@ -1923,10 +1923,13 @@ class QRCodeDialog(QWidget):
     def focusOutEvent(self, event):
         """点击外部自动关闭"""
         # 延迟一帧检查，避免动画刚弹出就被自己 raise 触发关闭
-        QTimer.singleShot(50, self._maybe_close_on_focus_loss)
+        if self._close_on_focus_loss:
+            QTimer.singleShot(50, self._maybe_close_on_focus_loss)
         super().focusOutEvent(event)
 
     def _maybe_close_on_focus_loss(self):
+        if not self._close_on_focus_loss:
+            return
         if self._animation_mode:
             return
         if self._scan_success_shown or self._closing_after_success:
@@ -1938,6 +1941,27 @@ class QRCodeDialog(QWidget):
     def mousePressEvent(self, event):
         """点弹窗内空白处不关闭，但点关闭按钮等已在子控件处理"""
         super().mousePressEvent(event)
+
+
+def show_qr_dialog_at(anchor_global_pos=None, close_on_focus_loss=True):
+    """显示 QR 码弹窗；Linux 启动备用入口会关闭焦点丢失自动隐藏。"""
+    if state.qr_dialog is None:
+        state.qr_dialog = QRCodeDialog()
+
+    if anchor_global_pos is None:
+        screen = QApplication.primaryScreen()
+        anchor_global_pos = screen.availableGeometry().center() if screen else QCursor.pos()
+
+    state.qr_dialog.show_from(
+        anchor_global_pos,
+        close_on_focus_loss=close_on_focus_loss,
+    )
+
+
+def show_startup_qr_dialog():
+    """Linux 托盘不可见/不可用时，启动后保留一个可扫码二维码窗口。"""
+    logging.info("启动时显示 QR 码窗口，作为 Linux 托盘备用入口")
+    show_qr_dialog_at(close_on_focus_loss=False)
 
 
 class ModernTrayIcon(QSystemTrayIcon):
@@ -1958,9 +1982,6 @@ class ModernTrayIcon(QSystemTrayIcon):
         if state.qr_dialog is None:
             state.qr_dialog = QRCodeDialog()
             state.qr_dialog._populate_content()
-            state.qr_dialog.move(-10000, -10000)
-            state.qr_dialog.show()
-            QTimer.singleShot(50, state.qr_dialog.hide)
         self.setup_icon()
         self.setup_menu()
         # 设置悬停提示
@@ -2028,11 +2049,37 @@ class ModernTrayIcon(QSystemTrayIcon):
         """设置菜单"""
         # 不使用 QMenu，而是自定义菜单
         self.activated.connect(self.on_tray_activated)
+        if get_platform() == "linux":
+            self._setup_linux_native_menu()
+
+    def _setup_linux_native_menu(self):
+        """GNOME/AppIndicator 环境下，原生菜单比自绘弹窗更可靠。"""
+        self.native_menu = QMenu()
+
+        show_qr_action = QAction("显示 QR 码", self.native_menu)
+        show_qr_action.triggered.connect(self.show_qr_dialog)
+        self.native_menu.addAction(show_qr_action)
+
+        open_log_action = QAction("打开日志", self.native_menu)
+        open_log_action.triggered.connect(self.open_log_from_tray)
+        self.native_menu.addAction(open_log_action)
+
+        self.native_menu.addSeparator()
+
+        quit_action = QAction("退出应用", self.native_menu)
+        quit_action.triggered.connect(self.quit_app_from_tray)
+        self.native_menu.addAction(quit_action)
+
+        self.setContextMenu(self.native_menu)
 
     def on_tray_activated(self, reason):
-        """托盘图标激活事件 - 仅响应右键"""
-        if reason == QSystemTrayIcon.Context:
+        """托盘图标激活事件"""
+        if reason == QSystemTrayIcon.Context and get_platform() != "linux":
             self.show_custom_menu()
+        elif reason == QSystemTrayIcon.Trigger:
+            self.show_custom_menu()
+        elif reason == QSystemTrayIcon.DoubleClick:
+            self.show_qr_dialog()
 
     def show_custom_menu(self):
         """显示自定义菜单"""
@@ -2042,6 +2089,25 @@ class ModernTrayIcon(QSystemTrayIcon):
         # 获取托盘图标位置并显示菜单（带动画）
         pos = QCursor.pos()
         self.menu_widget.show_at_position(pos)
+
+    def show_qr_dialog(self):
+        """从托盘直接显示 QR 码。"""
+        show_qr_dialog_at(QCursor.pos(), close_on_focus_loss=True)
+
+    def open_log_from_tray(self):
+        """原生托盘菜单打开日志。"""
+        if state.log_file and state.log_file.exists():
+            open_file_in_text_editor(state.log_file)
+        else:
+            log_dir = get_log_dir()
+            log_dir.mkdir(parents=True, exist_ok=True)
+            open_file_in_default_app(log_dir)
+
+    def quit_app_from_tray(self):
+        """原生托盘菜单退出应用。"""
+        state.running = False
+        state.shutdown_event.set()
+        QApplication.quit()
 
     def update_icon(self, status, dim=False):
         """更新图标状态 - 使用缓存的图标（快速切换）
@@ -2102,8 +2168,9 @@ def run_tray():
         app = QApplication.instance()
 
     app.setQuitOnLastWindowClosed(False)
-    if not QSystemTrayIcon.isSystemTrayAvailable():
-        raise RuntimeError("当前桌面环境不提供系统托盘，Voicing 无法继续运行。")
+    tray_available = QSystemTrayIcon.isSystemTrayAvailable()
+    if not tray_available:
+        logging.warning("当前桌面环境不提供系统托盘，将使用启动 QR 码窗口作为备用入口。")
 
     if state.ui_signals is None:
         state.ui_signals = UiSignals()
@@ -2112,20 +2179,25 @@ def run_tray():
         type=Qt.QueuedConnection,
     )
 
-    # 创建现代托盘图标
-    tray_icon = ModernTrayIcon()
-    tray_icon.show()
+    update_timer = None
+    if tray_available:
+        # 创建现代托盘图标
+        tray_icon = ModernTrayIcon()
+        tray_icon.show()
 
-    # 更新初始状态
-    update_tray_icon_pyqt(tray_icon)
+        # 更新初始状态
+        update_tray_icon_pyqt(tray_icon)
 
-    # 保存到状态
-    state.tray_icon = tray_icon
+        # 保存到状态
+        state.tray_icon = tray_icon
 
-    # 定时更新图标状态
-    update_timer = QTimer()
-    update_timer.timeout.connect(lambda: update_tray_icon_pyqt(tray_icon))
-    update_timer.start(200)  # 每200ms更新（闪烁）
+        # 定时更新图标状态
+        update_timer = QTimer()
+        update_timer.timeout.connect(lambda: update_tray_icon_pyqt(tray_icon))
+        update_timer.start(200)  # 每200ms更新（闪烁）
+
+    if get_platform() == "linux" or not tray_available:
+        QTimer.singleShot(250, show_startup_qr_dialog)
 
     # 运行应用
     app.exec()
