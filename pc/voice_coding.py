@@ -88,7 +88,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.3"
+APP_VERSION = "2.9.4"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.15
 NATIVE_FONT_FAMILY = get_native_font_family()
@@ -119,6 +119,7 @@ class AppState:
         self.qr_dialog = None  # QR 码弹窗（懒加载）
         self.ui_signals = None  # Qt UI 线程信号桥
         self.bound_ws_host = None  # 当前 WebSocket 实际绑定地址
+        self.bound_ws_hosts = []  # 当前 WebSocket 实际绑定成功的地址列表
 
 state = AppState()
 
@@ -602,10 +603,8 @@ def _classify_interface_type(platform_name: str, interface_name: str) -> str:
         return "unknown"
 
     if platform_name == "darwin":
-        if normalized == "en0":
-            return "wifi"
         if re.match(r"^en\d+$", normalized):
-            return "ethernet"
+            return "unknown"
         return "unknown"
 
     return "unknown"
@@ -713,6 +712,25 @@ def get_advertised_server_ips(*, refresh: bool = False) -> list[str]:
         if fallback_ip:
             ips.append(fallback_ip)
     return ips
+
+
+def get_bound_server_ips() -> list[str]:
+    with state.lock:
+        return list(state.bound_ws_hosts)
+
+
+def set_bound_server_ips(hosts: list[str]) -> None:
+    normalized_hosts = list(dict.fromkeys(hosts))
+    with state.lock:
+        state.bound_ws_hosts = normalized_hosts
+        state.bound_ws_host = ",".join(normalized_hosts) if normalized_hosts else None
+
+
+def get_qr_advertised_server_ips(*, refresh: bool = False) -> list[str]:
+    bound_ips = get_bound_server_ips()
+    if bound_ips:
+        return bound_ips
+    return get_advertised_server_ips(refresh=refresh)
 
 
 def log_detected_network_interfaces(interfaces: list[NetworkInterfaceCandidate]) -> None:
@@ -891,13 +909,14 @@ async def start_server():
                 print(f"WebSocket server started at ws://{bind_host}:{state.ws_port}")
 
             if not servers:
+                set_bound_server_ips([])
                 logging.error(
                     "没有可监听的物理网络接口，WebSocket server 暂停重试。"
                 )
                 await asyncio.sleep(2)
                 continue
 
-            state.bound_ws_host = ",".join(bound_hosts)
+            set_bound_server_ips(bound_hosts)
             logging.info(
                 "WebSocket server listening on physical interfaces: "
                 f"{', '.join(f'{host}:{state.ws_port}' for host in bound_hosts)}"
@@ -926,7 +945,7 @@ async def start_server():
                     *(server.wait_closed() for server in servers),
                     return_exceptions=True,
                 )
-            state.bound_ws_host = None
+            set_bound_server_ips([])
 
 
 def run_server():
@@ -1623,8 +1642,8 @@ class QRCodeDialog(QWidget):
 
     def _build_qr_payload(self):
         device_identity = get_or_create_device_identity()
-        advertised_ips = get_advertised_server_ips(refresh=True)
-        primary_ip = advertised_ips[0] if advertised_ips else get_primary_server_ip()
+        advertised_ips = get_qr_advertised_server_ips(refresh=True)
+        primary_ip = advertised_ips[0] if advertised_ips else get_primary_server_ip(refresh=True)
         payload = build_qr_payload(
             device_id=device_identity.device_id,
             ip=primary_ip,

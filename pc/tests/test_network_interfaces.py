@@ -12,9 +12,12 @@ from voice_coding import (
     extract_command_interface_candidates,
     extract_command_interfaces,
     get_advertised_server_ips,
+    get_bound_server_ips,
     get_primary_server_ip,
     get_psutil_network_candidates,
+    get_qr_advertised_server_ips,
     refresh_server_interfaces,
+    set_bound_server_ips,
 )
 
 
@@ -84,7 +87,27 @@ utun4: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380
 """
         self.assertEqual(
             extract_command_interfaces("darwin", output),
-            [("10.0.0.5", 24), ("192.168.2.1", 24)],
+            [("192.168.2.1", 24), ("10.0.0.5", 24)],
+        )
+
+    def test_extract_command_interfaces_macos_treats_en_interfaces_as_unknown(self):
+        output = """
+en0: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+    inet 192.168.2.10 netmask 0xffffff00 broadcast 192.168.2.255
+en1: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+    inet 10.16.177.83 netmask 0xffffc000 broadcast 10.16.191.255
+en5: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
+    inet 172.20.10.2 netmask 0xfffffff0 broadcast 172.20.10.15
+"""
+        candidates = extract_command_interface_candidates("darwin", output)
+
+        self.assertEqual(
+            [(candidate.ip, candidate.interface_type) for candidate in candidates],
+            [
+                ("192.168.2.10", "unknown"),
+                ("10.16.177.83", "unknown"),
+                ("172.20.10.2", "unknown"),
+            ],
         )
 
     def test_extract_command_interfaces_empty_output_returns_empty_list(self):
@@ -175,6 +198,32 @@ utun4: flags=8051<UP,POINTOPOINT,RUNNING,MULTICAST> mtu 1380
             voice_coding.get_all_network_candidates = original_get_all_network_candidates
             voice_coding.SERVER_INTERFACES = original_server_interfaces
             voice_coding.SERVER_INTERFACES_INITIALIZED = original_initialized
+
+    def test_qr_advertised_ips_prefer_bound_hosts_without_hiding_fresh_candidates(self):
+        original_get_all_network_candidates = voice_coding.get_all_network_candidates
+        original_server_interfaces = voice_coding.SERVER_INTERFACES
+        original_initialized = voice_coding.SERVER_INTERFACES_INITIALIZED
+        original_bound_ips = get_bound_server_ips()
+        try:
+            voice_coding.SERVER_INTERFACES = [("192.168.1.23", "192.168.1.255")]
+            voice_coding.SERVER_INTERFACES_INITIALIZED = True
+            voice_coding.get_all_network_candidates = lambda: [
+                NetworkInterfaceCandidate(
+                    ip="10.16.177.83",
+                    prefix_length=18,
+                    name="WLAN",
+                    interface_type="wifi",
+                ),
+            ]
+            set_bound_server_ips(["192.168.1.23", "192.168.1.23"])
+
+            self.assertEqual(get_qr_advertised_server_ips(refresh=True), ["192.168.1.23"])
+            self.assertEqual(get_advertised_server_ips(refresh=True), ["10.16.177.83"])
+        finally:
+            voice_coding.get_all_network_candidates = original_get_all_network_candidates
+            voice_coding.SERVER_INTERFACES = original_server_interfaces
+            voice_coding.SERVER_INTERFACES_INITIALIZED = original_initialized
+            set_bound_server_ips(original_bound_ips)
 
     def test_get_advertised_server_ips_can_force_refresh_current_pool(self):
         original_get_all_network_candidates = voice_coding.get_all_network_candidates

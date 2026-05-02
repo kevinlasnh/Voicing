@@ -17,6 +17,72 @@ _None yet. / 暂无。_
 
 ---
 
+## [2.9.4] - 2026-05-02
+
+### Fixed
+
+- **PC: QR payload now prefers actually bound WebSocket listener IPs**
+  - Fixed a same-LAN QR pairing failure where the QR code could advertise an interface candidate that the desktop failed to bind
+  - The desktop now keeps the fresh candidate IP pool separate from the actual bound listener IP pool, preserving runtime network-change rebinds while making QR payloads safer
+  - QR payload `ip/ips` now prefer bound listener addresses after the WebSocket server starts; before first bind they fall back to the current physical IPv4 candidate list
+
+- **PC: macOS interface classification is now conservative**
+  - macOS `en0/en1/enX` names are no longer treated as fixed WiFi/Ethernet roles
+  - This avoids prioritizing the wrong address on Macs with Ethernet, Thunderbolt docks, or changing interface order
+
+- **Android: physical WiFi selection excludes VPN networks more explicitly**
+  - The native Android WebSocket path now requires `NET_CAPABILITY_NOT_VPN` when selecting the WiFi `Network`
+  - This reduces the chance of binding Voicing traffic to a VPN/proxy network object when VPN software is active
+
+### Docs
+
+- README and Android-facing connection docs now describe that QR codes prefer actually bound listener IPs and that macOS interface names are handled conservatively
+
+### Tests
+
+- PC:
+  - `python -m py_compile pc\voice_coding.py pc\voicing_protocol.py pc\device_identity.py pc\network_recovery.py`
+  - `python -m unittest discover -s pc\tests`
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
+  - `flutter build apk --debug`
+- General:
+  - `git diff --check`
+
+### 修复
+
+- **PC: QR payload 优先使用 WebSocket 实际监听成功的 IP**
+  - 修复同一局域网扫码配对时，二维码可能发布了桌面端未实际绑定成功的候选 IP，导致手机优先连接失败的问题
+  - 桌面端现在将“当前理论候选 IP 池”和“实际绑定成功 IP 池”拆开，既保留运行时网络变化重绑能力，又让 QR payload 更可靠
+  - WebSocket server 启动后，QR payload 的 `ip/ips` 优先使用实际监听地址；首次绑定完成前才 fallback 到当前物理 IPv4 候选池
+
+- **PC: macOS 网卡分类改为保守策略**
+  - 不再假设 macOS 的 `en0/en1/enX` 分别固定代表 WiFi 或以太网
+  - 避免 Mac 接入以太网、Thunderbolt 扩展坞或接口顺序变化后，错误优先发布不可达地址
+
+- **Android: 物理 WiFi 选择更明确排除 VPN**
+  - Android 原生 WebSocket 选取 WiFi `Network` 时改为显式要求 `NET_CAPABILITY_NOT_VPN`
+  - 降低 VPN / 代理开启时 Voicing 流量绑定到错误 Network 的概率
+
+### 文档
+
+- README 与 Android 连接说明补充：QR 码优先展示实际监听 IP，macOS 网卡命名按保守策略处理
+
+### 测试
+
+- PC:
+  - `python -m py_compile pc\voice_coding.py pc\voicing_protocol.py pc\device_identity.py pc\network_recovery.py`
+  - `python -m unittest discover -s pc\tests`
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
+  - `flutter build apk --debug`
+- General:
+  - `git diff --check`
+
+---
+
 ## [2.9.3] - 2026-04-26
 
 ### Fixed

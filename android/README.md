@@ -16,7 +16,8 @@ The Android client. Streams text from the phone's voice keyboard to the desktop 
 - On launch, foreground resume, and manual refresh, reconnects directly via the saved IP candidates — handles hotspot ↔ office/school LAN switching
 - Re-scanning the same PC merges new and old candidate IPs, so scanning on a new LAN does not drop the old LAN address
 - The PC refreshes its QR and WebSocket listener at runtime, so the desktop app does not need a restart after a LAN switch
-- Android-native WiFi-bound WebSocket prefers the physical WiFi `Network`, reducing VPN/proxy adapter interference
+- After the desktop listener is up, QR payloads prefer the IPs that the PC actually bound successfully
+- Android-native WiFi-bound WebSocket prefers a physical, non-VPN WiFi `Network`, reducing VPN/proxy adapter interference
 - Android-native IME-height listener keeps the input field tracking the keyboard as it expands/collapses
 - Fast reconnect after screen-off / screen-on, prefers showing "Connected" while reconnecting
 - Live connection status (Connected / Connecting… / Disconnected)
@@ -42,7 +43,7 @@ flutter build apk --release
 2. From the desktop tray menu, click "Show QR code"
 3. Connect the phone to the same network and open Voicing
 4. First use or new PC: tap "More → Scan to connect" on the phone and scan the desktop's QR
-5. Once the status bar reads "Connected" you're set; later launches will try the saved IP candidates directly. After both ends switch to a new LAN, wait for the desktop to refresh its QR, then re-scan to merge the new IP into the candidate pool — no desktop restart needed. Switching back to the old LAN keeps trying the older candidate IPs
+5. Once the status bar reads "Connected" you're set; later launches will try the saved IP candidates directly. After both ends switch to a new LAN, wait for the desktop to refresh its QR, then re-scan to merge the new IP into the candidate pool — no desktop restart needed. Switching back to the old LAN keeps trying the older candidate IPs. On v2.9.4+, QR payloads avoid preferring desktop addresses that failed to bind
 6. Switch to a voice keyboard, talk, and the text shows up at the cursor on the computer
 7. Open "More" to enable "Auto Enter" (good for chat scenarios — only one Enter is fired per chunked voice utterance)
 

@@ -205,7 +205,7 @@ class MainActivity : FlutterActivity() {
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: continue
             if (
                 capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-                !capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
             ) {
                 val linkProperties = connectivityManager.getLinkProperties(network)
                 val interfaceName = linkProperties?.interfaceName

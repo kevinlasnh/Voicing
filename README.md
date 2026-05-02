@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.3-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.4-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -29,6 +29,7 @@ Voicing turns your phone's voice keyboard into your computer's "mouth" — speak
 - **Cross-subnet auto-recovery** — multiple candidate IPs are saved per PC, so switching between hotspot, office, and school LANs reconnects automatically
 - **No broadcast required** — after launch, the phone tries the saved IP pool directly; no UDP discovery
 - **PC runtime network refresh** — when the desktop switches to a new LAN, the QR code and WebSocket listener refresh on the fly with no app restart
+- **Bound-IP QR safety** — once the listener is up, QR codes advertise only the IPs the desktop actually bound successfully
 - **Physical NIC priority** — both ends try to bypass VPN/proxy virtual adapters and prefer real WiFi/LAN
 - **Auto-send on speech end** — finished sentences are sent automatically; no manual confirm
 - **Auto Enter (optional)** — submit to the agent as soon as you stop speaking
@@ -104,14 +105,15 @@ Tray icon states:
 
 ## How it works
 
-1. The desktop displays a pairing QR with `device_id/ip/ips/port/name/os`, refreshing the physical IPv4 address pool at runtime
+1. The desktop displays a pairing QR with `device_id/ip/ips/port/name/os`, refreshing the physical IPv4 address pool at runtime and preferring the WebSocket listener's actually bound IPs
 2. The phone scans the QR and runs a WebSocket (port 9527) connectivity probe; on success it saves this PC
 3. The phone persists multiple candidate IPs for the same PC — hotspot and various LAN addresses are all kept; re-scanning the same `device_id` merges the candidate pool rather than overwriting it
 4. On later launches or manual refresh, the phone tries the saved IP pool one by one; UDP discovery is no longer used
 5. The PC WebSocket server rebinds to the current LAN IP whenever the address pool changes, so it never lingers on stale addresses
-6. The Android WebSocket prefers binding to the physical WiFi `Network`; the PC filters VPN / virtual adapters; this reduces misrouting when either end has a VPN running
-7. Phone text (voice or typed) streams to the desktop in real time
-8. The desktop pastes via the clipboard (Windows Ctrl+V / macOS Cmd+V / Linux Ctrl+V) and emits an Enter when needed
+6. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
+7. The Android WebSocket prefers binding to the physical WiFi `Network`; the PC filters VPN / virtual adapters, and Android explicitly requires a non-VPN WiFi Network
+8. Phone text (voice or typed) streams to the desktop in real time
+9. The desktop pastes via the clipboard (Windows Ctrl+V / macOS Cmd+V / Linux Ctrl+V) and emits an Enter when needed
 
 ## Development
 
@@ -170,8 +172,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.3
-git push origin v2.9.3
+git tag v2.9.4
+git push origin v2.9.4
 ```
 
 Local debug builds:
@@ -203,6 +205,7 @@ Note: a local Android release build needs a compatible JDK 17/21 and a valid sig
 3. First-time setup or a new PC: run "Show QR code" on the desktop and "Scan to connect" on the phone
 4. After the screen wakes up the phone enters fast-reconnect mode automatically — usually no manual refresh is needed
 5. Right after switching to a new LAN, the desktop refreshes the QR and listener automatically; if it still fails, tap "Refresh connection" on the phone or re-scan the desktop QR to merge the new IP into the candidate pool
+6. If the PC is on macOS, make sure Voicing has been restarted after updating to v2.9.4 so QR codes no longer prefer a misclassified `en0/en1` interface
 
 **Local Flutter APK build fails with a Java / Gradle error?**
 If your default Java is 25, `flutter build apk --release` will fail. Install JDK 17/21 and set `org.gradle.java.home=...` in `android/voice_coding/android/local.properties`. Production releases use the Java 17 environment in GitHub Actions.
