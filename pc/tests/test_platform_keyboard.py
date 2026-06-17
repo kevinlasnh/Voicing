@@ -13,8 +13,12 @@ class PlatformKeyboardTests(unittest.TestCase):
         with patch("platform_keyboard.get_platform", return_value="darwin"):
             self.assertEqual(platform_keyboard.get_paste_hotkey(), ("command", "v"))
 
-    def test_get_paste_hotkey_non_macos_uses_ctrl(self):
+    def test_get_paste_hotkey_linux_uses_terminal_paste(self):
         with patch("platform_keyboard.get_platform", return_value="linux"):
+            self.assertEqual(platform_keyboard.get_paste_hotkey(), ("ctrl", "shift", "v"))
+
+    def test_get_paste_hotkey_windows_uses_ctrl(self):
+        with patch("platform_keyboard.get_platform", return_value="windows"):
             self.assertEqual(platform_keyboard.get_paste_hotkey(), ("ctrl", "v"))
 
     def test_paste_from_clipboard_uses_pyautogui_hotkey(self):

@@ -19,8 +19,13 @@ def _get_pyautogui():
     return _PYAUTOGUI
 
 
-def get_paste_hotkey() -> tuple[str, str]:
-    return ("command", "v") if get_platform() == "darwin" else ("ctrl", "v")
+def get_paste_hotkey() -> tuple[str, ...]:
+    platform = get_platform()
+    if platform == "darwin":
+        return ("command", "v")
+    if platform == "linux":
+        return ("ctrl", "shift", "v")
+    return ("ctrl", "v")
 
 
 def press_enter() -> None:
