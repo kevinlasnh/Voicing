@@ -103,10 +103,7 @@ android/voice_coding/android/local.properties
 *.key
 *.pem
 
-# Local dev docs (not for GitHub)
-findings.md
-progress.md
-task_plan.md
+# Local agent config (not for GitHub)
 CLAUDE.md
 AGENTS.md
 
