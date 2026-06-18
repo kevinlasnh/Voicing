@@ -391,5 +391,36 @@
 - 现象：宿主自带 WebSearch 实际未联网；tavily 走 clash-verge（127.0.0.1:7897）对 `api.tavily.com` SSL EOF（分流劫持到坏出口），但 tavily 直连本就可达。
 - 修复：`~/.bashrc` 增加 `tvly()` 包装函数去掉代理变量直连 tavily；不影响其他工具走代理。
 
+## 会话：2026-06-18（深夜）CST — 自定义菜单美化 + 原生菜单分隔条 + QR 闪烁修复迭代
+
+### 自定义 Fluent 菜单（Windows/macOS）美化
+- **状态：** complete（代码已落地；本机 Linux 走原生菜单，无法在当前环境肉眼确认，待 Windows 实机复核）
+- 问题：菜单宽度偏大与文字不匹配；项之间有横条分隔。
+- 执行的操作：
+  - 实测 `ModernMenuWidget`：`sizeHint=164`，但 `adjustSize()` 给出 `200`（多约 36px）→ 右侧留白。
+  - `show_at_position` 增加 `self.setFixedWidth(self.sizeHint().width())`，宽度收紧到 164（随最长文字自适应）。
+  - `setup_ui` 删除 4 个 separator（qr/sync、sync/startup、startup/log、log/quit 之间）。
+  - `_finish_open_animation` 第一版尝试 reorder（先 resize 再 show container）→ **未解决 QR 闪烁**（假设错根因）。
+- 测试：新增 `CustomMenuLayoutTests`（无分隔条恰好 5 项、宽度收紧到 sizeHint）；`unittest discover` 71 OK。
+- 注意：这些改动对 Linux 原生菜单无效（Linux 不走 ModernMenuWidget）。
+
+### Linux 原生菜单分隔条
+- **状态：** complete + 用户实机确认
+- 问题：用户在 Linux 看到的分隔条来自 `_setup_native_context_menu` 的 4 个 `addSeparator()`。
+- 修复：删除原生菜单 4 个 `addSeparator()`，菜单变平铺无横条。
+- 用户确认：菜单正常，无分隔符。✅
+
+### QR 弹窗闪烁修复（迭代两版）
+- **状态：** in_progress（第一版无效；第二版消除"下方第二个 QR"，但"到达中心时自身闪动"仍存）
+- 现象：点「显示 QR 码」→ QR 从右上角飞到中心，到达瞬间在中心 QR 下方闪出第二个 QR 再消失。
+- **第一版（无效）**：`_finish_open_animation` reorder（先 `_restore_dialog_geometry` 再 `container.show()`）→ 用户反馈仍闪，假设错根因。
+- **第二版（部分成功）**：新理论——打开动画期间顶层窗口是大 `canvas_rect`（QR 在旧缓冲中部约 y400），收尾时窗口**可见状态下** resize+move（原点从托盘→中心），Mutter 把上一帧旧缓冲按**新原点**重显 → QR 出现在「中心+偏移」= 中心下方。
+  - 修法：收尾先 `hide()` 解除 surface 映射，不可见时 `_restore_dialog_geometry`，再 `show()` 出容器；期间保持 `_animation_mode=True` 让 `focusOutEvent` 延迟关闭检查直接 return。
+  - 用户确认：**下方第二个 QR 不再闪** ✅，但**到达中心时自身会闪动一次**（新现象，待继续处理）。
+
+### 待办（本次未解决）
+- [ ] Linux 原生菜单宽度仍不自适应（用户反馈"宽度没有自适应"）。注：GNOME QMenu 理论上按文字自适应，需复核用户看到的具体表现（是否文字被截断 / 有多余留白 / emoji 导致偏宽）。
+- [ ] QR 到达中心时自身闪动一次（第二版修复引入或暴露的新现象）。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

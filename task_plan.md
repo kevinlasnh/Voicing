@@ -86,6 +86,14 @@
 - [x] 调研 GNOME portal 永久授权 → 不可行（GNOME #175），决策保持 portal、接受每次启动一次点击
 - **状态：** complete
 
+### 阶段 12：自定义菜单美化 + 原生菜单分隔条 + QR 闪烁迭代
+- [x] 自定义 Fluent 菜单（Win/macOS）宽度收紧到 sizeHint（随最长文字自适应）+ 去分隔条（本机 Linux 走原生菜单，无法肉眼确认，待 Windows 实机复核）
+- [x] Linux 原生菜单去分隔条（`_setup_native_context_menu` 删 4 个 `addSeparator()`）—— 用户确认无横条 ✅
+- [x] QR「下方第二个 QR」闪烁修复（收尾先 hide 解除 surface 映射再 resize/show）—— 用户确认下方闪动消失 ✅
+- [ ] Linux 原生菜单宽度仍不自适应（用户反馈，待复核具体表现）
+- [ ] QR 到达中心时自身闪动一次（第二版修复引入/暴露，待定位）
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？

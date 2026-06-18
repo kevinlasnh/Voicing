@@ -31,6 +31,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PC: Linux tray icon no longer flickers every 200ms** — `setIcon` is now only called when the icon state actually changes (SNI/AppIndicator hosts rebuild the icon on every `setIcon`)
 - **PC: no more black flash at the top-left corner on Linux/Wayland startup** — offscreen pre-warm no longer shows the window, since Wayland forbids client-side window positioning
 - **PC: GNOME Wayland RemoteDesktop portal calls no longer rejected with `Expected type 'u' ... got 'i'`** — `SelectDevices` `types` and `NotifyKeyboardKeysym` `state` are now sent as D-Bus uint32 via a typed `QDBusArgument` instead of a Python int
+- **PC: tray menus no longer draw separator lines between items** — both the Linux native context menu and the Windows/macOS custom Fluent menu now render as a flat list with spacing instead of divider lines
+- **PC: QR dialog no longer flashes a ghost QR below center when arriving** — the open animation now unmapped before its end-of-animation resize so the Wayland compositor does not repaint a stale buffer at the new origin (a residual one-frame self-flash at arrival is still being investigated)
+- **PC (Windows/macOS): custom tray menu width now fits its content** — the menu width is tightened to the longest item instead of the oversized default from `adjustSize()`
 
 ### Docs
 

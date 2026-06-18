@@ -55,5 +55,29 @@ class TrayNativeMenuTests(unittest.TestCase):
         )
 
 
+class CustomMenuLayoutTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt5.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_custom_menu_has_no_separator_items(self):
+        # 自定义 Fluent 菜单（Windows/macOS）不再在项之间插入分隔横条。
+        # container 内应恰好 5 个功能项：QR / 同步输入 / 开机自启 / 打开日志 / 退出应用。
+        from voice_coding import ModernMenuWidget
+        menu = ModernMenuWidget()
+        self.assertEqual(menu.container.layout().count(), 5)
+
+    def test_custom_menu_width_tightens_to_content(self):
+        # 菜单内容尺寸应等于 sizeHint；setFixedWidth(sizeHint) 收紧掉 adjustSize 的多余宽度。
+        from voice_coding import ModernMenuWidget
+        menu = ModernMenuWidget()
+        menu.adjustSize()
+        menu.setFixedWidth(menu.sizeHint().width())
+        self.assertEqual(menu.width(), menu.sizeHint().width())
+        # 宽度应在最长项内容附近，不应是 adjustSize 默认的偏大值（约 200）。
+        self.assertLess(menu.width(), 190)
+
+
 if __name__ == "__main__":
     unittest.main()

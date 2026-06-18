@@ -95,3 +95,10 @@
 - GNOME RemoteDesktop portal **不能**持久授权：每次启动/重启必弹授权，无 `persist_mode`/预授权 API（GNOME issue #175）。这是 GNOME 安全设计，非 bug。当前"每次启动授权一次、退出自动失效"已是 portal 极限。
 - 决策：保持 portal 默认。ydotool（绕开 portal，`/dev/uinput`）可在无弹窗一项上占优，但代价是系统级虚拟键盘权限降级 + 每用户都要配 + 不可分发；Voicing 是已发布应用，综合选 portal。ydotool 仅作可选 opt-in 留记，未实现。
 - tvly SSL 根因不是 tvly 配置：`api.tavily.com` 直连可达，但 clash-verge 分流劫持到坏出口导致 SSL EOF。修法：`~/.bashrc` 加 `tvly()` 去掉代理变量直连。
+
+## 2026-06-18 自定义菜单宽度特性 + QR 动画与 Wayland surface
+
+- **Linux 托盘用系统原生 `QMenu`（上轮已切）**：对 `ModernMenuWidget` 的宽度/分隔条改动在 Linux 不可见；Linux 的分隔条来自 `_setup_native_context_menu` 的 `addSeparator()`，已删除。GNOME 原生 QMenu 宽度理论按文字自适应，但用户反馈仍"不自适应"，需复核具体表现。
+- **PyQt5 顶层 Popup 窗口 adjustSize 宽度偏大**：实测 `ModernMenuWidget` `sizeHint=164`、`minimumSizeHint=164`、`minimumSize=0`，但 `adjustSize()` 给出 `200`（多约 36px，原因疑似 Qt 对顶层 Popup 窗口的调整逻辑）。修法：`show_at_position` 里 `adjustSize()` 后追加 `self.setFixedWidth(self.sizeHint().width())` 强制收紧，宽度随最长文字自适应。offscreen 实测收紧到 164。
+- **QR 弹窗"下方第二个 QR"闪动根因（Wayland/Mutter）**：打开动画期间顶层窗口是大 `canvas_rect`（横跨托盘锚点→屏幕中心），动画 pixmap 的 QR 位于该旧缓冲**中部**（约 y400）。收尾 `_finish_open_animation` 要从 `canvas_rect` 切到 `end_rect`（原点从托盘→中心），若在**可见状态下** resize+move，Mutter 会把上一帧旧缓冲按**新原点**重显 → QR 出现在「中心 + y400 偏移」= 中心下方。修法：收尾先 `hide()` 解除 surface 映射（unmap），在不可见时完成 resize/move，再 `show()` 出最终容器画面——Mutter 只显示最终一帧。需注意：hide/show 抖动可能触发 `focusOutEvent` → `_maybe_close_on_focus_loss`；修法里收尾期间保持 `_animation_mode=True` 让该检查直接 return（`_animation_mode` 判断在 `_maybe_close_on_focus_loss` 开头）。
+- **遗留**：第二版修法消除"下方第二个 QR"，但用户反馈 QR 到达中心时**自身闪动一次**（pixmap→container 切换那一帧，或 hide/show 引入的再显）。待定位：可能是 hide/show 本身的再显、或 pixmap（全对话框渲染）与最终 container 在中心位置不完全对齐导致的一帧跳变。

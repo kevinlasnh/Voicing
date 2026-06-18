@@ -1097,49 +1097,25 @@ class ModernMenuWidget(QWidget):
         container_layout.setContentsMargins(4, 6, 4, 6)  # 内边距
         container_layout.setSpacing(4)  # 项间距（4px 网格）
 
-        # 显示 QR 码（新增：最顶部）
+        # 显示 QR 码（最顶部）
         self.qr_btn = MenuItemWidget("📱", "显示 QR 码")
         self.qr_btn.clicked.connect(self.show_qr_dialog)
         container_layout.addWidget(self.qr_btn)
-
-        # 分隔线（显示 QR 码 与 同步输入 之间）
-        separator_qr = QWidget()
-        separator_qr.setFixedHeight(1)
-        separator_qr.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
-        container_layout.addWidget(separator_qr)
 
         # 同步输入
         self.sync_btn = MenuItemWidget("📡", "同步输入", has_toggle=True, is_checked=True)
         self.sync_btn.clicked.connect(self.toggle_sync)
         container_layout.addWidget(self.sync_btn)
 
-        # 分隔线（同步输入 与 开机自启 之间）
-        separator_sync = QWidget()
-        separator_sync.setFixedHeight(1)
-        separator_sync.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
-        container_layout.addWidget(separator_sync)
-
         # 开机自启
         self.startup_btn = MenuItemWidget("🚀", "开机自启", has_toggle=True, is_checked=False)
         self.startup_btn.clicked.connect(self.toggle_startup)
         container_layout.addWidget(self.startup_btn)
 
-        # 分隔线
-        separator1 = QWidget()
-        separator1.setFixedHeight(1)
-        separator1.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
-        container_layout.addWidget(separator1)
-
         # 打开日志
         log_btn = MenuItemWidget("📋", "打开日志")
         log_btn.clicked.connect(self.open_log)
         container_layout.addWidget(log_btn)
-
-        # 分隔线
-        separator2 = QWidget()
-        separator2.setFixedHeight(1)
-        separator2.setStyleSheet("background-color: rgba(255, 255, 255, 0.08); margin: 4px 8px;")
-        container_layout.addWidget(separator2)
 
         # 退出应用
         quit_btn = MenuItemWidget("🚪", "退出应用")
@@ -1165,6 +1141,9 @@ class ModernMenuWidget(QWidget):
     def show_at_position(self, tray_pos):
         """在指定位置显示菜单，视觉左下角对齐鼠标点击位置"""
         self.adjustSize()
+        # adjustSize() 对顶层 Popup 窗口给出的宽度偏大（实测比 sizeHint 多约 36px），
+        # 导致菜单右边留白、宽度与文字不匹配。强制收紧到内容 sizeHint，使宽度随最长文字自适应。
+        self.setFixedWidth(self.sizeHint().width())
         menu_width = self.width()
         menu_height = self.height()
         screen = QApplication.primaryScreen()
@@ -1831,11 +1810,19 @@ class QRCodeDialog(QWidget):
 
     def _finish_open_animation(self, end_rect):
         self.setUpdatesEnabled(False)
-        self._animation_mode = False
+        # 动画收尾时顶层窗口要从横跨「锚点→中心」的大 canvas_rect 切回 end_rect，
+        # 且 pixmap 的 QR 位于旧缓冲的中部。若在可见状态下 resize+move，Mutter 会把
+        # 上一帧旧缓冲按新原点重显，闪出"中心下方第二个二维码"。
+        # 解法：先 hide 解除 surface 映射，在不可见时完成 resize，再 show 出最终容器画面。
+        # 期间保持 _animation_mode=True，让 focusOutEvent 的延迟关闭检查直接 return，
+        # 避免 hide/show 抖动误触发关闭。
         self._animation_pixmap = QPixmap()
-        self.container.show()
+        self.hide()
         self._restore_dialog_geometry(end_rect)
+        self.container.show()
         self.setWindowOpacity(1.0)
+        self.show()
+        self._animation_mode = False
         self.setUpdatesEnabled(True)
         self.repaint()
         self.raise_()
@@ -2049,24 +2036,16 @@ class ModernTrayIcon(QSystemTrayIcon):
         qr_action = self.native_menu.addAction("显示 QR 码")
         qr_action.triggered.connect(self.menu_widget.show_qr_dialog)
 
-        self.native_menu.addSeparator()
-
         self.native_sync_action = self.native_menu.addAction("同步输入")
         self.native_sync_action.setCheckable(True)
         self.native_sync_action.triggered.connect(self.menu_widget.toggle_sync)
-
-        self.native_menu.addSeparator()
 
         self.native_startup_action = self.native_menu.addAction("开机自启")
         self.native_startup_action.setCheckable(True)
         self.native_startup_action.triggered.connect(self.menu_widget.toggle_startup)
 
-        self.native_menu.addSeparator()
-
         log_action = self.native_menu.addAction("打开日志")
         log_action.triggered.connect(self.menu_widget.open_log)
-
-        self.native_menu.addSeparator()
 
         quit_action = self.native_menu.addAction("退出应用")
         quit_action.triggered.connect(self.menu_widget.quit_app)
