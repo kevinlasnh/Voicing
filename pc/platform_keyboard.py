@@ -25,6 +25,31 @@ REMOTE_DESKTOP_DEVICE_KEYBOARD = 1
 PORTAL_REQUEST_TIMEOUT_MS = 60000
 
 
+def _dbus_uint(value: int):
+    """Build a D-Bus ``u`` (uint32) argument.
+
+    PyQt5 marshals a plain Python ``int`` as signed int32 ('i'). Several XDG
+    RemoteDesktop portal fields (e.g. ``SelectDevices`` ``types`` and the
+    ``state`` arg of ``NotifyKeyboardKeysym``) require unsigned 'u', so we
+    build a typed ``QDBusArgument`` to force the right signature. This is used
+    for top-level call arguments; for values inside an ``a{sv}`` map wrap the
+    result via :func:`_dbus_uint_variant`.
+    """
+    from PyQt5.QtCore import QMetaType
+    from PyQt5.QtDBus import QDBusArgument
+
+    arg = QDBusArgument()
+    arg.add(value, QMetaType.UInt)
+    return arg
+
+
+def _dbus_uint_variant(value: int):
+    """uint32 wrapped as a variant, for use as a value in an ``a{sv}`` map."""
+    from PyQt5.QtCore import QVariant
+
+    return QVariant(_dbus_uint(value))
+
+
 def _get_pyautogui():
     global _PYAUTOGUI
     if _PYAUTOGUI is None:
@@ -200,7 +225,7 @@ class RemoteDesktopPortalKeyboardBackend:
                     "SelectDevices",
                     self._dbus_object_path(self._session_handle),
                     {
-                        "types": REMOTE_DESKTOP_DEVICE_KEYBOARD,
+                        "types": _dbus_uint_variant(REMOTE_DESKTOP_DEVICE_KEYBOARD),
                     },
                 )
                 self._call_request(
@@ -225,7 +250,7 @@ class RemoteDesktopPortalKeyboardBackend:
                 self._dbus_object_path(session_handle),
                 {},
                 int(keysym),
-                int(state),
+                _dbus_uint(int(state)),
             )
             if reply.errorMessage():
                 self._session_handle = None

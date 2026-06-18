@@ -137,10 +137,12 @@ class PlatformKeyboardTests(unittest.TestCase):
         self.assertEqual(mock_call.call_args_list[0].args[0], "CreateSession")
         self.assertEqual(mock_call.call_args_list[1].args[0], "SelectDevices")
         self.assertEqual(mock_call.call_args_list[2].args[0], "Start")
-        self.assertEqual(
-            mock_call.call_args_list[1].args[2],
-            {"types": platform_keyboard.REMOTE_DESKTOP_DEVICE_KEYBOARD},
-        )
+        # 'types' 必须是 uint 变体（QVariant 包裹的 QDBusArgument），否则
+        # portal 会以 "Expected type 'u' ... got 'i'" 拒绝 SelectDevices。
+        select_options = mock_call.call_args_list[1].args[2]
+        self.assertIn("types", select_options)
+        from PyQt5.QtCore import QVariant
+        self.assertIsInstance(select_options["types"], QVariant)
 
     def test_remote_desktop_portal_ensure_started_requires_keyboard_capability(self):
         backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
@@ -160,13 +162,16 @@ class PlatformKeyboardTests(unittest.TestCase):
             with patch.object(backend, "_dbus_object_path", side_effect=lambda value: f"path:{value}"):
                 backend._send_key_sequence(((1, platform_keyboard.KEY_STATE_PRESSED),))
 
-        iface.call.assert_called_once_with(
-            "NotifyKeyboardKeysym",
-            "path:/session",
-            {},
-            1,
-            platform_keyboard.KEY_STATE_PRESSED,
-        )
+        self.assertEqual(iface.call.call_count, 1)
+        call_args = iface.call.call_args.args
+        self.assertEqual(call_args[0], "NotifyKeyboardKeysym")
+        self.assertEqual(call_args[1], "path:/session")
+        self.assertEqual(call_args[2], {})
+        # keysym 保持普通 int（本机 portal 内省期望 'i'）；state 必须是 uint
+        # QDBusArgument，否则会被以 "got 'i'" 拒绝。
+        self.assertEqual(call_args[3], 1)
+        from PyQt5.QtDBus import QDBusArgument
+        self.assertIsInstance(call_args[4], QDBusArgument)
 
     def test_remote_desktop_portal_send_key_sequence_resets_session_on_error(self):
         backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()

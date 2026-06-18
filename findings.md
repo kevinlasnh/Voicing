@@ -84,3 +84,14 @@
 ---
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
+
+## 2026-06-18 GNOME Wayland 托盘改造与 portal 输入修复
+
+- 决策：Linux 托盘改用系统原生 `QMenu`，自定义 Fluent 菜单仅 Windows/macOS 保留。原因：自定义 `Qt.Popup` 菜单在 GNOME/Wayland 下有定位（GNOME 顶栏方向与 Windows 底部任务栏相反）、半透明+`QGraphicsDropShadowEffect` 黑块、Esc 失焦、`QSystemTrayIcon.geometry()` 无效等一堆问题；上次 `c2bcf71` 同时设 `setContextMenu` + Context 触发自定义菜单导致右键弹两个菜单。改原生菜单后这些问题随架构切换自动消失。
+- 关键：Linux 右键（Context）必须交给 `setContextMenu`/宿主，不能在 `activated` 里再 `_popup_native_menu()`，否则双菜单叠加；左键/双击才手动 `native_menu.popup(QCursor.pos())`。
+- Linux SNI/AppIndicator 宿主每次 `setIcon` 都可能重建图标 → 已连接后图标每 200ms 抖动。修法：`update_icon` 记录 `_current_icon_key`，状态未变跳过 `setIcon`。
+- Wayland 禁止客户端自由定位顶层窗口，`move(-10000,-10000)+show()+hide()` 预热会让窗口短暂可见闪在左上角。Linux 改为 `ensurePolished()` + `layout().activate()`，不 `show()`。
+- PyQt5 D-Bus uint32 序列化：Python `int` 默认序列化成 `'i'`；XDG portal 多个字段要 `'u'`。强制 uint32：`QDBusArgument.add(value, QMetaType.UInt)`。顶层参数用裸 `QDBusArgument`；`a{sv}` map 值用 `QVariant(QDBusArgument)`。已对 live GNOME portal 验证：`SelectDevices.types` 与 `NotifyKeyboardKeysym.state` 用此法通过；keysym 保持普通 int（本机 portal 内省期望 `(oa{sv}iu)`，而非 spec 的 `(oa{sv}uu)`）。
+- GNOME RemoteDesktop portal **不能**持久授权：每次启动/重启必弹授权，无 `persist_mode`/预授权 API（GNOME issue #175）。这是 GNOME 安全设计，非 bug。当前"每次启动授权一次、退出自动失效"已是 portal 极限。
+- 决策：保持 portal 默认。ydotool（绕开 portal，`/dev/uinput`）可在无弹窗一项上占优，但代价是系统级虚拟键盘权限降级 + 每用户都要配 + 不可分发；Voicing 是已发布应用，综合选 portal。ydotool 仅作可选 opt-in 留记，未实现。
+- tvly SSL 根因不是 tvly 配置：`api.tavily.com` 直连可达，但 clash-verge 分流劫持到坏出口导致 SSL EOF。修法：`~/.bashrc` 加 `tvly()` 去掉代理变量直连。

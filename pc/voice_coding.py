@@ -1946,20 +1946,32 @@ class ModernTrayIcon(QSystemTrayIcon):
         super().__init__(parent)
         # 预先缓存图标
         self._icon_cache = {}
+        # 记录当前生效的图标键，避免状态未变时重复 setIcon
+        # （Linux SNI/AppIndicator 宿主每次 setIcon 都可能重建图标导致闪烁）
+        self._current_icon_key = None
         self._init_icon_cache()
         # 预先创建菜单（避免首次打开慢）
         self.menu_widget = ModernMenuWidget()
-        # 预热渲染：强制 Qt 提前编译 stylesheet 和计算布局
-        self.menu_widget.move(-10000, -10000)
-        self.menu_widget.show()
-        QTimer.singleShot(50, self.menu_widget.hide)
+        # 自定义菜单仅在非 Linux 平台使用；Linux 走原生菜单，无需预热其窗口。
+        if get_platform() != "linux":
+            # 预热渲染：强制 Qt 提前编译 stylesheet 和计算布局
+            self.menu_widget.move(-10000, -10000)
+            self.menu_widget.show()
+            QTimer.singleShot(50, self.menu_widget.hide)
         # 预热 QR 弹窗与 QR pixmap，避免首次点击时同步生成图片和计算布局
         if state.qr_dialog is None:
             state.qr_dialog = QRCodeDialog()
             state.qr_dialog._populate_content()
-            state.qr_dialog.move(-10000, -10000)
-            state.qr_dialog.show()
-            QTimer.singleShot(50, state.qr_dialog.hide)
+            if get_platform() == "linux":
+                # Wayland 禁止客户端自由定位顶层窗口，show() + move(-10000,-10000)
+                # 会让窗口短暂可见地闪在屏幕左上角。这里只做样式与布局预热，不 show。
+                state.qr_dialog.ensurePolished()
+                if state.qr_dialog.layout() is not None:
+                    state.qr_dialog.layout().activate()
+            else:
+                state.qr_dialog.move(-10000, -10000)
+                state.qr_dialog.show()
+                QTimer.singleShot(50, state.qr_dialog.hide)
         self.setup_icon()
         self.setup_menu()
         # 设置悬停提示
@@ -2071,22 +2083,47 @@ class ModernTrayIcon(QSystemTrayIcon):
             self.native_startup_action.setChecked(is_startup_enabled())
 
     @staticmethod
+    def _uses_native_menu():
+        """Linux 改用系统原生 QMenu，避免自定义 Popup 在 GNOME/Wayland 下的渲染与定位问题。"""
+        return get_platform() == "linux"
+
+    @staticmethod
     def _should_show_custom_menu_for_activation_reason(reason):
+        """Windows/macOS：左键 / 双击 / 右键都弹出自定义 Fluent 菜单。"""
         return reason in (
             QSystemTrayIcon.Trigger,
             QSystemTrayIcon.DoubleClick,
             QSystemTrayIcon.Context,
         )
 
+    @staticmethod
+    def _should_popup_native_menu_for_activation_reason(reason):
+        """Linux：左键 / 双击时手动弹出原生菜单。
+
+        右键（Context）交给 setContextMenu 让宿主处理；若这里也 popup 会与
+        宿主的原生右键菜单叠加，造成同时弹两个菜单。
+        """
+        return reason in (
+            QSystemTrayIcon.Trigger,
+            QSystemTrayIcon.DoubleClick,
+        )
+
     def on_tray_activated(self, reason):
         """托盘图标激活事件。
 
-        GNOME/Ubuntu tray hosts do not consistently report right clicks as
-        Context, so accept the common activation reasons and keep a native
-        Linux context menu as a fallback.
+        Linux 上由 setContextMenu + 左键 popup 共同提供原生菜单，右键完全交给
+        宿主以避免双菜单叠加；其他平台沿用自定义菜单。
         """
-        if self._should_show_custom_menu_for_activation_reason(reason):
+        if self._uses_native_menu():
+            if self._should_popup_native_menu_for_activation_reason(reason):
+                self._popup_native_menu()
+        elif self._should_show_custom_menu_for_activation_reason(reason):
             self.show_custom_menu()
+
+    def _popup_native_menu(self):
+        """弹出 Linux 原生托盘菜单，并同步开关状态。"""
+        self._sync_native_context_menu_state()
+        self.native_menu.popup(QCursor.pos())
 
     def show_custom_menu(self):
         """显示自定义菜单"""
@@ -2098,7 +2135,10 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.menu_widget.show_at_position(pos)
 
     def update_icon(self, status, dim=False):
-        """更新图标状态 - 使用缓存的图标（快速切换）
+        """更新图标状态 - 使用缓存的图标，仅在目标图标真正变化时才 setIcon。
+
+        Linux SNI/AppIndicator 宿主每次 setIcon 都可能重建图标导致托盘闪烁，
+        因此记录当前生效的图标键，状态未变时跳过 setIcon。
 
         Args:
             status: 未使用，保留兼容
@@ -2106,13 +2146,16 @@ class ModernTrayIcon(QSystemTrayIcon):
         """
         if not state.sync_enabled:
             # 暂停状态
-            self.setIcon(self._icon_cache['paused'])
+            icon_key = 'paused'
         elif len(state.connected_clients) == 0 and dim:
             # 等待连接 + 暗淡状态
-            self.setIcon(self._icon_cache['dim'])
+            icon_key = 'dim'
         else:
             # 正常状态（已连接或等待连接的亮状态）
-            self.setIcon(self._icon_cache['normal'])
+            icon_key = 'normal'
+        if icon_key != self._current_icon_key:
+            self._current_icon_key = icon_key
+            self.setIcon(self._icon_cache[icon_key])
 
 
 # ============================================================

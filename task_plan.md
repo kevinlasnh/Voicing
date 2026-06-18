@@ -70,12 +70,21 @@
 - **状态：** complete
 
 ### 阶段 10：Android 实机扫码与端到端输入验证
-- [ ] 启动 PC 端并保持 WebSocket 服务运行
-- [ ] Android 端扫码或用已保存设备连接当前 PC
-- [ ] 验证普通文本进入当前光标
-- [ ] 验证中文文本、Auto Enter 和空 commit 回车
-- [ ] 验证剪贴板恢复
-- **状态：** pending
+- [x] 启动 PC 端并保持 WebSocket 服务运行
+- [x] Android 端扫码或用已保存设备连接当前 PC
+- [x] 验证普通文本进入当前光标（portal uint 修复后通）
+- [ ] 验证中文文本、Auto Enter 和空 commit 回车（Auto Enter 路径已触发 `press_enter`；portal 修复后未逐项复核）
+- [ ] 验证剪贴板恢复（未单独复核）
+- **状态：** in_progress（核心端到端已通，细粒度项待复核）
+
+### 阶段 11：Linux 托盘前端交互修复 + portal D-Bus 修复 + 永久授权调研
+- [x] 细颗粒度审查 `pc/voice_coding.py` 托盘链路，定位 Linux 双菜单/抖动/黑闪等问题
+- [x] Linux 改用系统原生 `QMenu`（右键交给 `setContextMenu`/宿主，左键/双击 popup），杜绝双菜单
+- [x] `update_icon` 去重，消除 Linux 每 200ms 图标抖动
+- [x] Wayland 启动预热改为不 `show()`，消除黑闪
+- [x] 修复 portal `SelectDevices.types` 与 `NotifyKeyboardKeysym.state` 的 D-Bus uint32 序列化（`'u'` vs `'i'`）
+- [x] 调研 GNOME portal 永久授权 → 不可行（GNOME #175），决策保持 portal、接受每次启动一次点击
+- **状态：** complete
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
@@ -87,6 +96,8 @@
 |------|------|
 | 使用 PWF 记录本次检查 | 任务涉及多目录、多文件和多阶段阅读，适合持久化上下文 |
 | 同步新增 `CLAUDE.md` 与 `AGENTS.md` | 仓库级 agent 配置新增时应保持两份文件正文一致，仅 H1 工具名差异 |
+| Linux 托盘改用系统原生 `QMenu` | 自定义 `Qt.Popup` 菜单在 GNOME/Wayland 下定位/半透明黑块/Esc/几何无效等问题多，原生菜单更稳 |
+| 保持 GNOME portal 输入后端，接受每次启动一次授权 | portal 在安全/零部署/可分发/跨发行版/前瞻性上全面优于 ydotool；ydotool 仅"无弹窗"占优但代价是 `/dev/uinput` 权限降级，不可作为已发布应用的默认 |
 
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |

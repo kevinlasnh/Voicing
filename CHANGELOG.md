@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - PC text injection is now centralized in the platform keyboard layer instead of being implemented directly in `voice_coding.py`
 - Linux runtime errors now report a missing RemoteDesktop portal keyboard capability instead of blocking all Wayland sessions unconditionally
 
+### Fixed
+
+- **PC: GNOME Wayland tray no longer shows two menus on right-click** — Linux now uses the native system context menu (left and right click both open the same menu), while Windows and macOS keep the custom Fluent menu
+- **PC: Linux tray icon no longer flickers every 200ms** — `setIcon` is now only called when the icon state actually changes (SNI/AppIndicator hosts rebuild the icon on every `setIcon`)
+- **PC: no more black flash at the top-left corner on Linux/Wayland startup** — offscreen pre-warm no longer shows the window, since Wayland forbids client-side window positioning
+- **PC: GNOME Wayland RemoteDesktop portal calls no longer rejected with `Expected type 'u' ... got 'i'`** — `SelectDevices` `types` and `NotifyKeyboardKeysym` `state` are now sent as D-Bus uint32 via a typed `QDBusArgument` instead of a Python int
+
 ### Docs
 
 - README / README.zh-CN now document GNOME Wayland support and the first-run RemoteDesktop keyboard permission prompt

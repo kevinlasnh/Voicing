@@ -356,5 +356,40 @@
   - 创建 Git commit。
   - 推送到 `origin/main`。
 
+## 会话：2026-06-18（晚）CST
+
+### Linux 托盘前端交互修复（自定义菜单 → 原生菜单）
+- **状态：** complete
+- 问题：GNOME Wayland 上托盘右键弹两个菜单、图标每 200ms 抖动、启动左上角闪黑框。
+- 执行的操作：
+  - 细颗粒度审查 `pc/voice_coding.py` 托盘链路；定位 P0 双菜单回归来自上次 `c2bcf71` 同时设 `setContextMenu` + Context 触发自定义菜单。
+  - 决策（用户选定）：Linux 改用系统原生 `QMenu`，自定义 Fluent 菜单仅 Windows/macOS 保留。
+  - `on_tray_activated` 平台分流：Linux 右键交给 `setContextMenu`/宿主，左键/双击才 `_popup_native_menu()`，杜绝双菜单。
+  - `update_icon` 加 `_current_icon_key` 去重，状态未变不 `setIcon`，消除 Linux SNI/AppIndicator 每 200ms 抖动。
+  - Linux 跳过自定义菜单预热；QR 预热改为 `ensurePolished()` 不 `show()`，消除 Wayland 启动黑闪。
+- 测试结果：
+  - `unittest discover -s pc/tests` 69 OK；新增/更新托盘原生菜单路径测试。
+  - 用户实机确认托盘交互正常（右键单菜单、左键同菜单、无黑闪）。
+
+### GNOME Wayland portal 输入修复（D-Bus uint32 序列化）
+- **状态：** complete
+- 问题：手机端发文本触发 `RuntimeError: RemoteDesktop portal SelectDevices 调用失败: Expected type 'u' for option 'types', got 'i'`；后续 `NotifyKeyboardKeysym` 的 `state` 也有同样 `'u' vs 'i'` 问题。
+- 执行的操作：
+  - 探测 PyQt5 QtDBus：`QDBusArgument.add(value, QMetaType.UInt)` 生成 uint32。
+  - 实证（对 live portal）：`SelectDevices.types` 用 `QVariant(QDBusArgument(uint))`；`NotifyKeyboardKeysym.state` 用裸 `QDBusArgument(uint)`，keysym 保持普通 int（本机 portal 内省期望 `(oa{sv}iu)`）。两者均经 live portal 验证通过。
+  - 新增 `_dbus_uint()` / `_dbus_uint_variant()` 助手；更新 `pc/tests/test_platform_keyboard.py` 锁定新的类型化传参。
+- 测试结果：
+  - `py_compile` 通过；`unittest discover -s pc/tests` 69 OK。
+  - 实机：portal 授权弹窗出现 = SelectDevices→Start 链路成功，uint 修复有效。
+
+### GNOME portal 永久授权调研与决策
+- **状态：** complete
+- 调研（修好 tvly SSL 后联网）：GNOME `xdg-desktop-portal-gnome` 不保留 RemoteDesktop 授权，每次启动/重启必弹授权；无 `persist_mode`、无预授权 API（`persist_mode` 只对屏幕捕获生效）。GNOME 官方 issue #175 确认；KDE Plasma 6.3+ 已有预授权；GNOME 尚无，Chrome Remote Desktop 团队在推进标准 API。
+- 决策（用户选定）：保持 portal 原样，接受每次启动一次授权点击。综合评估 portal 全面优于 ydotool（安全/零部署/可分发/跨发行版/前瞻性）；ydotool 仅"无弹窗"占优，代价是 `/dev/uinput` 权限降级 + 每用户都要配，不可作为已发布应用默认。ydotool 仅作可选 opt-in 留记，未实现。
+
+### tvly CLI 代理修复（仓库外）
+- 现象：宿主自带 WebSearch 实际未联网；tavily 走 clash-verge（127.0.0.1:7897）对 `api.tavily.com` SSL EOF（分流劫持到坏出口），但 tavily 直连本就可达。
+- 修复：`~/.bashrc` 增加 `tvly()` 包装函数去掉代理变量直连 tavily；不影响其他工具走代理。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
