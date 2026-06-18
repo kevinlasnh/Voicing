@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 9
+阶段 10
 
 ## 各阶段
 
@@ -53,19 +53,29 @@
 
 ### 阶段 8：下次继续 Ubuntu 实机可用性修复
 - [ ] 切换到 `Ubuntu on Xorg` 会话后重新检查 `XDG_SESSION_TYPE`
-- [ ] 补齐系统依赖：至少 `libxcb-cursor0`，建议同时安装 `xclip` 或 `xsel`
-- [ ] 建立可用 Python 运行环境并安装 `pc/requirements.txt`
-- [ ] 在 X11 会话下启动 `python3 pc/voice_coding.py --dev`
+- [x] 补齐系统依赖：至少 `libxcb-cursor0`，建议同时安装 `xclip` 或 `xsel`
+- [x] 建立可用 Python 运行环境并安装 `pc/requirements.txt`
+- [x] 在当前 GNOME Wayland 会话下启动 `.venv/bin/python pc/voice_coding.py --dev`
 - [ ] 用 Android 端扫码配对并验证文本能进入当前光标
-- **状态：** pending
+- **状态：** in_progress
 
 ### 阶段 9：GNOME Wayland 同等 Windows 体验改造方案
 - [x] 确认当前 Ubuntu/GNOME/Wayland 代码阻断点
 - [x] 检索并验证 RemoteDesktop portal、libei、ydotool、wtype 等输入方案
 - [x] 对比候选方案能否达到 Windows 同等自动输入/自动回车效果
 - [x] 形成推荐代码改造范围和验证计划
-- [ ] 等待用户确认采用的实现路径
-- **状态：** in_progress
+- [x] 用户确认采用稳定推荐路径后实现 RemoteDesktop portal 后端
+- [x] 更新 PC 端测试、README 和 CHANGELOG
+- [x] 完成本机 PC/Android 前置验证
+- **状态：** complete
+
+### 阶段 10：Android 实机扫码与端到端输入验证
+- [ ] 启动 PC 端并保持 WebSocket 服务运行
+- [ ] Android 端扫码或用已保存设备连接当前 PC
+- [ ] 验证普通文本进入当前光标
+- [ ] 验证中文文本、Auto Enter 和空 commit 回车
+- [ ] 验证剪贴板恢复
+- **状态：** pending
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
@@ -86,6 +96,7 @@
 | 当前 Ubuntu 会话为 Wayland，Voicing Linux 桌面端会主动拒绝启动 | 1 | 切换到 `Ubuntu on Xorg` 会话后再运行 |
 | 当前源码运行环境缺少 PyQt5 和 pip | 1 | 下次补齐 Python 依赖环境后再启动 PC 端 |
 | GNOME Wayland 不支持直接复用现有 pyautogui 全局按键路径 | 1 | 研究 RemoteDesktop portal/libei 与 ydotool 等替代输入后端 |
+| Android debug APK 构建缺 Android SDK | 1 | 已补 SDK，但本任务未改 Android native，用户确认无需继续 APK 构建；停止构建，仅保留 analyze/test |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。

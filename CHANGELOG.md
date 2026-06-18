@@ -13,7 +13,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_None yet. / 暂无。_
+### Added
+
+- **PC: GNOME Wayland input support via RemoteDesktop portal**
+  - Linux startup now allows Wayland sessions when the XDG RemoteDesktop portal exposes keyboard capability
+  - GNOME Wayland text paste keeps the existing phone/WebSocket protocol unchanged and uses portal keyboard events for Ctrl+V and Enter
+  - Wayland clipboard handling prefers `wl-copy` / `wl-paste`, while Windows, macOS, and Linux X11 keep the existing clipboard and hotkey behavior
+
+### Changed
+
+- PC text injection is now centralized in the platform keyboard layer instead of being implemented directly in `voice_coding.py`
+- Linux runtime errors now report a missing RemoteDesktop portal keyboard capability instead of blocking all Wayland sessions unconditionally
+
+### Docs
+
+- README / README.zh-CN now document GNOME Wayland support and the first-run RemoteDesktop keyboard permission prompt
+
+### Tests
+
+- PC:
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py`
+  - `.venv/bin/python -m unittest discover -s pc/tests`
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
+
+### 新增
+
+- **PC: 通过 RemoteDesktop portal 支持 GNOME Wayland 输入**
+  - Linux 启动检查现在会在 XDG RemoteDesktop portal 暴露键盘能力时允许 Wayland 会话启动
+  - GNOME Wayland 文本粘贴保持手机端和 WebSocket 协议不变，通过 portal 键盘事件发送 Ctrl+V 和 Enter
+  - Wayland 剪贴板优先使用 `wl-copy` / `wl-paste`，Windows、macOS 和 Linux X11 保持原有剪贴板与快捷键行为
+
+### 变更
+
+- PC 文本注入逻辑集中到平台键盘层，不再由 `voice_coding.py` 直接操作剪贴板和粘贴快捷键
+- Linux 运行时错误改为提示缺少 RemoteDesktop portal 键盘能力，不再无条件阻断所有 Wayland 会话
+
+### 文档
+
+- README / README.zh-CN 补充 GNOME Wayland 支持和首次运行 RemoteDesktop 键盘授权提示
+
+### 测试
+
+- PC:
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py`
+  - `.venv/bin/python -m unittest discover -s pc/tests`
+- Android:
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`
+  - `flutter test`
 
 ---
 

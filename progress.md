@@ -292,5 +292,69 @@
   - 根据仓库全局 PWF 规则和本次 push 要求，准备从 `.gitignore` 中移除 PWF 三件套忽略规则。
   - 保持 `CLAUDE.md`、`AGENTS.md`、`.brv/`、Python cache 等本地 agent/config/artifact 文件继续忽略，不纳入提交。
 
+### 阶段 9：GNOME Wayland 输入后端实现
+- **状态：** complete
+- **记录时间：** 2026-06-18 CST
+- 执行的操作：
+  - 按用户确认的稳定推荐方案，在 PC 端实现 GNOME Wayland RemoteDesktop portal 键盘后端。
+  - `pc/platform_keyboard.py` 新增统一 `type_text_at_cursor()`、Wayland `wl-copy`/`wl-paste` 剪贴板路径、RemoteDesktop portal Ctrl+V/Enter 后端。
+  - `pc/platform_utils.py` 将 Wayland 启动门禁改为 RemoteDesktop portal 键盘能力检测，不再一刀切阻断 Wayland。
+  - `pc/voice_coding.py` 移除业务层直接 `pyperclip` 操作，改为调用平台输入层。
+  - 更新 `pc/tests/test_platform_keyboard.py`、`pc/tests/test_platform_utils.py` 覆盖 Wayland portal、剪贴板恢复、后端分支和启动能力检测。
+  - 更新 `README.md`、`README.zh-CN.md`、`CHANGELOG.md` 记录 GNOME Wayland 支持与首次 RemoteDesktop 授权提示。
+  - 建立 `.venv` 并安装 `pc/requirements.txt`；系统级安装 `libxcb-cursor0`、`xclip`、`xsel`。
+  - 安装 Flutter 3.27.0 到 `~/development/flutter-3.27.0`，安装 Android SDK 到 `~/Android/Sdk`。
+- 测试结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：63 tests OK。
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`：通过，仍有 4 个既有 `withOpacity` info。
+  - `flutter test`：通过。
+  - `timeout 5s .venv/bin/python pc/voice_coding.py --dev`：启动到 WebSocket 监听 `192.168.50.113:9527` 后被 timeout 主动结束，证明当前 Wayland 会话下启动前置已通过。
+  - `git diff --check`：通过。
+  - `flutter build apk --debug`：用户询问后确认本次未改 Android native/Gradle，不需要继续；后台构建已停止，并还原由工具造成的 `pubspec.lock` 与 `gradlew` 权限变化。
+- 当前结论：
+  - 代码与前置验证已到 Android 实机扫码配对测试之前的状态。
+  - 下一步应运行 PC 端常驻进程，并用 Android 手机验证扫码连接、文本输入、Auto Enter 与剪贴板恢复。
+
+### 阶段 10：Android 实机扫码与端到端输入验证
+- **状态：** pending
+- **记录时间：** 2026-06-18 CST
+- 待做事项：
+  - 启动 `.venv/bin/python pc/voice_coding.py --dev` 并保持运行。
+  - Android 端扫码当前 PC QR 或使用已保存设备连接。
+  - 验证普通文本、中文文本、Auto Enter、空 commit 回车与剪贴板恢复。
+  - 首次 Wayland 输入时如出现 GNOME RemoteDesktop 键盘授权提示，需要用户批准。
+
+### 阶段 10：托盘菜单弹出修复
+- **状态：** complete
+- **记录时间：** 2026-06-18 CST
+- 问题：
+  - 用户反馈 PC 端启动后右键托盘不弹菜单。
+- 执行的操作：
+  - 检查 `ModernTrayIcon`，发现此前只在 `QSystemTrayIcon.Context` 激活原因下弹出自定义菜单。
+  - GNOME/Ubuntu 托盘宿主不稳定地把托盘点击映射为 `Trigger` / `DoubleClick` / `Context`，只监听 `Context` 会导致右键或点击完全无反应。
+  - 在 Linux 下为 `QSystemTrayIcon` 设置原生 `QMenu` 作为右键 fallback。
+  - 将自定义菜单触发兼容 `Trigger`、`DoubleClick`、`Context`。
+  - 新增 `pc/tests/test_voice_coding_tray.py` 覆盖托盘激活原因判断。
+- 测试结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/tests/test_voice_coding_tray.py`：通过。
+  - `.venv/bin/python -m unittest pc.tests.test_voice_coding_tray pc.tests.test_platform_keyboard pc.tests.test_platform_utils`：37 tests OK。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：65 tests OK。
+  - `git diff --check`：通过。
+- 注意：
+  - 当前 9527 端口被 `python` pid 136115 占用，说明已有旧 PC 端实例在运行；需要重启 PC 端才能加载托盘修复。
+
+### 阶段 10：记录进度并准备提交推送
+- **状态：** in_progress
+- **记录时间：** 2026-06-18 CST
+- 执行的操作：
+  - 用户要求先记录进度，然后 push。
+  - 检查当前分支为 `main`，远端为 `origin`。
+  - 检查待提交改动集中在 GNOME Wayland 输入后端、托盘菜单 fallback、测试、README/CHANGELOG 和 PWF 三件套。
+  - 运行 `git diff --check`，结果通过。
+- 待完成：
+  - 创建 Git commit。
+  - 推送到 `origin/main`。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

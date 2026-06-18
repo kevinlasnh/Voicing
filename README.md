@@ -49,7 +49,7 @@ Grab the right file from [Releases](https://github.com/kevinlasnh/Voicing/releas
 |------|------|------|
 | Windows | `voicing-windows-x64.exe` | Win 10/11 (64-bit) |
 | macOS | `voicing-macos-arm64.dmg` | Apple Silicon (M1+) |
-| Linux | `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11 |
+| Linux | `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11, or GNOME Wayland with RemoteDesktop portal |
 | Android | `voicing.apk` | Android 5.0+ |
 
 Each release also ships `SHA256SUMS.txt` so you can verify the SHA-256 digest before installing.
@@ -62,7 +62,7 @@ Run the desktop app → start a hotspot / Internet sharing / join the same LAN �
 
 - **Windows**: run `voicing-windows-x64.exe` and turn on "Mobile hotspot"
 - **macOS**: open `voicing-macos-arm64.dmg`, drag to Applications (right-click → Open the first time), enable "Internet Sharing" or join the same LAN
-- **Linux**: `chmod +x voicing-linux-x86_64` and run; start a Wi-Fi hotspot or join the same LAN
+- **Linux**: `chmod +x voicing-linux-x86_64` and run; start a Wi-Fi hotspot or join the same LAN. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session the first time text is pasted.
 
 When the status bar shows "Connected" you're good to go.
 
@@ -113,7 +113,7 @@ Tray icon states:
 6. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
 7. The Android WebSocket prefers binding to the physical WiFi `Network`; the PC filters VPN / virtual adapters, and Android explicitly requires a non-VPN WiFi Network
 8. Phone text (voice or typed) streams to the desktop in real time
-9. The desktop pastes via the clipboard (Windows Ctrl+V / macOS Cmd+V / Linux Ctrl+V) and emits an Enter when needed
+9. The desktop pastes via the clipboard and emits an Enter when needed; Linux X11 uses the normal Ctrl+V path, while GNOME Wayland uses the RemoteDesktop portal keyboard permission
 
 ## Development
 

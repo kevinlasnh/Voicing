@@ -1,4 +1,6 @@
 import os
+import re
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -106,9 +108,71 @@ def is_wayland_session() -> bool:
     return session_type == "wayland" or bool(os.environ.get("WAYLAND_DISPLAY"))
 
 
+def has_remote_desktop_keyboard_portal() -> bool:
+    if get_platform() != "linux":
+        return False
+    try:
+        return _get_remote_desktop_available_device_types() & 1 != 0
+    except Exception:
+        return False
+
+
+def _get_remote_desktop_available_device_types() -> int:
+    gdbus = shutil.which("gdbus")
+    if gdbus:
+        return _get_remote_desktop_available_device_types_with_gdbus(gdbus)
+    return _get_remote_desktop_available_device_types_with_qtdbus()
+
+
+def _get_remote_desktop_available_device_types_with_gdbus(gdbus: str) -> int:
+    result = subprocess.run(
+        [
+            gdbus,
+            "call",
+            "--session",
+            "--dest",
+            "org.freedesktop.portal.Desktop",
+            "--object-path",
+            "/org/freedesktop/portal/desktop",
+            "--method",
+            "org.freedesktop.DBus.Properties.Get",
+            "org.freedesktop.portal.RemoteDesktop",
+            "AvailableDeviceTypes",
+        ],
+        capture_output=True,
+        check=True,
+        text=True,
+        timeout=3,
+    )
+    match = re.search(r"\b(\d+)\b", result.stdout)
+    if not match:
+        return 0
+    return int(match.group(1))
+
+
+def _get_remote_desktop_available_device_types_with_qtdbus() -> int:
+    from PyQt5.QtCore import QCoreApplication
+    from PyQt5.QtDBus import QDBusConnection, QDBusInterface
+
+    _app = QCoreApplication.instance() or QCoreApplication([])
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        return 0
+    iface = QDBusInterface(
+        "org.freedesktop.portal.Desktop",
+        "/org/freedesktop/portal/desktop",
+        "org.freedesktop.DBus.Properties",
+        bus,
+    )
+    reply = iface.call("Get", "org.freedesktop.portal.RemoteDesktop", "AvailableDeviceTypes")
+    if reply.errorMessage() or not reply.arguments():
+        return 0
+    return int(reply.arguments()[0])
+
+
 def ensure_runtime_supported() -> None:
-    if is_wayland_session():
+    if is_wayland_session() and not has_remote_desktop_keyboard_portal():
         raise RuntimeError(
-            "Voicing 的 Linux 桌面端当前仅支持 Ubuntu 22.04 GNOME on X11。"
-            "当前检测到 Wayland 会话，请切换到 X11 后再启动。"
+            "当前检测到 Wayland 会话，但没有可用的 RemoteDesktop portal 键盘能力。"
+            "请确认 xdg-desktop-portal 与 GNOME portal 正在运行，或切换到 Ubuntu on Xorg 后再启动。"
         )

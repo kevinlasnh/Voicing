@@ -2,7 +2,7 @@ import os
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -39,11 +39,60 @@ class PlatformUtilsTests(unittest.TestCase):
                     fake_home / ".local" / "share" / "Voicing",
                 )
 
-    def test_wayland_runtime_is_blocked(self):
+    def test_wayland_runtime_is_allowed_with_keyboard_portal(self):
         with patch.object(platform_utils.sys, "platform", "linux"):
             with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
-                with self.assertRaises(RuntimeError):
+                with patch("platform_utils.has_remote_desktop_keyboard_portal", return_value=True):
                     platform_utils.ensure_runtime_supported()
+
+    def test_wayland_runtime_is_blocked_without_keyboard_portal(self):
+        with patch.object(platform_utils.sys, "platform", "linux"):
+            with patch.dict(os.environ, {"XDG_SESSION_TYPE": "wayland"}, clear=False):
+                with patch("platform_utils.has_remote_desktop_keyboard_portal", return_value=False):
+                    with self.assertRaises(RuntimeError):
+                        platform_utils.ensure_runtime_supported()
+
+    def test_remote_desktop_keyboard_portal_detects_keyboard_bit(self):
+        with patch.object(platform_utils.sys, "platform", "linux"):
+            with patch("platform_utils._get_remote_desktop_available_device_types", return_value=7):
+                self.assertTrue(platform_utils.has_remote_desktop_keyboard_portal())
+
+    def test_remote_desktop_keyboard_portal_returns_false_without_keyboard_bit(self):
+        with patch.object(platform_utils.sys, "platform", "linux"):
+            with patch("platform_utils._get_remote_desktop_available_device_types", return_value=2):
+                self.assertFalse(platform_utils.has_remote_desktop_keyboard_portal())
+
+    def test_remote_desktop_keyboard_portal_returns_false_on_probe_error(self):
+        with patch.object(platform_utils.sys, "platform", "linux"):
+            with patch(
+                "platform_utils._get_remote_desktop_available_device_types",
+                side_effect=ImportError("missing"),
+            ):
+                self.assertFalse(platform_utils.has_remote_desktop_keyboard_portal())
+
+    def test_remote_desktop_device_types_prefers_gdbus(self):
+        with patch("platform_utils.shutil.which", return_value="/usr/bin/gdbus"):
+            with patch(
+                "platform_utils._get_remote_desktop_available_device_types_with_gdbus",
+                return_value=7,
+            ) as mock_gdbus:
+                self.assertEqual(platform_utils._get_remote_desktop_available_device_types(), 7)
+        mock_gdbus.assert_called_once_with("/usr/bin/gdbus")
+
+    def test_remote_desktop_device_types_gdbus_parses_uint(self):
+        result = MagicMock()
+        result.stdout = "(<uint32 7>,)"
+        with patch("platform_utils.subprocess.run", return_value=result) as mock_run:
+            value = platform_utils._get_remote_desktop_available_device_types_with_gdbus("/usr/bin/gdbus")
+        self.assertEqual(value, 7)
+        mock_run.assert_called_once()
+
+    def test_remote_desktop_device_types_gdbus_returns_zero_without_number(self):
+        result = MagicMock()
+        result.stdout = "(<uint32>,)"
+        with patch("platform_utils.subprocess.run", return_value=result):
+            value = platform_utils._get_remote_desktop_available_device_types_with_gdbus("/usr/bin/gdbus")
+        self.assertEqual(value, 0)
 
     def test_known_hotspot_prefixes_cover_all_platforms(self):
         self.assertEqual(

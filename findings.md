@@ -48,6 +48,12 @@
 - 2026-06-17 GNOME Wayland 方案调研：`ydotool` 通过 Linux `/dev/uinput` 创建设备，理论上可在 GNOME Wayland 下模拟 Ctrl+V/Enter，实现效果接近 Windows，但需要 `ydotoold` 和 `/dev/uinput` 权限/服务配置，安全边界更粗。
 - 2026-06-17 推荐方向：长期/产品化优先使用 RemoteDesktop portal 的键盘权限来实现 GNOME Wayland 输入后端；快速本机可用可先实现 `wl-copy`/剪贴板 + `ydotool` 键盘事件 fallback。
 - 2026-06-17 代码范围判断：改造应集中在 PC 端 `platform_keyboard.py`、`platform_utils.py`，并把 `voice_coding.py::type_text()` 里的剪贴板操作抽到平台输入后端；Android Flutter UI、协议 contract、QR/WebSocket 连接状态机无需先改。
+- 2026-06-18 实现结果：已在 `pc/platform_keyboard.py` 落地 GNOME Wayland RemoteDesktop portal 键盘后端，Wayland 下粘贴与回车走 portal `NotifyKeyboardKeysym`，Windows/macOS/Linux X11 保持原有快捷键路径。
+- 2026-06-18 实现结果：`pc/platform_utils.py` 的启动检查已改为能力检测；当前 GNOME Wayland 会话在 portal 键盘能力可用时可正常启动，不再被一刀切阻断。
+- 2026-06-18 实现结果：`pc/voice_coding.py` 已把文本注入收口到平台键盘层，业务层不再直接操作 `pyperclip`。
+- 2026-06-18 验证结果：`.venv/bin/python -m unittest discover -s pc/tests` 通过 63 项测试；`flutter analyze --no-fatal-infos --no-fatal-warnings` 与 `flutter test` 通过。
+- 2026-06-18 验证结果：`timeout 5s .venv/bin/python pc/voice_coding.py --dev` 在当前 GNOME Wayland 会话下成功启动到 WebSocket 监听阶段，说明 Wayland 前置已具备可运行性。
+- 2026-06-18 环境变更：已安装 `.venv`、`libxcb-cursor0`、`xclip`、`xsel`、Flutter 3.27.0 与 Android SDK command-line tools / platform-tools / android-35 / build-tools 35.0.0。
 
 ## 技术决策
 | 决策 | 理由 |
@@ -66,6 +72,7 @@
 | 当前 Ubuntu 会话是 Wayland | 切换到 `Ubuntu on Xorg`，否则 `ensure_runtime_supported()` 会主动报错 |
 | 当前源码开发环境缺少 pip 和 PC runtime 依赖 | 安装 `python3-pip` 或创建可用 venv 后安装 `pc/requirements.txt` |
 | 当前缺少 `xclip` / `xsel` | 在 X11 下补装其一，降低 `pyperclip` 剪贴板失败概率 |
+| Android debug APK 构建缺 Android SDK | 已补 SDK；用户确认本次未改 Android native/Gradle，无需继续 APK 构建，因此中止构建并还原工具造成的 lock/权限变化 |
 
 ## 资源
 - 本地仓库：`/home/kevinlasnh/Projects/Voicing`

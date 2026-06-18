@@ -24,7 +24,7 @@ from typing import NamedTuple, Optional
 from PyQt5.QtWidgets import (
     QApplication, QSystemTrayIcon, QMessageBox,
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-    QGraphicsDropShadowEffect,
+    QGraphicsDropShadowEffect, QMenu,
 )
 from PyQt5.QtCore import (
     QObject,
@@ -46,7 +46,6 @@ import qrcode
 import websockets
 from websockets.server import serve
 from PIL import Image, ImageDraw
-import pyperclip
 
 try:
     import psutil
@@ -56,7 +55,7 @@ except Exception:
 from device_identity import get_or_create_device_identity
 from platform_autostart import is_startup_enabled, set_startup_enabled
 from platform_instance import check_single_instance, show_already_running_message
-from platform_keyboard import paste_from_clipboard, press_enter
+from platform_keyboard import press_enter, type_text_at_cursor
 from platform_utils import (
     WINDOWS_HOTSPOT_PREFIXES,
     ensure_runtime_supported,
@@ -771,31 +770,12 @@ def type_text(text: str, auto_enter: bool = False):
         return
 
     try:
-        ensure_runtime_supported()
-
-        # Save current clipboard
-        try:
-            old_clipboard = pyperclip.paste()
-        except Exception:
-            old_clipboard = ""
-
-        # Copy new text and paste
-        pyperclip.copy(text)
-        paste_from_clipboard()
-
-        # Auto press Enter if enabled
-        if auto_enter:
-            # Give the target app time to process Ctrl+V before sending Enter.
-            # Some chat inputs mis-handle an immediate Enter as Ctrl+Enter/newline.
-            threading.Event().wait(AUTO_ENTER_SETTLE_DELAY_SEC)
-            press_enter()
-
-        # Small delay then restore clipboard
-        threading.Event().wait(0.1)
-        try:
-            pyperclip.copy(old_clipboard)
-        except Exception:
-            pass
+        type_text_at_cursor(
+            text,
+            auto_enter=auto_enter,
+            enter_delay_sec=AUTO_ENTER_SETTLE_DELAY_SEC,
+            restore_delay_sec=0.1,
+        )
 
     except Exception as e:
         logging.error(f"Error typing text: {e}")
@@ -2047,10 +2027,65 @@ class ModernTrayIcon(QSystemTrayIcon):
         """设置菜单"""
         # 不使用 QMenu，而是自定义菜单
         self.activated.connect(self.on_tray_activated)
+        if get_platform() == "linux":
+            self._setup_native_context_menu()
+
+    def _setup_native_context_menu(self):
+        """Linux tray hosts may only show menus provided through setContextMenu."""
+        self.native_menu = QMenu()
+
+        qr_action = self.native_menu.addAction("显示 QR 码")
+        qr_action.triggered.connect(self.menu_widget.show_qr_dialog)
+
+        self.native_menu.addSeparator()
+
+        self.native_sync_action = self.native_menu.addAction("同步输入")
+        self.native_sync_action.setCheckable(True)
+        self.native_sync_action.triggered.connect(self.menu_widget.toggle_sync)
+
+        self.native_menu.addSeparator()
+
+        self.native_startup_action = self.native_menu.addAction("开机自启")
+        self.native_startup_action.setCheckable(True)
+        self.native_startup_action.triggered.connect(self.menu_widget.toggle_startup)
+
+        self.native_menu.addSeparator()
+
+        log_action = self.native_menu.addAction("打开日志")
+        log_action.triggered.connect(self.menu_widget.open_log)
+
+        self.native_menu.addSeparator()
+
+        quit_action = self.native_menu.addAction("退出应用")
+        quit_action.triggered.connect(self.menu_widget.quit_app)
+
+        self.native_menu.aboutToShow.connect(self._sync_native_context_menu_state)
+        self._sync_native_context_menu_state()
+        self.setContextMenu(self.native_menu)
+
+    def _sync_native_context_menu_state(self):
+        self.menu_widget.update_state()
+        if hasattr(self, "native_sync_action"):
+            self.native_sync_action.setChecked(state.sync_enabled)
+        if hasattr(self, "native_startup_action"):
+            self.native_startup_action.setChecked(is_startup_enabled())
+
+    @staticmethod
+    def _should_show_custom_menu_for_activation_reason(reason):
+        return reason in (
+            QSystemTrayIcon.Trigger,
+            QSystemTrayIcon.DoubleClick,
+            QSystemTrayIcon.Context,
+        )
 
     def on_tray_activated(self, reason):
-        """托盘图标激活事件 - 仅响应右键"""
-        if reason == QSystemTrayIcon.Context:
+        """托盘图标激活事件。
+
+        GNOME/Ubuntu tray hosts do not consistently report right clicks as
+        Context, so accept the common activation reasons and keep a native
+        Linux context menu as a fallback.
+        """
+        if self._should_show_custom_menu_for_activation_reason(reason):
             self.show_custom_menu()
 
     def show_custom_menu(self):
