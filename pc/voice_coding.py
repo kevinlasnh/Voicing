@@ -2032,6 +2032,12 @@ class ModernTrayIcon(QSystemTrayIcon):
     def _setup_native_context_menu(self):
         """Linux tray hosts may only show menus provided through setContextMenu."""
         self.native_menu = QMenu()
+        # 默认 QMenu 给每项预留很大的水平 padding（实测 168px 宽 vs 文本 84px），
+        # 右侧留白过多。收紧 item 内边距（左 20 留勾选框位、右 12 收窄），
+        # 不改颜色/边框，保留 GTK 原生外观，只让宽度更贴合文字。
+        self.native_menu.setStyleSheet(
+            "QMenu::item { padding: 6px 12px 6px 20px; }"
+        )
 
         qr_action = self.native_menu.addAction("显示 QR 码")
         qr_action.triggered.connect(self.menu_widget.show_qr_dialog)

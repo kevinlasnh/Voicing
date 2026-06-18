@@ -422,5 +422,16 @@
 - [ ] Linux 原生菜单宽度仍不自适应（用户反馈"宽度没有自适应"）。注：GNOME QMenu 理论上按文字自适应，需复核用户看到的具体表现（是否文字被截断 / 有多余留白 / emoji 导致偏宽）。
 - [ ] QR 到达中心时自身闪动一次（第二版修复引入或暴露的新现象）。
 
+### 原生菜单宽度收紧（用户反馈"右边空白多"）
+- **状态：** complete（代码落地，待用户肉眼确认；padding 值可微调）
+- 诊断：`actionGeometry` 显示每项占满整菜单宽（168px），但文本仅 84px → 默认 QMenu item 水平 padding 过大。
+- 修复：`_setup_native_context_menu` 给 `native_menu` 加 `QMenu::item { padding: 6px 12px 6px 20px; }`（左 20 留勾选框位、右 12 收窄；不改颜色/边框，保留 GTK 原生外观）。offscreen 实测 168→134。
+- 测试：`unittest discover` 71 OK。
+
+### QR 自身闪动 — 整体梳理完成，方案待用户定（A/B）
+- **状态：** in_progress（仅梳理，未改码；太晚了留到下次）
+- 整体梳理结论：两个闪动同根——"从右上角飞入"效果要求动画期窗口是大 canvas（托盘→中心），收尾缩到 end_rect；而 Wayland 上**任何收尾的 resize 或 hide/show remap 都会闪**（可见 resize 闪重影 / hide-show 闪自身）。
+- 两条整体改造路：A 改成"窗口恒定 end_rect 尺寸 + 位置移动 + 内容缩放 + 淡入"（无 resize，保留飞入，中等改动需重写动画）；B 砍飞入改"原地缩放+淡入"（最稳，无飞入）。待用户选。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
