@@ -45,7 +45,7 @@ flutter build apk --release
 4. First use or new PC: tap "More → Scan to connect" on the phone and scan the desktop's QR
 5. Once the status bar reads "Connected" you're set; later launches will try the saved IP candidates directly. After both ends switch to a new LAN, wait for the desktop to refresh its QR, then re-scan to merge the new IP into the candidate pool — no desktop restart needed. Switching back to the old LAN keeps trying the older candidate IPs. On v2.9.4+, QR payloads avoid preferring desktop addresses that failed to bind
 6. Switch to a voice keyboard, talk, and the text shows up at the cursor on the computer
-7. On Linux/GNOME Wayland desktops, leave the PC tray paste mode on Auto paste unless a specific app needs a manual mode. Auto paste uses the terminal-safe Ctrl+Shift+V path when focus detection is unresolved. If GNOME asks for RemoteDesktop keyboard permission after login or app start, approve it before sending text
+7. On Linux/GNOME Wayland desktops, leave the PC tray paste mode on Auto paste unless a specific app needs a manual mode. Auto paste uses Ctrl+V for normal windows and Ctrl+Shift+V for detected terminal focus; if focus detection is unresolved it falls back to Ctrl+V unless a terminal was detected very recently. If GNOME asks for RemoteDesktop keyboard permission after login or app start, approve it before sending text
 8. Open "More" to enable "Auto Enter" (good for chat scenarios — only one Enter is fired per chunked voice utterance)
 
 ## Build notes

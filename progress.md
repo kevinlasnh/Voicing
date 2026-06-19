@@ -770,5 +770,99 @@
   - `SHA256SUMS.txt`
 - 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
 
+## 会话：2026-06-19 CST — Auto Enter 可靠性修复
+
+### Android commit / PC Enter ACK 链路修复
+- **状态：** complete，未提交
+- 用户反馈：自动 Enter 仍有问题，要求再次检查代码。
+- 执行的操作：
+  - 复查 PC `handle_client()`、`type_text()`、`press_enter()`、Wayland portal Enter 发送路径。
+  - 复查 Android `sendText()`、shadow increment、`_finalizeShadowInput(forceEnter:)` 和 ACK 处理路径。
+  - 查看本机 PC 日志，未发现近期 `press_enter` 相关异常；日志主要是此前 portal 能力探测和无托盘环境错误。
+  - 修复 PC：
+    - `AUTO_ENTER_SETTLE_DELAY_SEC` 从 `0.15` 提高到 `0.35`。
+    - 新增 `press_enter_after_settle()`，粘贴稳定窗口后再发送 Enter，并把异常转换为 `False`。
+    - WebSocket commit 分支现在 Enter 成功才 ACK `clear_input=true`；失败 ACK `clear_input=false`，不再让异常直接打断 handler。
+  - 修复 Android：
+    - `_finalizeShadowInput(forceEnter: true)` 发出空 commit 后不再立即清空输入框。
+    - 成功清空改为等待 PC ACK，复用现有 `_handleMessage()` 对 `clear_input=true` 的清空逻辑。
+  - 更新 `CHANGELOG.md` 的 Unreleased 修复说明。
+  - 补充 `pc/tests/test_voice_coding_server.py` 覆盖 commit Auto Enter 成功/失败 ACK。
+- 验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest pc.tests.test_voice_coding_server pc.tests.test_platform_keyboard`：42 tests OK。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：99 tests OK。
+  - `~/development/flutter-3.27.0/bin/dart format --output=none --set-exit-if-changed lib/voicing_connection_controller.dart`：通过。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仍只有既有 4 个 `withOpacity` info。
+  - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+  - `git diff --check`：通过。
+- 本轮未执行 APK 或 DEB 编译。
+
+## 会话：2026-06-19 CST — Android 到 PC 发送核心链路最终审查
+
+### 发送后端审查
+- **状态：** complete，未提交
+- 用户实测 Auto Enter “还算不错”后，要求最终检查 Android 到 PC 的发送核心后端逻辑。
+- 审查范围：
+  - Android controller：`sendText()`、`_sendShadowIncrement()`、`_finalizeShadowInput()`、`_handleMessage()`、断线重连。
+  - Android WebSocket：Dart `VoicingWebSocketSink`、native WiFi WebSocket wrapper。
+  - Kotlin native bridge：`connectWifiWebSocket`、`sendWebSocketMessage`、OkHttp listener 事件回传。
+  - PC：`handle_client()`、`type_text()`、`press_enter_after_settle()`、平台输入层 Enter/Paste。
+  - 协议：Android/Python constants 与 `protocol/voicing_protocol_contract.json`。
+- 审查结论：
+  - Submit 发送：Android 发送成功后等待 PC ACK 清空；PC 注入失败时 ACK `clear_input=false`，不会误清手机输入。
+  - Shadow 发送：increment 发送成功后才推进 `_lastSentLength`；PC 对 shadow ACK 不清空。
+  - Auto Enter commit：Android 发送空 commit 后等待 PC ACK；PC Enter 成功才 ACK 清空，失败保留输入。
+  - Native 发送：Kotlin `webSocket.send()` 返回 false 或未连接时会报错，Dart `sink.add()` 可捕获；不再 fire-and-forget。
+  - 断线：connection generation 会丢弃旧连接消息，failure/closed 会触发重连路径。
+  - 协议字段一致，无需更新 contract。
+- 发现：
+  - 未发现新的阻断级发送核心逻辑问题。
+  - 残余非阻断点：commit 发送成功后 Android 会先记录 sent history，再等 PC ACK；如果 PC ACK false 后用户重试，历史可能重复，但不会丢文本。
+- 本轮复用此前刚完成的验证结果：
+  - PC `unittest discover -s pc/tests`：99 tests OK。
+  - Flutter analyze：退出码 0，仍只有既有 `withOpacity` info。
+  - Flutter test：24 tests passed。
+  - `git diff --check`：通过。
+
+## 会话：2026-06-19 CST — GNOME Wayland Auto 粘贴普通窗口误判修复
+
+### 自动粘贴普通窗口回归修复
+- **状态：** complete，未提交
+- 用户反馈：自动粘贴模式下 terminal 能粘贴，但普通窗口不能粘贴。
+- 执行的操作：
+  - 复查 `pc/platform_keyboard.py` 的 `_resolve_auto_paste_mode()`、AT-SPI focused/active fallback 和系统 Python helper。
+  - 确认根因：未知焦点无近期 terminal 缓存时仍默认返回 `PasteMode.TERMINAL`，导致普通窗口收到 `Ctrl+Shift+V`。
+  - 修改 `pc/platform_keyboard.py`：
+    - `_scan_atspi_desktop()` 在 focused 信息不可靠时返回 active accessible 信息，不再只找 active terminal。
+    - `_resolve_auto_paste_mode()` 仅在明确 terminal 或近期 terminal 缓存有效时走终端粘贴；完全未知且无 terminal 缓存时走普通粘贴。
+    - 同步 `_ATSPI_FOCUS_HELPER`，让系统 Python helper 也返回 active 普通窗口信息。
+  - 更新 `pc/tests/test_platform_keyboard.py`，覆盖未知焦点默认普通、近期 terminal 缓存仍走终端、shell 焦点下 active 普通窗口走普通等路径。
+  - 更新 `README.md`、`README.zh-CN.md`、`android/README.md`、`android/README.zh-CN.md`、`CHANGELOG.md` 的当前行为说明。
+- 验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest pc.tests.test_platform_keyboard pc.tests.test_voice_coding_server`：44 tests OK。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：101 tests OK。
+  - `git diff --check`：通过。
+
+## 会话：2026-06-19 CST — v2.9.8 Release 发布
+
+### 发布前版本与验证
+- **状态：** in_progress
+- 用户要求更新并推送新的 GitHub Actions release。
+- 执行的操作：
+  - 检查 `.github/workflows/release.yml`，确认 release workflow 由 `v*` tag 触发，且要求 `CHANGELOG.md` 中存在对应版本块。
+  - 将 `CHANGELOG.md` 的 Unreleased 内容落到 `2.9.8`。
+  - 更新 `pc/voice_coding.py` 的 `APP_VERSION` 到 `2.9.8`。
+  - 更新 `android/voice_coding/pubspec.yaml` 到 `2.9.8+9`。
+  - 更新 README / README.zh-CN 的版本徽章和 release tag 示例到 `v2.9.8`。
+  - 保留 Flutter 3.27.0 刷新的 `android/voice_coding/pubspec.lock`。
+- 发布前验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：101 tests OK。
+  - `~/development/flutter-3.27.0/bin/dart format --output=none --set-exit-if-changed lib/voicing_connection_controller.dart`：通过，0 changed。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
+  - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

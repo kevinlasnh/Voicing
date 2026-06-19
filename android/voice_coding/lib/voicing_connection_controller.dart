@@ -1098,6 +1098,9 @@ class VoicingConnectionController extends ChangeNotifier {
             ),
           ),
         );
+        _recordSentText(currentText);
+        _wasComposing = false;
+        return;
       } catch (error, stackTrace) {
         AppLogger.warning('自动 Enter 提交失败',
             error: error, stackTrace: stackTrace);

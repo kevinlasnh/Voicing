@@ -355,12 +355,12 @@ class PlatformKeyboardTests(unittest.TestCase):
         self.assertEqual(mock_probe.call_count, 2)
         mock_sleep.assert_called_once_with(platform_keyboard.ATSPI_FOCUS_RETRY_DELAY_SEC)
 
-    def test_auto_paste_mode_treats_unresolved_focus_as_terminal_safe(self):
+    def test_auto_paste_mode_treats_unresolved_focus_as_normal_without_terminal_cache(self):
         with patch("platform_keyboard._get_focused_accessible_info", return_value=None):
             with patch("platform_keyboard.time.sleep"):
                 self.assertEqual(
                     platform_keyboard._resolve_auto_paste_mode(),
-                    platform_keyboard.PasteMode.TERMINAL,
+                    platform_keyboard.PasteMode.NORMAL,
                 )
 
     def test_is_current_focus_terminal_clears_cache_for_normal_focused_app(self):
@@ -411,7 +411,7 @@ class PlatformKeyboardTests(unittest.TestCase):
         fake_terminal = object()
         fake_atspi.get_desktop.return_value = fake_root
         with patch("platform_keyboard._find_focused_accessible", return_value=fake_focused):
-            with patch("platform_keyboard._find_active_terminal_accessible", return_value=fake_terminal):
+            with patch("platform_keyboard._find_active_accessible", return_value=fake_terminal):
                 with patch(
                     "platform_keyboard._accessible_info",
                     side_effect=[
@@ -424,13 +424,43 @@ class PlatformKeyboardTests(unittest.TestCase):
                         {"role": "frame", "app_name": "ghostty"},
                     )
 
+    def test_scan_atspi_desktop_uses_active_normal_app_when_focus_is_shell(self):
+        fake_atspi = MagicMock()
+        fake_root = object()
+        fake_focused = object()
+        fake_active_normal = object()
+        fake_atspi.get_desktop.return_value = fake_root
+        with patch("platform_keyboard._find_focused_accessible", return_value=fake_focused):
+            with patch("platform_keyboard._find_active_accessible", return_value=fake_active_normal):
+                with patch(
+                    "platform_keyboard._accessible_info",
+                    side_effect=[
+                        {"role": "window", "app_name": "gnome-shell"},
+                        {"role": "entry", "app_name": "Google Chrome"},
+                    ],
+                ):
+                    self.assertEqual(
+                        platform_keyboard._scan_atspi_desktop(fake_atspi),
+                        {"role": "entry", "app_name": "Google Chrome"},
+                    )
+
+    def test_auto_paste_mode_uses_normal_for_shell_focus_with_active_normal_app(self):
+        with patch(
+            "platform_keyboard._get_focused_accessible_info",
+            return_value={"role": "entry", "app_name": "Google Chrome"},
+        ):
+            self.assertEqual(
+                platform_keyboard._resolve_auto_paste_mode(),
+                platform_keyboard.PasteMode.NORMAL,
+            )
+
     def test_scan_atspi_desktop_does_not_override_normal_focused_app(self):
         fake_atspi = MagicMock()
         fake_root = object()
         fake_focused = object()
         fake_atspi.get_desktop.return_value = fake_root
         with patch("platform_keyboard._find_focused_accessible", return_value=fake_focused):
-            with patch("platform_keyboard._find_active_terminal_accessible") as mock_find_active:
+            with patch("platform_keyboard._find_active_accessible") as mock_find_active:
                 with patch(
                     "platform_keyboard._accessible_info",
                     return_value={"role": "entry", "app_name": "Google Chrome"},

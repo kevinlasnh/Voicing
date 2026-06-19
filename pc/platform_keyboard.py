@@ -562,7 +562,7 @@ def _resolve_auto_paste_mode() -> PasteMode:
     if _is_uncertain_focus_info(uncertain_info) and _has_recent_terminal_focus(TERMINAL_FOCUS_FALLBACK_CACHE_SEC):
         return PasteMode.TERMINAL
     if _is_uncertain_focus_info(uncertain_info):
-        return PasteMode.TERMINAL
+        _clear_terminal_focus_cache()
     return PasteMode.NORMAL
 
 
@@ -585,7 +585,7 @@ def _has_recent_terminal_focus(max_age_sec: float) -> bool:
 
 
 def _is_uncertain_focus_info(info: dict[str, str] | None) -> bool:
-    return info is None or _should_scan_active_terminal_fallback(info)
+    return info is None or _should_scan_active_fallback(info)
 
 
 def _normalize_terminal_app_name(value: str) -> str:
@@ -666,10 +666,10 @@ def _scan_atspi_desktop(Atspi) -> dict[str, str] | None:
     if focused_info and _is_terminal_accessible_info(focused_info):
         return focused_info
 
-    if _should_scan_active_terminal_fallback(focused_info):
-        active_terminal = _find_active_terminal_accessible(Atspi, desktop)
-        if active_terminal is not None:
-            return _accessible_info(Atspi, active_terminal)
+    if _should_scan_active_fallback(focused_info):
+        active = _find_active_accessible(Atspi, desktop)
+        if active is not None:
+            return _accessible_info(Atspi, active)
     return focused_info
 
 
@@ -680,7 +680,7 @@ def _is_terminal_accessible_info(info: dict[str, str]) -> bool:
     return app_name in TERMINAL_APP_NAMES
 
 
-def _should_scan_active_terminal_fallback(info: dict[str, str] | None) -> bool:
+def _should_scan_active_fallback(info: dict[str, str] | None) -> bool:
     if not info:
         return True
     app_name = _normalize_terminal_app_name(str(info.get("app_name", "")))
@@ -691,6 +691,10 @@ def _should_scan_active_terminal_fallback(info: dict[str, str] | None) -> bool:
         "desktop frame",
         "desktop icon",
     }
+
+
+def _should_scan_active_terminal_fallback(info: dict[str, str] | None) -> bool:
+    return _should_scan_active_fallback(info)
 
 
 def _find_focused_accessible(Atspi, root, max_depth: int = 7):
@@ -714,16 +718,14 @@ def _find_focused_accessible(Atspi, root, max_depth: int = 7):
     return None
 
 
-def _find_active_terminal_accessible(Atspi, root, max_depth: int = 4):
+def _find_active_accessible(Atspi, root, max_depth: int = 4):
     stack = [(root, 0)]
     while stack:
         accessible, depth = stack.pop()
         try:
             state_set = accessible.get_state_set()
             if state_set.contains(Atspi.StateType.ACTIVE):
-                info = _accessible_info(Atspi, accessible)
-                if _is_terminal_accessible_info(info):
-                    return accessible
+                return accessible
             child_count = accessible.get_child_count()
         except Exception:
             continue
@@ -734,6 +736,18 @@ def _find_active_terminal_accessible(Atspi, root, max_depth: int = 4):
                 stack.append((accessible.get_child_at_index(index), depth + 1))
             except Exception:
                 pass
+    return None
+
+
+def _find_active_terminal_accessible(Atspi, root, max_depth: int = 4):
+    active = _find_active_accessible(Atspi, root, max_depth=max_depth)
+    if active is None:
+        return None
+    try:
+        if _is_terminal_accessible_info(_accessible_info(Atspi, active)):
+            return active
+    except Exception:
+        pass
     return None
 
 
@@ -819,15 +833,14 @@ def is_terminal(info):
     }
     return role == "terminal" or app_name in terminals
 
-def find_active_terminal(root, max_depth=4):
+def find_active(root, max_depth=4):
     stack = [(root, 0)]
     while stack:
         accessible, depth = stack.pop()
         try:
             state_set = accessible.get_state_set()
             if state_set.contains(Atspi.StateType.ACTIVE):
-                if is_terminal(info(accessible)):
-                    return accessible
+                return accessible
             child_count = accessible.get_child_count()
         except Exception:
             continue
@@ -860,9 +873,9 @@ else:
         or role in {"desktop frame", "desktop icon"}
     )
     if use_active_fallback:
-        active_terminal = find_active_terminal(desktop)
-        if active_terminal is not None:
-            print(json.dumps(info(active_terminal)))
+        active = find_active(desktop)
+        if active is not None:
+            print(json.dumps(info(active)))
         elif focused_info:
             print(json.dumps(focused_info))
     elif focused_info:

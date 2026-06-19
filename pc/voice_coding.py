@@ -94,9 +94,9 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.7"
+APP_VERSION = "2.9.8"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
-AUTO_ENTER_SETTLE_DELAY_SEC = 0.15
+AUTO_ENTER_SETTLE_DELAY_SEC = 0.35
 NATIVE_FONT_FAMILY = get_native_font_family()
 NETWORK_INTERFACE_REFRESH_SEC = 1
 
@@ -791,6 +791,17 @@ def type_text(text: str, auto_enter: bool = False) -> bool:
         return False
 
 
+def press_enter_after_settle(delay_sec: float = AUTO_ENTER_SETTLE_DELAY_SEC) -> bool:
+    """Press Enter after giving the target app time to consume a paste event."""
+    try:
+        threading.Event().wait(delay_sec)
+        press_enter()
+        return True
+    except Exception as e:
+        logging.error(f"Error pressing Enter: {e}")
+        return False
+
+
 # ============================================================
 # Reserved for future features / 保留给未来功能
 # ============================================================
@@ -833,10 +844,11 @@ async def handle_client(websocket):
                     send_mode = data.get("send_mode", TEXT_SEND_MODE_SUBMIT)
                     auto_enter = data.get("auto_enter", False) and send_mode == TEXT_SEND_MODE_SUBMIT
                     if send_mode == TEXT_SEND_MODE_COMMIT:
+                        entered = False
                         if data.get("auto_enter", False):
-                            await asyncio.to_thread(press_enter)
+                            entered = await asyncio.to_thread(press_enter_after_settle)
                         await websocket.send(json.dumps(build_ack_message(
-                            clear_input=False,
+                            clear_input=entered,
                         )))
                     elif text:
                         # Type the received text (run in thread to avoid blocking event loop)

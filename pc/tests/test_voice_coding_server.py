@@ -8,7 +8,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import voice_coding
-from voicing_protocol import TYPE_TEXT, TEXT_SEND_MODE_SUBMIT
+from voicing_protocol import TYPE_TEXT, TEXT_SEND_MODE_COMMIT, TEXT_SEND_MODE_SUBMIT
 
 
 class FakeWebSocket:
@@ -59,6 +59,70 @@ class HandleClientTests(unittest.TestCase):
             voice_coding.state.connected_clients.clear()
             voice_coding.state.connected_clients.update(old_clients)
 
+        self.assertEqual(websocket.sent[-1]["type"], "ack")
+        self.assertFalse(websocket.sent[-1]["clear_input"])
+
+    def test_commit_auto_enter_ack_clears_after_enter_succeeds(self):
+        message = json.dumps(
+            {
+                "type": TYPE_TEXT,
+                "content": "",
+                "send_mode": TEXT_SEND_MODE_COMMIT,
+                "auto_enter": True,
+            }
+        )
+        websocket = FakeWebSocket([message])
+        old_sync_enabled = voice_coding.state.sync_enabled
+        old_clients = set(voice_coding.state.connected_clients)
+        try:
+            voice_coding.state.sync_enabled = True
+            voice_coding.state.connected_clients.clear()
+            with (
+                patch("voice_coding.press_enter_after_settle", return_value=True) as mock_enter,
+                patch("voice_coding.get_or_create_device_identity") as identity,
+            ):
+                identity.return_value.name = "PC"
+                identity.return_value.device_id = "device"
+                identity.return_value.os = "linux"
+                asyncio.run(voice_coding.handle_client(websocket))
+        finally:
+            voice_coding.state.sync_enabled = old_sync_enabled
+            voice_coding.state.connected_clients.clear()
+            voice_coding.state.connected_clients.update(old_clients)
+
+        mock_enter.assert_called_once()
+        self.assertEqual(websocket.sent[-1]["type"], "ack")
+        self.assertTrue(websocket.sent[-1]["clear_input"])
+
+    def test_commit_auto_enter_ack_keeps_input_after_enter_fails(self):
+        message = json.dumps(
+            {
+                "type": TYPE_TEXT,
+                "content": "",
+                "send_mode": TEXT_SEND_MODE_COMMIT,
+                "auto_enter": True,
+            }
+        )
+        websocket = FakeWebSocket([message])
+        old_sync_enabled = voice_coding.state.sync_enabled
+        old_clients = set(voice_coding.state.connected_clients)
+        try:
+            voice_coding.state.sync_enabled = True
+            voice_coding.state.connected_clients.clear()
+            with (
+                patch("voice_coding.press_enter_after_settle", return_value=False) as mock_enter,
+                patch("voice_coding.get_or_create_device_identity") as identity,
+            ):
+                identity.return_value.name = "PC"
+                identity.return_value.device_id = "device"
+                identity.return_value.os = "linux"
+                asyncio.run(voice_coding.handle_client(websocket))
+        finally:
+            voice_coding.state.sync_enabled = old_sync_enabled
+            voice_coding.state.connected_clients.clear()
+            voice_coding.state.connected_clients.update(old_clients)
+
+        mock_enter.assert_called_once()
         self.assertEqual(websocket.sent[-1]["type"], "ack")
         self.assertFalse(websocket.sent[-1]["clear_input"])
 

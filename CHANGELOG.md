@@ -15,6 +15,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.8] - 2026-06-19
+
+### Fixed
+
+- PC/Android: Auto Enter commit now waits for the desktop ACK before clearing phone input, and the desktop only returns a clearing ACK after Enter was actually sent
+- PC: Auto Enter now waits a little longer after paste before sending Enter, improving reliability on GNOME Wayland terminals and slower target apps
+- PC (Linux): Auto paste no longer treats completely unresolved focus as terminal without a recent terminal signal, so regular windows continue to paste when AT-SPI focus detection is flaky
+
+### 修复
+
+- PC/Android: Auto Enter commit 现在等待桌面端 ACK 后才清空手机输入；桌面端也只有在 Enter 确实发出后才返回清空 ACK
+- PC: Auto Enter 在粘贴后等待更长一点再发送 Enter，提高 GNOME Wayland 终端和较慢目标应用里的可靠性
+- PC (Linux): 自动粘贴不再把没有近期终端命中的完全未知焦点当作终端，避免 AT-SPI 焦点不稳定时普通窗口收到终端粘贴快捷键
+
+---
+
 ## [2.9.7] - 2026-06-19
 
 ### Fixed

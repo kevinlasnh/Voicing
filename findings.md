@@ -192,3 +192,32 @@
 - GitHub Actions run `27824263798` 成功完成，URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27824263798`。
 - GitHub Release 已发布：`https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.7`。
 - Release 资产已确认齐全：`voicing.apk`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`SHA256SUMS.txt`。
+
+## 2026-06-19 Auto Enter 可靠性修复
+
+- PC 端 commit 分支旧行为：收到 Android 空 commit 且 `auto_enter=true` 时直接调用 `press_enter()`，随后固定回 `clear_input=false`。如果 `press_enter()` 抛异常，WebSocket handler 会退出；如果成功，Android 也无法通过 ACK 判断 Enter 已经成功。
+- Android 端 `_finalizeShadowInput(forceEnter: true)` 旧行为：只等待 WebSocket `sink.add()` 成功就立即 `_recordSentText()`、重置 shadow 状态并 `textController.clear()`，没有等待 PC ACK。因此 PC 没有按出 Enter 时，手机端仍可能清空输入，用户很难重试。
+- 修复决策：PC 新增 `press_enter_after_settle()`，粘贴后等待 `0.35s` 再发送 Enter，并把成功/失败转换成 ACK：成功 `clear_input=true`，失败 `clear_input=false` 且记录错误。Android forceEnter commit 发出后不再本地清空，等待 PC ACK 走现有 `_handleMessage()` 清空。
+- 取舍：Android forceEnter 成功后的输入框清空现在依赖 PC ACK；若连接异常或 PC Enter 失败，手机端保留文本，便于用户手动重发或排查。
+- 验证：PC `py_compile` 通过；PC `unittest discover -s pc/tests` 99 项通过；Flutter analyze 退出码 0（仅既有 `withOpacity` info）；Flutter test 24 项通过；`git diff --check` 通过。
+
+## 2026-06-19 Android 到 PC 发送核心链路最终审查
+
+- 发送链路结论：Android `sendText()` 只在 connected 且 sync enabled 时发送；shadow increment 只推进 `_lastSentLength` 于 `sink.add()` 成功之后；native WiFi sink 等待 Kotlin `sendWebSocketMessage` 返回 true，发送失败会抛回 controller；PC WebSocket handler 只有注入成功才 ACK `clear_input=true`。
+- Auto Enter 结论：submit 模式由 PC 在粘贴后按 Enter；shadow 模式由 Android 发送空 commit，PC Enter 成功后 ACK 清空，失败 ACK 保留输入。当前未发现“PC 未成功但手机误清空”的核心逻辑漏洞。
+- 断线/重连结论：Dart controller 使用 connection generation 丢弃旧连接消息；native WebSocket failure/closed 会移除 controller 并触发 reconnect；旧连接的 onDone/onError 不会污染新连接。
+- 协议结论：Android/Python/protocol contract 中 `text` message 的 `content`、`auto_enter`、`send_mode` 和 `ack.clear_input` 字段一致，无需改协议。
+- 残余非阻断点：Android forceEnter commit 发送成功后会先记录 sent history，再等 PC ACK 清空；如果 PC ACK false 后用户重试，历史可能重复，但文本不会丢失，发送核心语义正确。
+
+## 2026-06-19 GNOME Wayland Auto 粘贴普通窗口误判修复
+
+- 用户反馈：自动粘贴模式下 terminal 可以粘贴，但普通窗口不能粘贴。根因是上一轮为稳定 terminal，将“AT-SPI 焦点完全无法确认且无近期 terminal 缓存”的情况也默认判为 `PasteMode.TERMINAL`，普通窗口在焦点检测短暂失败时会收到 `Ctrl+Shift+V`。
+- 修复决策：Auto 模式只在明确 terminal 或近期 terminal 缓存仍有效时走 `Ctrl+Shift+V`；完全未知且没有近期 terminal 命中时回到普通 `Ctrl+V`，避免普通窗口被未知焦点误伤。
+- AT-SPI fallback 需要返回 active 窗口本身，而不是只查找 active terminal。这样 GNOME Shell/desktop frame 等不可靠 focused accessible 出现时，如果真实 active 窗口是 Chrome/普通输入框，就能明确返回普通 app 信息并清空 terminal 缓存。
+- 系统 Python AT-SPI helper 与主进程扫描逻辑必须保持一致：focused 不可靠时打印 active accessible 的信息，active 是 terminal 才由上层判为终端，否则普通 app 走 Ctrl+V。
+
+## 2026-06-19 v2.9.8 Release 准备
+
+- 发布内容包含两组未发布修复：Auto Enter ACK/清空语义修复，以及 GNOME Wayland Auto 粘贴普通窗口误判修复。
+- 版本同步：PC `APP_VERSION` 升到 `2.9.8`；Android `pubspec.yaml` 升到 `2.9.8+9`；README 版本徽章和 tag 示例升到 `v2.9.8`。
+- Flutter 3.27.0 在本地 analyze/test 前执行依赖解析时刷新了 `pubspec.lock` 中 8 个 SDK/test 相关传递依赖；该锁文件更新随发布提交保留，以匹配当前发布验证工具链。

@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 22（complete）
+阶段 26（in_progress）
 
 ## 各阶段
 
@@ -179,6 +179,40 @@
 - [x] 推送 `v2.9.7` tag 触发 GitHub Actions release workflow
 - [x] 确认 Actions 成功并发布 GitHub Release 资产
 - **状态：** complete
+
+### 阶段 23：Auto Enter 可靠性修复
+- [x] 复查 Android shadow/commit Auto Enter 发送路径
+- [x] 复查 PC WebSocket commit 分支与 Wayland Enter 发送路径
+- [x] 修复 PC commit 成功/失败 ACK 语义，Enter 成功才返回清空输入
+- [x] 延长 PC 粘贴后 Auto Enter settle 延迟
+- [x] 修复 Android forceEnter commit 后立刻清空输入的问题，改为等待 PC ACK 清空
+- [x] 补充 PC 服务端单元测试并完成 PC/Android 验证
+- **状态：** complete
+
+### 阶段 24：Android 到 PC 发送核心链路最终审查
+- [x] 审查 Android `sendText()`、shadow increment、commit finalize 与 ACK 处理
+- [x] 审查 Dart WebSocket 抽象和 Android Kotlin native WebSocket bridge
+- [x] 审查 PC WebSocket handler、输入注入、ACK 清空和 sync disabled 语义
+- [x] 审查协议常量/contract 中 text、ack、send_mode、auto_enter 字段一致性
+- [x] 运行 PC/Android 验证并确认无新增阻断问题
+- **状态：** complete
+
+### 阶段 25：GNOME Wayland Auto 粘贴普通窗口误判修复
+- [x] 复查 PC Auto 粘贴焦点判定、AT-SPI active fallback 和测试覆盖
+- [x] 修复未知焦点无近期 terminal 缓存时误走终端粘贴的问题
+- [x] 将 AT-SPI fallback 从只找 active terminal 改为返回 active 窗口信息，普通窗口可明确走 Ctrl+V
+- [x] 同步系统 Python AT-SPI helper 与公开文档/CHANGELOG
+- [x] 补充 PC 单元测试并完成验证
+- **状态：** complete
+
+### 阶段 26：v2.9.8 Release 发布
+- [x] 更新 PC / Android 版本号到 `2.9.8`
+- [x] 将 CHANGELOG Unreleased 内容落到 `2.9.8` 发布块
+- [x] 运行 PC 和 Android 发布前验证
+- [ ] 提交并推送 `main`
+- [ ] 推送 `v2.9.8` tag 触发 GitHub Actions release workflow
+- [ ] 确认 Actions 成功并发布 GitHub Release 资产
+- **状态：** in_progress
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
