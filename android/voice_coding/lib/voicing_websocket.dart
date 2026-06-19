@@ -6,7 +6,7 @@ import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 abstract class VoicingWebSocketSink {
-  void add(Object? data);
+  Future<void> add(Object? data);
 
   Future<void> close([int? closeCode, String? closeReason]);
 }
@@ -65,7 +65,7 @@ class _DartIoWebSocketSink implements VoicingWebSocketSink {
   final WebSocketSink _delegate;
 
   @override
-  void add(Object? data) {
+  Future<void> add(Object? data) async {
     _delegate.add(data);
   }
 
@@ -215,18 +215,21 @@ class _NativeWifiWebSocketSink implements VoicingWebSocketSink {
   final Future<int> _idFuture;
 
   @override
-  void add(Object? data) {
-    unawaited(
-      _idFuture.then((id) {
-        return _methodChannel.invokeMethod<void>(
-          'sendWebSocketMessage',
-          <String, Object?>{
-            'id': id,
-            'message': data?.toString() ?? '',
-          },
-        );
-      }),
+  Future<void> add(Object? data) async {
+    final id = await _idFuture;
+    final sent = await _methodChannel.invokeMethod<bool>(
+      'sendWebSocketMessage',
+      <String, Object?>{
+        'id': id,
+        'message': data?.toString() ?? '',
+      },
     );
+    if (sent != true) {
+      throw PlatformException(
+        code: 'native_websocket_send_failed',
+        message: 'Native WebSocket refused the message',
+      );
+    }
   }
 
   @override

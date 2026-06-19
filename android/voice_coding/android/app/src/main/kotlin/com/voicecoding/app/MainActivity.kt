@@ -73,7 +73,11 @@ class MainActivity : FlutterActivity() {
                         result.error("not_connected", "WebSocket is not connected", null)
                         return@setMethodCallHandler
                     }
-                    result.success(webSocket.send(message))
+                    if (!webSocket.send(message)) {
+                        result.error("send_failed", "WebSocket refused the message", null)
+                        return@setMethodCallHandler
+                    }
+                    result.success(true)
                 }
                 "closeWebSocket" -> {
                     val id = call.argument<Int>("id")

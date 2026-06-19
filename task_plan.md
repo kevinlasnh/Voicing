@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 10
+阶段 14
 
 ## 各阶段
 
@@ -91,7 +91,23 @@
 - [x] Linux 原生菜单去分隔条（`_setup_native_context_menu` 删 4 个 `addSeparator()`）—— 用户确认无横条 ✅
 - [x] QR「下方第二个 QR」闪烁修复（收尾先 hide 解除 surface 映射再 resize/show）—— 用户确认下方闪动消失 ✅
 - [ ] Linux 原生菜单宽度仍不自适应（用户反馈，待复核具体表现）
-- [ ] QR 到达中心时自身闪动一次（第二版修复引入/暴露，待定位）
+- [x] QR 到达中心时自身闪动一次：用户选择砍掉飞入，已改为中心直接出现/直接关闭，待用户手动启动肉眼确认
+- **状态：** in_progress
+
+### 阶段 13：整体前端逻辑 Review
+- [x] 审查 PC PyQt 托盘、菜单、QR 和 WebSocket 前端信号链路
+- [x] 审查 Android Flutter UI、QR 扫码、连接 controller、native WebSocket 包装和 shadow/commit 发送路径
+- [x] 运行 PC 单元测试、Flutter test 和 Flutter analyze
+- [x] 汇总可复现/高概率逻辑风险
+- **状态：** complete
+
+### 阶段 14：整体前端 Review 问题修复
+- [x] 修复 Android native WebSocket 发送失败不可被 controller 捕获的问题
+- [x] 修复 PC 同步开关即时广播跨 asyncio event loop 的风险
+- [x] 修复 Android QR 替换设备确认先成功后确认的时序问题
+- [x] 保持用户要求：不执行 APK 或 deb 编译
+- [x] 运行 PC/Android 非打包验证
+- [ ] 提交并推送到远端
 - **状态：** in_progress
 
 ## 关键问题

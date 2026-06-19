@@ -1,9 +1,11 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from PyQt5.QtCore import QPoint, QRect
 from PyQt5.QtWidgets import QSystemTrayIcon
 
 from voice_coding import ModernTrayIcon
@@ -77,6 +79,88 @@ class CustomMenuLayoutTests(unittest.TestCase):
         self.assertEqual(menu.width(), menu.sizeHint().width())
         # 宽度应在最长项内容附近，不应是 adjustSize 默认的偏大值（约 200）。
         self.assertLess(menu.width(), 190)
+
+
+class QRCodeDialogOpenTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PyQt5.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_qr_dialog_opens_directly_at_center_rect(self):
+        from voice_coding import QRCodeDialog
+        dialog = QRCodeDialog()
+        end_rect = QRect(100, 120, dialog.DIALOG_WIDTH, dialog.DIALOG_HEIGHT)
+        dialog._populate_content = MagicMock()
+        dialog._build_end_rect = MagicMock(return_value=end_rect)
+
+        try:
+            dialog.show_from(QPoint(20, 30))
+
+            dialog._populate_content.assert_called_once_with()
+            dialog._build_end_rect.assert_called_once()
+            self.assertEqual(dialog.geometry(), end_rect)
+            self.assertEqual(dialog._anim_end_rect, end_rect)
+            self.assertTrue(dialog._ignore_focus_loss)
+        finally:
+            dialog.hide()
+            dialog.deleteLater()
+
+
+class SyncStateBroadcastTests(unittest.TestCase):
+    def test_schedule_sync_state_broadcast_uses_server_loop(self):
+        import voice_coding
+
+        old_loop = voice_coding.state.server_loop
+        loop = MagicMock()
+        loop.is_closed.return_value = False
+        future = MagicMock()
+        broadcast_call = object()
+        try:
+            voice_coding.state.server_loop = loop
+            with (
+                patch.object(
+                    voice_coding,
+                    "broadcast_sync_state",
+                    new=MagicMock(return_value=broadcast_call),
+                ) as broadcast,
+                patch.object(
+                    voice_coding.asyncio,
+                    "run_coroutine_threadsafe",
+                    return_value=future,
+                ) as run_coroutine_threadsafe,
+            ):
+                voice_coding.schedule_sync_state_broadcast()
+
+            broadcast.assert_called_once_with()
+            run_coroutine_threadsafe.assert_called_once_with(broadcast_call, loop)
+            future.add_done_callback.assert_called_once()
+        finally:
+            voice_coding.state.server_loop = old_loop
+
+    def test_schedule_sync_state_broadcast_skips_when_loop_missing(self):
+        import voice_coding
+
+        old_loop = voice_coding.state.server_loop
+        try:
+            voice_coding.state.server_loop = None
+            with (
+                patch.object(
+                    voice_coding,
+                    "broadcast_sync_state",
+                    new=MagicMock(),
+                ) as broadcast,
+                patch.object(
+                    voice_coding.asyncio,
+                    "run_coroutine_threadsafe",
+                ) as run_coroutine_threadsafe,
+            ):
+                voice_coding.schedule_sync_state_broadcast()
+
+            broadcast.assert_not_called()
+            run_coroutine_threadsafe.assert_not_called()
+        finally:
+            voice_coding.state.server_loop = old_loop
 
 
 if __name__ == "__main__":

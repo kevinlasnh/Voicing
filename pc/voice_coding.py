@@ -119,6 +119,7 @@ class AppState:
         self.ui_signals = None  # Qt UI 线程信号桥
         self.bound_ws_host = None  # 当前 WebSocket 实际绑定地址
         self.bound_ws_hosts = []  # 当前 WebSocket 实际绑定成功的地址列表
+        self.server_loop = None  # WebSocket server 所属 asyncio event loop
 
 state = AppState()
 
@@ -871,8 +872,27 @@ async def broadcast_sync_state():
             pass
 
 
+def schedule_sync_state_broadcast():
+    """Schedule sync state broadcast on the WebSocket server loop."""
+    loop = state.server_loop
+    if loop is None or loop.is_closed():
+        logging.warning("同步状态广播跳过：WebSocket event loop 尚未可用")
+        return
+
+    future = asyncio.run_coroutine_threadsafe(broadcast_sync_state(), loop)
+
+    def log_broadcast_error(completed_future):
+        try:
+            completed_future.result()
+        except Exception as exc:
+            logging.warning(f"同步状态广播失败: {exc}")
+
+    future.add_done_callback(log_broadcast_error)
+
+
 async def start_server():
     """Start the WebSocket server / 启动WebSocket服务器"""
+    state.server_loop = asyncio.get_running_loop()
     while state.running:
         bind_hosts = get_advertised_server_ips(refresh=True)
         servers = []
@@ -1251,13 +1271,7 @@ class ModernMenuWidget(QWidget):
         if state.tray_icon:
             update_tray_icon_pyqt(state.tray_icon)
         self.close_with_animation()
-        # 广播同步状态
-        def send_sync_state():
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(broadcast_sync_state())
-            loop.close()
-        threading.Thread(target=send_sync_state, daemon=True).start()
+        schedule_sync_state_broadcast()
 
     def toggle_startup(self):
         """切换开机自启"""
@@ -1451,15 +1465,11 @@ class QRSuccessOverlay(QWidget):
 
 
 class QRCodeDialog(QWidget):
-    """QR 码弹窗 - 与托盘菜单同色同风格，从菜单项位置缩放弹到屏幕中心"""
+    """QR 码弹窗 - 与托盘菜单同色同风格，直接在屏幕中心显示。"""
 
     DIALOG_WIDTH = 282
     DIALOG_HEIGHT = 308
     QR_SIZE = 230
-    START_SCALE = 0.12
-    OPEN_DURATION_MS = 430
-    CLOSE_DURATION_MS = 300
-    QT_MAX_WIDGET_SIZE = 16777215
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -1471,13 +1481,8 @@ class QRCodeDialog(QWidget):
         )
         self.setAttribute(Qt.WA_TranslucentBackground)
 
-        # 动画状态
-        self._anim_start_rect = None
+        self._ignore_focus_loss = False
         self._anim_end_rect = None
-        self._animation_group = None
-        self._animation_mode = False
-        self._animation_content_rect = QRect()
-        self._animation_pixmap = QPixmap()
 
         # Keep QR payload aligned with runtime IP changes.
         self._refresh_timer = QTimer(self)
@@ -1485,7 +1490,6 @@ class QRCodeDialog(QWidget):
 
         self._cached_qr_payload = None
         self._cached_qr_pixmap = None
-        self._cached_animation_pixmap = None
         self._scan_success_shown = False
         self._closing_after_success = False
         self._success_generation = 0
@@ -1572,7 +1576,7 @@ class QRCodeDialog(QWidget):
 
         layout.addWidget(self.container)
 
-        # 精确尺寸：真实窗口保持最终尺寸；动画阶段使用快照窗口缩放。
+        # 精确尺寸：窗口始终保持最终尺寸，避免 Wayland 上 resize/remap 闪烁。
         self.setFixedSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
 
     def _generate_qr_pixmap(self, payload: str) -> QPixmap:
@@ -1619,29 +1623,41 @@ class QRCodeDialog(QWidget):
         if self._cached_qr_payload != payload or self._cached_qr_pixmap is None:
             self._cached_qr_payload = payload
             self._cached_qr_pixmap = self._generate_qr_pixmap(payload)
-            self._cached_animation_pixmap = None
         pix = self._cached_qr_pixmap
         self.qr_label.setPixmap(pix)
 
     def show_from(self, anchor_global_pos):
-        """弹出动画：从鼠标点击位置缩放 + 位移到屏幕中心（所有平台统一行为）"""
+        """在屏幕中心显示 QR 弹窗，不做跨窗口飞入动画。"""
         self._populate_content()
         self.success_overlay.reset()
         self._scan_success_shown = False
         self._closing_after_success = False
         self._success_generation += 1
-        self._cached_animation_pixmap = None
+        generation = self._success_generation
 
         end_rect = self._build_end_rect(anchor_global_pos)
-        start_rect = self._build_start_rect(anchor_global_pos, end_rect)
 
-        self._anim_start_rect = start_rect
         self._anim_end_rect = end_rect
         self._refresh_timer.stop()
+        # 短暂忽略 focus-out，避免 Wayland show/activate 过程中的焦点事件把弹窗立即关闭。
+        self._ignore_focus_loss = True
+        self.setUpdatesEnabled(False)
         self.setGeometry(end_rect)
         self.setWindowOpacity(1.0)
-        self.hide()
-        self._start_dialog_animation(start_rect, end_rect, opening=True)
+        self.container.show()
+        self.setUpdatesEnabled(True)
+        self.show()
+        self.raise_()
+        self.activateWindow()
+        self.setFocus(Qt.ActiveWindowFocusReason)
+        self.repaint()
+        QTimer.singleShot(120, lambda: self._finish_direct_open(generation))
+
+    def _finish_direct_open(self, generation):
+        if generation != self._success_generation or not self.isVisible():
+            return
+        self._ignore_focus_loss = False
+        self._refresh_timer.start(5000)
 
     def _build_end_rect(self, anchor_global_pos):
         screen = None
@@ -1665,171 +1681,6 @@ class QRCodeDialog(QWidget):
             self.DIALOG_HEIGHT,
         )
 
-    def _build_start_rect(self, anchor_global_pos, end_rect):
-        start_w = max(24, int(end_rect.width() * self.START_SCALE))
-        start_h = max(24, int(end_rect.height() * self.START_SCALE))
-        return QRect(
-            anchor_global_pos.x() - start_w // 2,
-            anchor_global_pos.y() - start_h // 2,
-            start_w,
-            start_h,
-        )
-
-    def _capture_animation_pixmap(self):
-        if self._cached_animation_pixmap is None:
-            pixmap = QPixmap(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
-            pixmap.fill(Qt.transparent)
-            was_animation_mode = self._animation_mode
-            self._animation_mode = False
-            container_was_hidden = self.container.isHidden()
-            if hasattr(self, "container"):
-                self.container.show()
-            self.resize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
-            self.ensurePolished()
-            if self.layout() is not None:
-                self.layout().activate()
-            self.render(pixmap)
-            self._animation_mode = was_animation_mode
-            if container_was_hidden:
-                self.container.hide()
-            self._cached_animation_pixmap = pixmap
-        return QPixmap(self._cached_animation_pixmap)
-
-    def _capture_current_animation_pixmap(self):
-        pixmap = QPixmap(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
-        pixmap.fill(Qt.transparent)
-        was_animation_mode = self._animation_mode
-        self._animation_mode = False
-        container_was_hidden = self.container.isHidden()
-        if hasattr(self, "container"):
-            self.container.show()
-        self.resize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
-        self.ensurePolished()
-        if self.layout() is not None:
-            self.layout().activate()
-        self.render(pixmap)
-        self._animation_mode = was_animation_mode
-        if container_was_hidden:
-            self.container.hide()
-        return pixmap
-
-    def _relative_rect(self, rect, origin):
-        return QRect(
-            rect.x() - origin.x(),
-            rect.y() - origin.y(),
-            rect.width(),
-            rect.height(),
-        )
-
-    def _stop_animation_group(self):
-        if self._animation_group is not None:
-            self._animation_group.stop()
-            self._animation_group.deleteLater()
-            self._animation_group = None
-
-    def get_content_rect(self):
-        return self._animation_content_rect
-
-    def set_content_rect(self, rect):
-        self._animation_content_rect = rect
-        if self._animation_mode:
-            self.update()
-
-    contentRect = pyqtProperty(QRect, fget=get_content_rect, fset=set_content_rect)
-
-    def _allow_animation_geometry(self):
-        self.setMinimumSize(0, 0)
-        self.setMaximumSize(self.QT_MAX_WIDGET_SIZE, self.QT_MAX_WIDGET_SIZE)
-
-    def _restore_dialog_geometry(self, rect):
-        self.setFixedSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
-        self.setGeometry(rect)
-
-    def _screen_rect_for_content_rect(self):
-        top_left = self.geometry().topLeft()
-        return QRect(
-            top_left.x() + self._animation_content_rect.x(),
-            top_left.y() + self._animation_content_rect.y(),
-            self._animation_content_rect.width(),
-            self._animation_content_rect.height(),
-        )
-
-    def paintEvent(self, event):
-        if not self._animation_mode or self._animation_pixmap.isNull():
-            super().paintEvent(event)
-            return
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
-        painter.drawPixmap(self._animation_content_rect, self._animation_pixmap)
-
-    def _start_dialog_animation(self, start_rect, end_rect, opening):
-        """在同一个顶层窗口里绘制弹窗快照，避免两个顶层窗口交接闪烁。"""
-        self._stop_animation_group()
-        canvas_rect = start_rect.united(end_rect).adjusted(-2, -2, 2, 2)
-        canvas_origin = canvas_rect.topLeft()
-        local_start_rect = self._relative_rect(start_rect, canvas_origin)
-        local_end_rect = self._relative_rect(end_rect, canvas_origin)
-
-        animation_pixmap = self._capture_animation_pixmap()
-        self.setUpdatesEnabled(False)
-        self._animation_pixmap = animation_pixmap
-        self._animation_mode = True
-        self._animation_content_rect = local_start_rect
-        self.container.hide()
-        self._allow_animation_geometry()
-        self.setGeometry(canvas_rect)
-        self.setWindowOpacity(0.02 if opening else 1.0)
-        self.setUpdatesEnabled(True)
-        self.show()
-        self.raise_()
-        self.repaint()
-
-        duration = self.OPEN_DURATION_MS if opening else self.CLOSE_DURATION_MS
-
-        rect_anim = QPropertyAnimation(self, b"contentRect", self)
-        rect_anim.setDuration(duration)
-        rect_anim.setStartValue(local_start_rect)
-        rect_anim.setEndValue(local_end_rect)
-        rect_anim.setEasingCurve(QEasingCurve.OutCubic if opening else QEasingCurve.InCubic)
-
-        opacity_anim = QPropertyAnimation(self, b"windowOpacity", self)
-        opacity_anim.setDuration(duration)
-        opacity_anim.setStartValue(0.02 if opening else 1.0)
-        opacity_anim.setEndValue(1.0 if opening else 0.0)
-        opacity_anim.setEasingCurve(QEasingCurve.OutQuad if opening else QEasingCurve.InCubic)
-
-        group = QParallelAnimationGroup(self)
-        group.addAnimation(rect_anim)
-        group.addAnimation(opacity_anim)
-        if opening:
-            group.finished.connect(lambda: self._finish_open_animation(end_rect))
-        else:
-            group.finished.connect(self._finish_close_animation)
-        self._animation_group = group
-        QTimer.singleShot(0, lambda: group.start())
-
-    def _finish_open_animation(self, end_rect):
-        self.setUpdatesEnabled(False)
-        # 动画收尾时顶层窗口要从横跨「锚点→中心」的大 canvas_rect 切回 end_rect，
-        # 且 pixmap 的 QR 位于旧缓冲的中部。若在可见状态下 resize+move，Mutter 会把
-        # 上一帧旧缓冲按新原点重显，闪出"中心下方第二个二维码"。
-        # 解法：先 hide 解除 surface 映射，在不可见时完成 resize，再 show 出最终容器画面。
-        # 期间保持 _animation_mode=True，让 focusOutEvent 的延迟关闭检查直接 return，
-        # 避免 hide/show 抖动误触发关闭。
-        self._animation_pixmap = QPixmap()
-        self.hide()
-        self._restore_dialog_geometry(end_rect)
-        self.container.show()
-        self.setWindowOpacity(1.0)
-        self.show()
-        self._animation_mode = False
-        self.setUpdatesEnabled(True)
-        self.repaint()
-        self.raise_()
-        self.activateWindow()
-        self._refresh_timer.start(5000)
-        self._stop_animation_group()
-
     def show_scan_success(self):
         if not self.isVisible():
             logging.info("QR 成功态跳过：QR 弹窗当前不可见")
@@ -1841,19 +1692,9 @@ class QRCodeDialog(QWidget):
         self._closing_after_success = False
         self._success_generation += 1
         generation = self._success_generation
-        self._cached_animation_pixmap = None
         self.success_overlay.setGeometry(self.qr_label.rect())
         self.success_overlay.play()
         QTimer.singleShot(1150, lambda: self._close_after_success(generation))
-
-    def _freeze_success_snapshot(self):
-        self.success_overlay.setGeometry(self.qr_label.rect())
-        self.success_overlay.set_shade_progress(1.0)
-        self.success_overlay.set_check_progress(1.0)
-        self.success_overlay.show()
-        self.success_overlay.raise_()
-        self.success_overlay.repaint()
-        self._cached_animation_pixmap = self._capture_current_animation_pixmap()
 
     def _close_after_success(self, generation):
         if (
@@ -1862,43 +1703,27 @@ class QRCodeDialog(QWidget):
             and self.isVisible()
         ):
             self._closing_after_success = True
-            self._freeze_success_snapshot()
             self.close_with_animation()
 
-    def _finish_close_animation(self):
+    def _finish_close(self):
         self._refresh_timer.stop()
         self.setUpdatesEnabled(False)
-        self._animation_mode = False
-        self._animation_pixmap = QPixmap()
+        self._ignore_focus_loss = False
         self.container.show()
         if self._anim_end_rect is not None:
-            self._restore_dialog_geometry(self._anim_end_rect)
+            self.setFixedSize(self.DIALOG_WIDTH, self.DIALOG_HEIGHT)
+            self.setGeometry(self._anim_end_rect)
         self.setUpdatesEnabled(True)
         self.hide()
         self.success_overlay.reset()
         self._scan_success_shown = False
         self._closing_after_success = False
-        self._stop_animation_group()
 
     def close_with_animation(self):
-        self._stop_animation_group()
         if not self.isVisible():
             return
-        if self._anim_start_rect is None or self._anim_end_rect is None:
-            self.hide()
-            return
-        current_rect = (
-            self._screen_rect_for_content_rect()
-            if self._animation_mode
-            else self._anim_end_rect
-        )
-        self.setGeometry(current_rect)
-        self.setWindowOpacity(1.0)
         self._refresh_timer.stop()
-        if self._scan_success_shown and self._cached_animation_pixmap is None:
-            self._closing_after_success = True
-            self._freeze_success_snapshot()
-        self._start_dialog_animation(current_rect, self._anim_start_rect, opening=False)
+        self._finish_close()
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Escape:
@@ -1913,7 +1738,7 @@ class QRCodeDialog(QWidget):
         super().focusOutEvent(event)
 
     def _maybe_close_on_focus_loss(self):
-        if self._animation_mode:
+        if self._ignore_focus_loss:
             return
         if self._scan_success_shown or self._closing_after_success:
             logging.info("QR 成功态期间忽略 focus-out 关闭")

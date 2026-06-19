@@ -104,3 +104,27 @@
 - **遗留**：第二版修法消除"下方第二个 QR"，但用户反馈 QR 到达中心时**自身闪动一次**（pixmap→container 切换那一帧，或 hide/show 引入的再显）。待定位：可能是 hide/show 本身的再显、或 pixmap（全对话框渲染）与最终 container 在中心位置不完全对齐导致的一帧跳变。
 - **QR 闪动整体结论（重读 QRSuccessOverlay + QRCodeDialog 全生命周期后）**：两个闪动同根——"从右上角飞入"效果要求打开动画期顶层窗口是大 `canvas_rect`（横跨托盘→中心），收尾从 canvas 缩到 `end_rect`；而 Wayland/Mutter 上**任何收尾的 resize（可见→下方重影）或 hide/show remap（→自身闪动）都会闪**，二者是同一根问题的两面。根治只能从架构上消除收尾几何变化：窗口恒定 end_rect 尺寸，动画只做位置移动+内容缩放+淡入（A 方案，保留飞入）；或砍飞入改原地缩放淡入（B 方案，最稳）。待用户选。
 - **GNOME 原生 QMenu 宽度偏大根因**：`actionGeometry` 显示每项占满整菜单宽（实测 `sizeHint=168` vs 最长文本"显示 QR 码"仅 84px），是默认 QMenu item 水平 padding（左勾选框位 + 右留白）过大。修法：stylesheet 仅收紧 item 内边距（`QMenu::item { padding: 6px 12px 6px 20px; }`），不改 QMenu 背景边框以保 GTK 原生外观；offscreen 实测 168→134。注：offscreen 用 Qt 默认 style，GNOME GTK 实际宽度不同，但收紧幅度应一致。
+
+## 2026-06-19 QR 弹窗中心直接出现
+
+- 用户选择 B 方案：不保留 QR 从托盘/右上角飞入。产品行为改为点击「显示 QR 码」后，QR 弹窗直接出现在屏幕中心。
+- 实现决策：`QRCodeDialog` 不再使用跨锚点和中心的大 `canvas_rect`，也不再在打开/关闭时做 widget 快照缩放动画。这样从根上避开 Wayland/Mutter 对可见 resize、hide/show remap、旧 buffer 重显的处理差异。
+- 代码清理：移除 QR 弹窗旧飞行动画相关状态和方法，包括 start rect、动画 pixmap、`contentRect` 属性、快照捕获、`_start_dialog_animation()` 与 `_finish_open_animation()`；保留 `QRSuccessOverlay` 的扫码成功对勾动画。
+- 焦点边界：打开后短暂设置 `_ignore_focus_loss`，120ms 后通过 generation 校验解除，避免 Wayland show/activate 过程中的 focus-out 把刚出现的弹窗关闭；若弹窗已关闭或新一轮打开，旧 timer 不会影响当前状态。
+- 验证：`py_compile`、`unittest discover -s pc/tests`（72 OK）、`git diff --check` 均通过。视觉闪动仍需用户在真实 GNOME Wayland 会话中手动确认。
+
+## 2026-06-19 整体前端逻辑 Review
+
+- **Android native WebSocket 发送失败不可被上层捕获**：`VoicingWebSocketSink.add()` 接口是 `void`，native 实现 `_NativeWifiWebSocketSink.add()` 内部 `unawaited(_idFuture.then(... MethodChannel.invokeMethod('sendWebSocketMessage') ...))`。Kotlin `sendWebSocketMessage` 在未连接时会 `result.error("not_connected", ...)`，`webSocket.send(message)` 也可能返回 `false`；但 Dart 上层 `sendText()`、`_sendPing()`、`_sendShadowIncrement()`、commit 发送周围的 `try/catch` 都只包住同步调用，捕不到这些异步失败。结果是 UI/controller 可能记录已发送、清空输入或继续保持连接状态，但 native 实际未发出消息。
+- **PC 同步开关即时广播有跨 event loop 风险**：`ModernMenuWidget.toggle_sync()` 开新线程和新 asyncio loop 调 `broadcast_sync_state()`，而 `state.connected_clients` 里的 websockets 连接对象由 server 线程/loop 创建。对这些对象在另一个 loop 调 `client.send()` 在 websockets 12 下不是可靠模型，可能抛异常后被静默吞掉，导致手机端不会立即收到 `sync_state`。不过 PC 端处理文本时仍会返回 `sync_disabled`，心跳 pong 也会带 `sync_enabled`，所以这是即时状态同步风险，不是核心输入路径完全失效。
+- **Android QR 替换设备确认的时序语义不严谨**：`_finishQrPairing()` 在连通性 probe 成功后先设置 `_qrPairingSucceeded=true` 并展示成功态，再等待 `_qrSuccessHoldDelay` 后调用 `_confirmScannedServer()`。若扫到不同 `device_id` 且用户取消替换，会出现“先成功、再取消”的体验。数据不会被保存，属于 UX/状态语义问题；更严谨的流程是先确认替换，再展示最终成功态。
+- **菜单宽度/居中检查结论**：Linux 当前走原生 `QMenu`，实际宽度约 110px；`QMenu::item { text-align: center; }` 不改变实际文字绘制位置。真正居中需要 `QWidgetAction` 或自绘项，会牺牲当前 Linux 托盘宿主兼容性，用户已决定暂不改。
+- **验证状态**：PC 72 个单元测试通过；Android 22 个 Flutter tests 通过；Flutter analyze 仅报告既有 4 个 `withOpacity` info。当前 review 没有发现协议字段不一致或 QR-only reconnect 模型被破坏。
+
+## 2026-06-19 整体前端 Review 问题修复决策
+
+- **Android WebSocket 发送语义**：`VoicingWebSocketSink.add()` 改为 `Future<void>` 是必要的接口变化。原因是 native MethodChannel 发送本来就是异步边界，保持 `void` 会让 controller 的 `try/catch` 形成虚假保护，导致 UI 认为发送成功但 native 实际失败。Dart IO sink 虽然底层 `WebSocketSink.add()` 仍是同步 API，也用 `async` 包成同一接口，保持上层发送路径一致。
+- **发送后状态更新顺序**：`sendText()`、shadow increment、commit auto-enter 必须在 `await sink.add()` 成功后再记录历史、推进 `_lastSentLength` 或清空输入。发送失败时保留输入并断开/重连，比“清空但未到达 PC”更符合用户可恢复性。
+- **PC 同步广播 event loop**：`websockets` 连接对象由 server loop 创建，托盘 UI 线程切换同步状态时应使用 `asyncio.run_coroutine_threadsafe()` 投递回 `state.server_loop`。新建 event loop 后直接 `client.send()` 属于跨 loop 操作，不能作为即时状态同步实现。
+- **QR 替换确认时序**：扫码 probe 成功不等于用户已接受替换已保存设备。对不同 `device_id` 的替换，应先确认，再展示最终成功态和保存重连；取消时应直接退出扫码锁定态，不展示“成功后取消”的矛盾状态。
+- **验证边界**：本轮只做源码与单元/静态验证，按用户要求未编译 APK 或 deb。

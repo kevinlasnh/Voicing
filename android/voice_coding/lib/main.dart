@@ -753,7 +753,7 @@ class _MainPageState extends State<MainPage>
         ),
         cursorColor: AppColors.primary,
         textInputAction: TextInputAction.send,
-        onSubmitted: (_) => _controller.sendText(),
+        onSubmitted: (_) => unawaited(_controller.sendText()),
       ),
     );
   }

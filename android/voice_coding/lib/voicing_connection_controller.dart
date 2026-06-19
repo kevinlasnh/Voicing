@@ -230,9 +230,21 @@ class VoicingConnectionController extends ChangeNotifier {
             final data = VoicingProtocol.decodeMessage(message);
             final type = data?['type'];
             if (type == VoicingProtocol.typeConnected) {
-              probeChannel?.sink.add(
+              final sendFuture = probeChannel?.sink.add(
                 json.encode(VoicingProtocol.buildQrScanProbeMessage()),
               );
+              if (sendFuture != null) {
+                unawaited(
+                  sendFuture.catchError((Object error, StackTrace stackTrace) {
+                    AppLogger.warning(
+                      'QR 连通性测试探测消息发送失败',
+                      error: error,
+                      stackTrace: stackTrace,
+                    );
+                    finish(false);
+                  }),
+                );
+              }
             } else if (type == VoicingProtocol.typePong) {
               finish(true);
             }
@@ -286,15 +298,6 @@ class VoicingConnectionController extends ChangeNotifier {
     }
 
     if (success && scannedServer != null) {
-      _qrPairingSucceeded = true;
-      _qrPairingFailed = false;
-      notifyListeners();
-      await Future.delayed(_qrSuccessHoldDelay);
-
-      if (generation != _qrPairingGeneration || !_qrScanMode) {
-        return;
-      }
-
       final accepted = await _confirmScannedServer(scannedServer);
       if (generation != _qrPairingGeneration || !_qrScanMode) {
         return;
@@ -306,6 +309,15 @@ class VoicingConnectionController extends ChangeNotifier {
         _qrPairingFailed = false;
         notifyListeners();
         AppLogger.info('用户取消替换已保存设备');
+        return;
+      }
+
+      _qrPairingSucceeded = true;
+      _qrPairingFailed = false;
+      notifyListeners();
+      await Future.delayed(_qrSuccessHoldDelay);
+
+      if (generation != _qrPairingGeneration || !_qrScanMode) {
         return;
       }
 
@@ -578,7 +590,7 @@ class VoicingConnectionController extends ChangeNotifier {
     );
   }
 
-  void sendText() {
+  Future<void> sendText() async {
     final text = textController.text.trim();
     if (text.isEmpty ||
         _status != ConnectionStatus.connected ||
@@ -587,13 +599,13 @@ class VoicingConnectionController extends ChangeNotifier {
     }
 
     if (_hasPendingShadowBuffer(text)) {
-      _finalizeShadowInput(forceEnter: _autoEnterEnabled);
+      await _finalizeShadowInput(forceEnter: _autoEnterEnabled);
       return;
     }
 
     _shadowFinalizeTimer?.cancel();
     try {
-      _channel?.sink.add(
+      await _channel?.sink.add(
         json.encode(
           VoicingProtocol.buildTextMessage(
             text,
@@ -957,8 +969,12 @@ class VoicingConnectionController extends ChangeNotifier {
   }
 
   void _sendPing() {
+    unawaited(_sendPingAsync());
+  }
+
+  Future<void> _sendPingAsync() async {
     try {
-      _channel?.sink.add(json.encode(VoicingProtocol.buildPingMessage()));
+      await _channel?.sink.add(json.encode(VoicingProtocol.buildPingMessage()));
     } catch (error, stackTrace) {
       AppLogger.warning('Ping 发送失败', error: error, stackTrace: stackTrace);
       _handleDisconnect();
@@ -1018,20 +1034,20 @@ class VoicingConnectionController extends ChangeNotifier {
     final composing = textController.value.composing;
     final isComposing = composing.isValid && !composing.isCollapsed;
     if (_wasComposing && !isComposing) {
-      _sendShadowIncrement(currentText);
+      unawaited(_sendShadowIncrement(currentText));
     }
 
     _wasComposing = isComposing;
   }
 
-  void _sendShadowIncrement(String currentText) {
+  Future<void> _sendShadowIncrement(String currentText) async {
     if (currentText.length <= _lastSentLength) {
       return;
     }
 
     final increment = currentText.substring(_lastSentLength);
     try {
-      _channel?.sink.add(
+      await _channel?.sink.add(
         json.encode(
           VoicingProtocol.buildTextMessage(
             increment,
@@ -1058,11 +1074,11 @@ class VoicingConnectionController extends ChangeNotifier {
     _shadowFinalizeTimer?.cancel();
     _shadowFinalizeTimer = Timer(
       _shadowFinalizeDelay,
-      () => _finalizeShadowInput(forceEnter: _autoEnterEnabled),
+      () => unawaited(_finalizeShadowInput(forceEnter: _autoEnterEnabled)),
     );
   }
 
-  void _finalizeShadowInput({required bool forceEnter}) {
+  Future<void> _finalizeShadowInput({required bool forceEnter}) async {
     _shadowFinalizeTimer?.cancel();
     _shadowFinalizeTimer = null;
 
@@ -1073,7 +1089,7 @@ class VoicingConnectionController extends ChangeNotifier {
 
     if (forceEnter && _status == ConnectionStatus.connected && _syncEnabled) {
       try {
-        _channel?.sink.add(
+        await _channel?.sink.add(
           json.encode(
             VoicingProtocol.buildTextMessage(
               '',
@@ -1085,6 +1101,8 @@ class VoicingConnectionController extends ChangeNotifier {
       } catch (error, stackTrace) {
         AppLogger.warning('自动 Enter 提交失败',
             error: error, stackTrace: stackTrace);
+        _handleDisconnect();
+        return;
       }
     }
 

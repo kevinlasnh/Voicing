@@ -433,5 +433,64 @@
 - 整体梳理结论：两个闪动同根——"从右上角飞入"效果要求动画期窗口是大 canvas（托盘→中心），收尾缩到 end_rect；而 Wayland 上**任何收尾的 resize 或 hide/show remap 都会闪**（可见 resize 闪重影 / hide-show 闪自身）。
 - 两条整体改造路：A 改成"窗口恒定 end_rect 尺寸 + 位置移动 + 内容缩放 + 淡入"（无 resize，保留飞入，中等改动需重写动画）；B 砍飞入改"原地缩放+淡入"（最稳，无飞入）。待用户选。
 
+## 会话：2026-06-19 CST — QR 弹窗改为中心直接出现
+
+### QR 飞入动画移除
+- **状态：** implemented，待用户手动启动肉眼确认
+- 用户选择 B 方案：砍掉从托盘/右上角飞入，QR 弹窗直接在屏幕中心出现即可。
+- 执行的操作：
+  - `QRCodeDialog.show_from()` 不再构造 start rect，也不再调用旧 `_start_dialog_animation()`。
+  - QR 窗口始终保持最终尺寸和中心几何，直接 `show()`，避免 Wayland/Mutter 上跨 canvas resize/remap 带来的重影和自身闪动。
+  - 关闭路径也改为直接隐藏，不再飞回托盘锚点，避免关闭时复用同类几何动画问题。
+  - 清理 `QRCodeDialog` 中旧飞行动画、快照 pixmap、`contentRect`、收尾 hide/show remap 等遗留代码；保留扫码成功态对勾动画。
+  - 新增 `QRCodeDialogOpenTests`，锁定 QR 打开直接落在中心 rect，不走旧动画路径。
+- 测试结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/tests/test_voice_coding_tray.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：72 tests OK。
+  - `git diff --check`：通过。
+- 待确认：
+  - 用户手动启动 PC 端，检查「显示 QR 码」是否直接在中心出现且无闪动。
+  - 顺便复核 Linux 原生菜单宽度收紧是否满足视觉预期。
+
+## 会话：2026-06-19 CST — 整体前端逻辑 Review
+
+### PC + Android 前端审查
+- **状态：** complete
+- 用户要求不继续改托盘，全面 review 整体前端代码是否还有逻辑错误。
+- 检查范围：
+  - PC：`pc/voice_coding.py` 的 PyQt 托盘、自定义菜单、Linux 原生菜单、QR 弹窗、QR 成功态、同步开关广播、run_tray UI 信号。
+  - Android：`lib/main.dart`、`voicing_connection_controller.dart`、`voicing_websocket.dart`、`saved_server.dart`、`connection_recovery_policy.dart` 与 Kotlin native WebSocket bridge。
+- 验证结果：
+  - `.venv/bin/python -m unittest discover -s pc/tests`：72 tests OK。
+  - `flutter test`：22 tests OK。
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`：通过；仅 4 个既有 `withOpacity` info。
+- 主要 review 发现：
+  - Android native WebSocket `sink.add()` 是 fire-and-forget MethodChannel 调用，上层 `sendText()`/ping/shadow 的 try/catch 捕不到异步发送失败；可能出现输入被记录/清空但消息未发送到 PC。
+  - PC 同步开关广播在新的 asyncio loop/thread 中对 `websockets` 连接对象执行 `send()`，这些连接对象属于 server loop；跨 loop 发送有兼容风险，可能导致 Android 端收不到即时 `sync_state`，只能等下一次 pong/文本响应同步。
+  - Android QR 新设备替换确认发生在成功态展示之后；用户取消替换时，体验上会先看到成功再取消退出，语义不严谨但不是数据破坏问题。
+  - PC QR 弹窗中心直接出现路径代码上成立，但仍待用户真实 GNOME Wayland 手测视觉效果。
+
+## 会话：2026-06-19 CST — 整体前端 Review 问题修复
+
+### 修复 review 发现的前端逻辑问题
+- **状态：** implemented + verified，待 push
+- 执行的操作：
+  - Android `VoicingWebSocketSink.add()` 改为 `Future<void>`；native WiFi WebSocket 发送现在等待 MethodChannel 返回，`sendWebSocketMessage` 返回非 `true` 或 native 报错时会向上抛异常。
+  - Kotlin `sendWebSocketMessage` 在 OkHttp `webSocket.send(message)` 返回 `false` 时返回 `send_failed`，成功时明确返回 `true`。
+  - Android controller 的 `sendText()`、ping、shadow increment、commit auto-enter 路径改为 await 发送；发送失败时不再记录/清空已发送文本，必要时触发断开重连。
+  - QR 连通性 probe 的探测消息发送改为处理 nullable future，并把发送失败记录为 probe 失败，避免未捕获异步错误。
+  - Android QR 替换设备流程改为先执行 `_confirmScannedServer()`，用户接受后才展示扫码成功态、保存并重连；取消时不再先展示成功。
+  - PC `AppState` 记录 WebSocket server 所属 `asyncio` event loop；同步开关即时广播用 `asyncio.run_coroutine_threadsafe()` 投递回 server loop，不再新建 loop/thread 操作已有 websocket 连接。
+  - 新增 PC tray 测试覆盖 QR 中心直接打开，以及同步状态广播使用 server loop/loop 缺失时跳过。
+- 测试结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/tests/test_voice_coding_tray.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：74 tests OK。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0；仅保留既有 4 个 `withOpacity` info。
+  - `~/development/flutter-3.27.0/bin/flutter test`：22 tests passed。
+  - `git diff --check`：通过。
+- 用户约束：
+  - 本轮未执行 APK 编译。
+  - 本轮未执行 deb 编译。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
