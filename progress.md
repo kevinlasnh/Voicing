@@ -511,5 +511,49 @@
   - 根因是 terminal 默认粘贴快捷键不是 `Ctrl+V`，而是 `Ctrl+Shift+V`；当前程序对所有 Wayland 目标都只发 `Ctrl+V`。
   - 推荐后续修复：为 Linux Wayland portal 后端增加 paste strategy（`ctrl-v` / `ctrl-shift-v` / `shift-insert`），并在写剪贴板时同时写 CLIPBOARD 与 PRIMARY。短期若只修用户当前 terminal，可让 Wayland terminal 模式发送 `Ctrl+Shift+V`。
 
+## 会话：2026-06-19 CST — GNOME Wayland Terminal 粘贴模式实现
+
+### AT-SPI Auto 检测 + 手动粘贴模式
+- **状态：** implemented + verified，待用户手动启动测试
+- 执行的操作：
+  - `pc/platform_keyboard.py` 新增 `PasteMode`：`AUTO` / `NORMAL` / `TERMINAL` / `COMPAT`。
+  - GNOME Wayland RemoteDesktop portal 粘贴序列改为按模式选择：
+    - Auto：通过 AT-SPI 读取焦点 accessible；role/app 命中 terminal 时发送 `Ctrl+Shift+V`，否则发送 `Ctrl+V`。
+    - 普通：固定 `Ctrl+V`。
+    - 终端：固定 `Ctrl+Shift+V`。
+    - 兼容：固定 `Shift+Insert`。
+  - 当前 venv 没有 `gi`，因此检测器先尝试当前进程，失败后调用 `/usr/bin/python3` 只读查询 AT-SPI；查询失败时静默回退普通 `Ctrl+V`。
+  - Wayland 写剪贴板时同时写 CLIPBOARD 和 PRIMARY，以支持 `Shift+Insert` 兼容模式；粘贴后尽量恢复原 PRIMARY。
+  - Linux 原生托盘菜单和 Windows/macOS 自定义菜单都新增“粘贴模式”项，点击按自动 → 普通 → 终端 → 兼容循环。
+  - 更新 README / README.zh-CN / CHANGELOG 的 GNOME Wayland 粘贴说明。
+  - 新增/更新 `pc/tests/test_platform_keyboard.py` 和 `pc/tests/test_voice_coding_tray.py` 测试。
+- 验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_keyboard.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_tray.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：85 tests OK。
+  - `git diff --check`：通过。
+  - 本轮未执行 APK 编译。
+  - 本轮未执行 deb 编译。
+- 待用户手测：
+  - 启动 PC 端后，默认粘贴模式显示“自动粘贴”。
+  - 在普通输入框接收手机文本，应继续粘贴成功。
+  - 在 terminal 接收手机文本，Auto 若识别到 terminal 应自动走 `Ctrl+Shift+V`；若未识别，托盘切到“终端粘贴”再测。
+  - Auto Enter 仍由手机端设置控制，粘贴后再触发 Enter。
+
+### 收尾复核
+- **状态：** ready for manual test，未提交
+- 收紧 AT-SPI fallback：只有 focused 对象缺失或明显落在 `gnome-shell` / 桌面壳层时，才扫描 ACTIVE terminal 兜底；若 focused 已是 Chrome/编辑器等普通应用，则按普通输入框处理，避免误发 `Ctrl+Shift+V`。
+- 新增单元测试覆盖普通 focused app 不被 ACTIVE terminal 覆盖。
+- 最终验证：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_keyboard.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_tray.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：86 tests OK。
+  - `git diff --check`：通过。
+  - 本轮未执行 APK 编译。
+  - 本轮未执行 deb 编译。
+
+### 用户实测确认
+- **状态：** complete，准备提交并 push
+- 用户手动启动 PC 端测试后确认：当前版本在 terminal 里面也能自动输入。
+- 该结果说明 GNOME Wayland Auto 粘贴模式在用户当前 terminal 环境中可识别 terminal 焦点并正确走 `Ctrl+Shift+V` 路径；普通输入框路径此前保持可用。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

@@ -55,7 +55,14 @@ except Exception:
 from device_identity import get_or_create_device_identity
 from platform_autostart import is_startup_enabled, set_startup_enabled
 from platform_instance import check_single_instance, show_already_running_message
-from platform_keyboard import press_enter, type_text_at_cursor
+from platform_keyboard import (
+    PasteMode,
+    get_paste_mode,
+    get_paste_mode_label,
+    press_enter,
+    set_paste_mode,
+    type_text_at_cursor,
+)
 from platform_utils import (
     WINDOWS_HOTSPOT_PREFIXES,
     ensure_runtime_supported,
@@ -1127,6 +1134,10 @@ class ModernMenuWidget(QWidget):
         self.sync_btn.clicked.connect(self.toggle_sync)
         container_layout.addWidget(self.sync_btn)
 
+        self.paste_mode_btn = MenuItemWidget("⌨", get_paste_mode_label())
+        self.paste_mode_btn.clicked.connect(self.cycle_paste_mode)
+        container_layout.addWidget(self.paste_mode_btn)
+
         # 开机自启
         self.startup_btn = MenuItemWidget("🚀", "开机自启", has_toggle=True, is_checked=False)
         self.startup_btn.clicked.connect(self.toggle_startup)
@@ -1261,6 +1272,7 @@ class ModernMenuWidget(QWidget):
         """更新菜单状态"""
         self.sync_btn.update_toggle_status(state.sync_enabled)
         self.startup_btn.update_toggle_status(is_startup_enabled())
+        self.paste_mode_btn.text_label.setText(get_paste_mode_label())
 
     def toggle_sync(self):
         """切换同步状态"""
@@ -1272,6 +1284,19 @@ class ModernMenuWidget(QWidget):
             update_tray_icon_pyqt(state.tray_icon)
         self.close_with_animation()
         schedule_sync_state_broadcast()
+
+    def cycle_paste_mode(self):
+        modes = (
+            PasteMode.AUTO,
+            PasteMode.NORMAL,
+            PasteMode.TERMINAL,
+            PasteMode.COMPAT,
+        )
+        current_index = modes.index(get_paste_mode())
+        next_mode = modes[(current_index + 1) % len(modes)]
+        set_paste_mode(next_mode)
+        self.paste_mode_btn.text_label.setText(get_paste_mode_label(next_mode))
+        self.close_with_animation()
 
     def toggle_startup(self):
         """切换开机自启"""
@@ -1871,6 +1896,9 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.native_sync_action.setCheckable(True)
         self.native_sync_action.triggered.connect(self.menu_widget.toggle_sync)
 
+        self.native_paste_mode_action = self.native_menu.addAction(get_paste_mode_label())
+        self.native_paste_mode_action.triggered.connect(self.menu_widget.cycle_paste_mode)
+
         self.native_startup_action = self.native_menu.addAction("开机自启")
         self.native_startup_action.setCheckable(True)
         self.native_startup_action.triggered.connect(self.menu_widget.toggle_startup)
@@ -1889,6 +1917,8 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.menu_widget.update_state()
         if hasattr(self, "native_sync_action"):
             self.native_sync_action.setChecked(state.sync_enabled)
+        if hasattr(self, "native_paste_mode_action"):
+            self.native_paste_mode_action.setText(get_paste_mode_label())
         if hasattr(self, "native_startup_action"):
             self.native_startup_action.setChecked(is_startup_enabled())
 

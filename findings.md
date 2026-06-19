@@ -138,3 +138,12 @@
 - **AT-SPI 探测**：本机 `gi.repository.Atspi` 可用，能列出应用并看到 `ghostty`，但当前焦点状态可能落在 `gnome-shell` window，不能作为无需授权且稳定的 terminal 检测依据。它可以作为后续增强/heuristic，但不应作为唯一修复。
 - **wl-clipboard 探测**：`wl-copy --primary` 与 `wl-paste --primary` 在本机可用。`Shift+Insert` 在 Linux/终端生态中常用于粘贴 PRIMARY 或 CLIPBOARD，行为跨应用不完全一致；如果同时写 CLIPBOARD 和 PRIMARY，可作为 terminal 兼容 fallback，但相比直接按 terminal 配置发送 `Ctrl+Shift+V` 更像广义兼容策略。
 - **推荐修复路径**：第一版优先在 Linux Wayland portal 后端增加“terminal 粘贴快捷键”能力：默认仍保留普通 `Ctrl+V`，但提供可切换策略或 heuristic；若要立即解决用户当前 terminal，最小改动是把 Wayland portal 粘贴序列改为 `Ctrl+Shift+V` 或增加一个 terminal 模式。更稳的产品化方案是：写剪贴板时同时写 CLIPBOARD/PRIMARY，然后在 portal 后端支持三种 paste strategy：`ctrl-v`、`ctrl-shift-v`、`shift-insert`，由配置/菜单/环境变量选择，后续再加 AT-SPI heuristic 自动选择。
+
+## 2026-06-19 GNOME Wayland Terminal 粘贴模式实现发现
+
+- **实现选择**：默认使用 Auto 模式，不强行把所有 Wayland 粘贴改成 `Ctrl+Shift+V`。理由：普通输入框仍以 `Ctrl+V` 最稳；只有检测到 terminal 时才切到 `Ctrl+Shift+V`。
+- **手动兜底**：Auto 检测不是 100% 稳定，因此托盘新增可见“粘贴模式”项：自动粘贴 / 普通粘贴 / 终端粘贴 / 兼容粘贴。用户可在 Auto 未识别 terminal 时手动切到终端模式。
+- **AT-SPI 运行环境**：项目 venv 缺少 `gi`，但系统 `/usr/bin/python3` 有 `gi.repository.Atspi`。检测器先尝试当前进程，失败后以 `/usr/bin/python3 -c` 执行只读查询；若失败或超时，回退普通 `Ctrl+V`。
+- **焦点兜底**：GNOME Wayland 上当前 `FOCUSED` accessible 有时落到 `gnome-shell` window。实现中若 focused 对象不是 terminal，会继续扫描 `ACTIVE` 且 app/role 命中 terminal 的窗口，提升 Ghostty/GNOME terminal 等实际窗口识别概率。
+- **PRIMARY 处理**：为了支持 `Shift+Insert` 兼容模式，Wayland 下会同时写 CLIPBOARD 和 PRIMARY。写入前尝试读取旧 PRIMARY，粘贴后尽量恢复；若读取失败则不恢复，避免阻断主粘贴路径。
+- **实测结果**：用户在当前 Linux/GNOME Wayland 环境手动启动测试后确认，普通输入框和 terminal 均可自动输入；AT-SPI Auto 检测 + terminal `Ctrl+Shift+V` 路径在该环境下有效。

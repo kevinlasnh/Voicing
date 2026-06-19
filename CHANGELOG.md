@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PC text injection is now centralized in the platform keyboard layer instead of being implemented directly in `voice_coding.py`
 - Linux runtime errors now report a missing RemoteDesktop portal keyboard capability instead of blocking all Wayland sessions unconditionally
+- GNOME Wayland paste now defaults to Auto mode: terminal focus detected via AT-SPI uses Ctrl+Shift+V, normal fields use Ctrl+V, and the tray menu can switch to normal, terminal, or compatibility modes manually
 
 ### Fixed
 
@@ -60,6 +61,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - PC 文本注入逻辑集中到平台键盘层，不再由 `voice_coding.py` 直接操作剪贴板和粘贴快捷键
 - Linux 运行时错误改为提示缺少 RemoteDesktop portal 键盘能力，不再无条件阻断所有 Wayland 会话
+- GNOME Wayland 粘贴默认使用自动模式：通过 AT-SPI 检测到终端焦点时发送 Ctrl+Shift+V，普通输入框发送 Ctrl+V；托盘菜单可手动切换为普通、终端或兼容模式
 
 ### 文档
 

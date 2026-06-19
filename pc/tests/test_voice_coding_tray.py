@@ -65,10 +65,10 @@ class CustomMenuLayoutTests(unittest.TestCase):
 
     def test_custom_menu_has_no_separator_items(self):
         # 自定义 Fluent 菜单（Windows/macOS）不再在项之间插入分隔横条。
-        # container 内应恰好 5 个功能项：QR / 同步输入 / 开机自启 / 打开日志 / 退出应用。
+        # container 内应恰好 6 个功能项：QR / 同步输入 / 粘贴模式 / 开机自启 / 打开日志 / 退出应用。
         from voice_coding import ModernMenuWidget
         menu = ModernMenuWidget()
-        self.assertEqual(menu.container.layout().count(), 5)
+        self.assertEqual(menu.container.layout().count(), 6)
 
     def test_custom_menu_width_tightens_to_content(self):
         # 菜单内容尺寸应等于 sizeHint；setFixedWidth(sizeHint) 收紧掉 adjustSize 的多余宽度。
@@ -79,6 +79,27 @@ class CustomMenuLayoutTests(unittest.TestCase):
         self.assertEqual(menu.width(), menu.sizeHint().width())
         # 宽度应在最长项内容附近，不应是 adjustSize 默认的偏大值（约 200）。
         self.assertLess(menu.width(), 190)
+
+    def test_custom_menu_cycles_paste_mode(self):
+        import voice_coding
+        import platform_keyboard
+
+        from voice_coding import ModernMenuWidget
+        old_mode = platform_keyboard.get_paste_mode()
+        menu = ModernMenuWidget()
+        try:
+            platform_keyboard.set_paste_mode(platform_keyboard.PasteMode.AUTO)
+            with patch.object(menu, "close_with_animation"):
+                menu.cycle_paste_mode()
+            self.assertEqual(
+                platform_keyboard.get_paste_mode(),
+                platform_keyboard.PasteMode.NORMAL,
+            )
+            self.assertEqual(menu.paste_mode_btn.text_label.text(), "普通粘贴")
+        finally:
+            platform_keyboard.set_paste_mode(old_mode)
+            menu.hide()
+            menu.deleteLater()
 
 
 class QRCodeDialogOpenTests(unittest.TestCase):

@@ -117,6 +117,16 @@
 - [x] 形成修复方案
 - **状态：** complete
 
+### 阶段 16：GNOME Wayland Terminal 粘贴模式实现
+- [x] 在 PC 平台输入层新增 Auto/普通/终端/兼容粘贴模式
+- [x] Auto 模式通过 AT-SPI 检测 terminal 焦点，命中后发送 Ctrl+Shift+V，否则发送 Ctrl+V
+- [x] 托盘菜单新增粘贴模式切换项，作为 Auto 检测失败时的手动兜底
+- [x] Wayland 下同时写入 CLIPBOARD 和 PRIMARY，并尽量恢复 PRIMARY
+- [x] 更新 README / README.zh-CN / CHANGELOG
+- [x] 补充 PC 单元测试并完成验证
+- [x] 用户手动启动实测：普通输入框和 terminal 均可自动输入
+- **状态：** complete（已实测通过）
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？

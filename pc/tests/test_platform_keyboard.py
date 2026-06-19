@@ -94,7 +94,8 @@ class PlatformKeyboardTests(unittest.TestCase):
         backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
         with patch.object(backend, "_ensure_started") as mock_started:
             with patch.object(backend, "_send_key_sequence") as mock_send:
-                backend.paste_from_clipboard()
+                with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.NORMAL):
+                    backend.paste_from_clipboard()
         mock_started.assert_called_once()
         mock_send.assert_called_once_with(
             (
@@ -104,6 +105,38 @@ class PlatformKeyboardTests(unittest.TestCase):
                 (platform_keyboard.KEYSYM_CTRL_L, platform_keyboard.KEY_STATE_RELEASED),
             )
         )
+
+    def test_remote_desktop_portal_auto_uses_terminal_sequence_for_terminal_focus(self):
+        backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
+        with patch.object(backend, "_ensure_started"):
+            with patch.object(backend, "_send_key_sequence") as mock_send:
+                with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.AUTO):
+                    with patch("platform_keyboard.is_current_focus_terminal", return_value=True):
+                        backend.paste_from_clipboard()
+        mock_send.assert_called_once_with(platform_keyboard._ctrl_shift_v_sequence())
+
+    def test_remote_desktop_portal_auto_uses_normal_sequence_for_non_terminal_focus(self):
+        backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
+        with patch.object(backend, "_ensure_started"):
+            with patch.object(backend, "_send_key_sequence") as mock_send:
+                with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.AUTO):
+                    with patch("platform_keyboard.is_current_focus_terminal", return_value=False):
+                        backend.paste_from_clipboard()
+        mock_send.assert_called_once_with(platform_keyboard._ctrl_v_sequence())
+
+    def test_remote_desktop_portal_terminal_mode_uses_ctrl_shift_v(self):
+        with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.TERMINAL):
+            self.assertEqual(
+                platform_keyboard._resolve_wayland_paste_sequence(),
+                platform_keyboard._ctrl_shift_v_sequence(),
+            )
+
+    def test_remote_desktop_portal_compat_mode_uses_shift_insert(self):
+        with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.COMPAT):
+            self.assertEqual(
+                platform_keyboard._resolve_wayland_paste_sequence(),
+                platform_keyboard._shift_insert_sequence(),
+            )
 
     def test_remote_desktop_portal_enter_sequence(self):
         backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
@@ -197,6 +230,96 @@ class PlatformKeyboardTests(unittest.TestCase):
         with patch("platform_keyboard.subprocess.run") as mock_run:
             backend.copy("new")
         mock_run.assert_called_once_with(["wl-copy"], input="new", text=True, check=True)
+
+    def test_type_text_at_cursor_copies_wayland_text_to_primary_selection(self):
+        clipboard = MagicMock()
+        clipboard.paste.return_value = "old"
+        with patch("platform_keyboard.ensure_runtime_supported"):
+            with patch("platform_keyboard._get_clipboard_backend", return_value=clipboard):
+                with patch("platform_keyboard.paste_from_clipboard"):
+                    with patch("platform_keyboard._is_linux_wayland", return_value=True):
+                        with patch("platform_keyboard.shutil.which", return_value="/usr/bin/wl-copy"):
+                            with patch("platform_keyboard._paste_primary_selection_if_supported", return_value=None):
+                                with patch("platform_keyboard.subprocess.run") as mock_run:
+                                    platform_keyboard.type_text_at_cursor("hello")
+
+        mock_run.assert_called_once_with(
+            ["wl-copy", "--primary"],
+            input="hello",
+            text=True,
+            check=True,
+        )
+
+    def test_type_text_at_cursor_restores_primary_selection_when_available(self):
+        clipboard = MagicMock()
+        clipboard.paste.return_value = "old"
+        with patch("platform_keyboard.ensure_runtime_supported"):
+            with patch("platform_keyboard._get_clipboard_backend", return_value=clipboard):
+                with patch("platform_keyboard.paste_from_clipboard"):
+                    with patch("platform_keyboard._is_linux_wayland", return_value=True):
+                        with patch("platform_keyboard.shutil.which", return_value="/usr/bin/wl-copy"):
+                            with patch("platform_keyboard._paste_primary_selection_if_supported", return_value="old-primary"):
+                                with patch("platform_keyboard.subprocess.run") as mock_run:
+                                    platform_keyboard.type_text_at_cursor("hello")
+
+        self.assertEqual(mock_run.call_count, 2)
+        self.assertEqual(mock_run.call_args_list[0].kwargs["input"], "hello")
+        self.assertEqual(mock_run.call_args_list[1].kwargs["input"], "old-primary")
+
+    def test_is_current_focus_terminal_detects_terminal_role(self):
+        with patch("platform_keyboard._get_focused_accessible_info", return_value={"role": "terminal"}):
+            self.assertTrue(platform_keyboard.is_current_focus_terminal())
+
+    def test_is_current_focus_terminal_detects_terminal_app_name(self):
+        with patch(
+            "platform_keyboard._get_focused_accessible_info",
+            return_value={"role": "frame", "app_name": "org.gnome.Console.desktop"},
+        ):
+            self.assertTrue(platform_keyboard.is_current_focus_terminal())
+
+    def test_is_current_focus_terminal_rejects_unknown_focus(self):
+        with patch(
+            "platform_keyboard._get_focused_accessible_info",
+            return_value={"role": "entry", "app_name": "Google Chrome"},
+        ):
+            self.assertFalse(platform_keyboard.is_current_focus_terminal())
+
+    def test_scan_atspi_desktop_prefers_active_terminal_when_focus_is_shell(self):
+        fake_atspi = MagicMock()
+        fake_root = object()
+        fake_focused = object()
+        fake_terminal = object()
+        fake_atspi.get_desktop.return_value = fake_root
+        with patch("platform_keyboard._find_focused_accessible", return_value=fake_focused):
+            with patch("platform_keyboard._find_active_terminal_accessible", return_value=fake_terminal):
+                with patch(
+                    "platform_keyboard._accessible_info",
+                    side_effect=[
+                        {"role": "window", "app_name": "gnome-shell"},
+                        {"role": "frame", "app_name": "ghostty"},
+                    ],
+                ):
+                    self.assertEqual(
+                        platform_keyboard._scan_atspi_desktop(fake_atspi),
+                        {"role": "frame", "app_name": "ghostty"},
+                    )
+
+    def test_scan_atspi_desktop_does_not_override_normal_focused_app(self):
+        fake_atspi = MagicMock()
+        fake_root = object()
+        fake_focused = object()
+        fake_atspi.get_desktop.return_value = fake_root
+        with patch("platform_keyboard._find_focused_accessible", return_value=fake_focused):
+            with patch("platform_keyboard._find_active_terminal_accessible") as mock_find_active:
+                with patch(
+                    "platform_keyboard._accessible_info",
+                    return_value={"role": "entry", "app_name": "Google Chrome"},
+                ):
+                    self.assertEqual(
+                        platform_keyboard._scan_atspi_desktop(fake_atspi),
+                        {"role": "entry", "app_name": "Google Chrome"},
+                    )
+        mock_find_active.assert_not_called()
 
     def test_get_clipboard_backend_prefers_wl_tools_on_wayland(self):
         with patch("platform_keyboard._is_linux_wayland", return_value=True):
