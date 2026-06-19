@@ -160,3 +160,4 @@
 - Linux 失败根因不是打包脚本或 DEB 逻辑，而是 `python -m unittest discover -s tests` 在 GitHub `ubuntu-22.04` headless runner 中创建 `QApplication` 时尝试加载 Qt `xcb` 平台插件，因无图形会话 abort：`Could not load the Qt platform plugin "xcb"`。
 - 修复决策：Linux release job 显式设置 `QT_QPA_PLATFORM=offscreen`，并在 `pc/tests/test_voice_coding_tray.py` 导入 PyQt 前设置同样默认值。该改动仅影响 CI/headless 测试环境，不改变用户机器上发布应用的运行平台选择。
 - 发布策略：GitHub 上尚未创建 `v2.9.5` release，因此可把失败构建用过的 `v2.9.5` tag 移到修复提交后重新触发同版本 release workflow，避免为 CI 环境变量修复单独升版本。
+- 最终结果：新 run `27815951469` 全部成功，GitHub Release `v2.9.5` 已发布，包含 Android APK、Linux DEB、Linux standalone binary、Windows EXE、macOS DMG 和 SHA256 校验文件。

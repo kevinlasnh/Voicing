@@ -624,5 +624,24 @@
   - `git diff --check`：通过。
 - 本轮仍未在本地编译 APK 或 deb。
 
+### v2.9.5 Release 发布完成
+- **状态：** complete
+- 已提交并推送 `ab749bf Fix Linux release validation on headless CI` 到 `main`。
+- 已将 `v2.9.5` tag 更新到 `ab749bf` 并 force push 重新触发 release workflow；原因是旧 tag run 失败且 GitHub Release 尚未创建。
+- 新 GitHub Actions run：
+  - Run ID：`27815951469`
+  - URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27815951469`
+  - 结论：success
+- 发布页面：
+  - `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.5`
+- 已确认 Release assets：
+  - `voicing.apk`
+  - `voicing-linux-amd64.deb`
+  - `voicing-linux-x86_64`
+  - `voicing-windows-x64.exe`
+  - `voicing-macos-arm64.dmg`
+  - `SHA256SUMS.txt`
+- 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

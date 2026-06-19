@@ -139,9 +139,9 @@
 - [x] 检查 Actions 结果并定位 Linux job 失败根因
 - [x] 修复 headless Linux runner 中 Qt 单元测试无法初始化的问题
 - [x] 运行本地非打包验证
-- [ ] 提交、推送并重新触发 `v2.9.5` release workflow
-- [ ] 等待 Actions 完成并确认 APK / DEB / 其他产物发布结果
-- **状态：** in_progress
+- [x] 提交、推送并重新触发 `v2.9.5` release workflow
+- [x] 等待 Actions 完成并确认 APK / DEB / 其他产物发布结果
+- **状态：** complete
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
