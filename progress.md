@@ -670,5 +670,27 @@
   - `git diff --check`：通过。
 - 本轮未在本地打 APK 或 DEB；后续通过 GitHub Actions 产出 `v2.9.6`。
 
+### v2.9.6 Release 发布完成
+- **状态：** complete
+- 已提交并推送 `cb12a21 Fix packaged Linux portal detection` 到 `main`。
+- 已推送 `v2.9.6` tag 触发 GitHub Actions release workflow。
+- GitHub Actions run：
+  - Run ID：`27817118952`
+  - URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27817118952`
+  - 首次结果：macOS `Create DMG` 因 `hdiutil: create failed - Resource busy` 失败；Android、Linux、Windows 均成功。
+  - 处理方式：执行 failed-job rerun。
+  - 最终结论：success。
+- 发布页面：
+  - `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.6`
+- 已确认 Release assets：
+  - `voicing.apk`
+  - `voicing-linux-amd64.deb`
+  - `voicing-linux-x86_64`
+  - `voicing-windows-x64.exe`
+  - `voicing-macos-arm64.dmg`
+  - `SHA256SUMS.txt`
+- 已复核本机错误 deb 卸载状态：`dpkg-query` 无 `voicing` 包记录，`/opt/voicing` 和 `voicing` 命令入口均不存在；未清理用户配置、日志或源码目录。
+- 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

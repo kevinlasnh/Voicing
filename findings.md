@@ -169,3 +169,4 @@
 - 修复决策：新增 `system_subprocess_env()`，调用系统命令时恢复 `LD_LIBRARY_PATH_ORIG`，无原始值时在 frozen app 中移除 `LD_LIBRARY_PATH`。该环境清理用于 `gdbus` portal 探测、`wl-copy` / `wl-paste` Wayland 剪贴板，以及系统 Python AT-SPI helper，避免打包态后续输入路径继续受同一问题影响。
 - 本机已用 `sudo -n apt-get remove -y voicing` 卸载错误的 `voicing 2.9.5` deb；未清理用户数据 `~/.local/share/Voicing`。
 - 本地 frozen smoke test 结果：临时 PyInstaller 二进制在 GNOME Wayland 上能进入 WebSocket 监听阶段，不再失败于 portal 能力检查；`QT_QPA_PLATFORM=offscreen` 下的系统托盘不可用错误是无界面测试环境预期结果。
+- `v2.9.6` 发布确认：GitHub Actions run `27817118952` 首次只有 macOS `Create DMG` 因 `hdiutil: create failed - Resource busy` 失败，failed-job rerun 后全部通过。Release 已发布，`voicing-linux-amd64.deb` 资产存在，GitHub 给出的 asset digest 为 `sha256:1e08c2bad8a068f74b776dee4f84d0eb27efff6376fb4d4b06bf69a4ea37558a`。
