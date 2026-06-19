@@ -147,3 +147,9 @@
 - **焦点兜底**：GNOME Wayland 上当前 `FOCUSED` accessible 有时落到 `gnome-shell` window。实现中若 focused 对象不是 terminal，会继续扫描 `ACTIVE` 且 app/role 命中 terminal 的窗口，提升 Ghostty/GNOME terminal 等实际窗口识别概率。
 - **PRIMARY 处理**：为了支持 `Shift+Insert` 兼容模式，Wayland 下会同时写 CLIPBOARD 和 PRIMARY。写入前尝试读取旧 PRIMARY，粘贴后尽量恢复；若读取失败则不恢复，避免阻断主粘贴路径。
 - **实测结果**：用户在当前 Linux/GNOME Wayland 环境手动启动测试后确认，普通输入框和 terminal 均可自动输入；AT-SPI Auto 检测 + terminal `Ctrl+Shift+V` 路径在该环境下有效。
+
+## 2026-06-19 最新 PC / Android 逻辑复查发现
+
+- **PC 输入失败恢复**：`type_text_at_cursor()` 原先在剪贴板写入新文本后，如果 `paste_from_clipboard()` 或 `press_enter()` 抛异常，会跳过旧剪贴板/PRIMARY 恢复。修复为 `finally` 恢复，避免失败后污染用户剪贴板。
+- **PC ACK 清空语义**：`handle_client()` 原先不区分 `type_text()` 是否真正注入成功，submit 文本失败后仍可能返回 `clear_input=true`。修复为 `type_text()` 返回 bool，只有成功注入时才让 Android 清空输入，失败时保留手机端文本便于重发。
+- **Android native close 语义**：`_NativeWifiWebSocketSink.close()` 原先等待 `_idFuture`；如果 native 连接还没返回 id 或已经失败，重连/释放路径可能留下未处理 Future 错误。修复为 best-effort close，id 不可用时静默完成。

@@ -201,21 +201,23 @@ def type_text_at_cursor(
         old_clipboard = ""
     old_primary = _paste_primary_selection_if_supported()
 
-    clipboard.copy(text)
-    copied_primary = _copy_to_primary_selection_if_supported(text)
-    paste_from_clipboard()
-
-    if auto_enter:
-        threading.Event().wait(enter_delay_sec)
-        press_enter()
-
-    threading.Event().wait(restore_delay_sec)
+    copied_primary = False
     try:
-        clipboard.copy(old_clipboard)
-    except Exception:
-        pass
-    if copied_primary and old_primary is not None:
-        _copy_to_primary_selection_if_supported(old_primary)
+        clipboard.copy(text)
+        copied_primary = _copy_to_primary_selection_if_supported(text)
+        paste_from_clipboard()
+
+        if auto_enter:
+            threading.Event().wait(enter_delay_sec)
+            press_enter()
+    finally:
+        threading.Event().wait(restore_delay_sec)
+        try:
+            clipboard.copy(old_clipboard)
+        except Exception:
+            pass
+        if copied_primary and old_primary is not None:
+            _copy_to_primary_selection_if_supported(old_primary)
 
 
 class _PyperclipClipboardBackend:

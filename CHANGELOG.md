@@ -13,12 +13,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.9.5] - 2026-06-19
+
 ### Added
 
 - **PC: GNOME Wayland input support via RemoteDesktop portal**
   - Linux startup now allows Wayland sessions when the XDG RemoteDesktop portal exposes keyboard capability
   - GNOME Wayland text paste keeps the existing phone/WebSocket protocol unchanged and uses portal keyboard events for Ctrl+V and Enter
   - Wayland clipboard handling prefers `wl-copy` / `wl-paste`, while Windows, macOS, and Linux X11 keep the existing clipboard and hotkey behavior
+- Release artifacts now include a Linux `.deb` package alongside the standalone `voicing-linux-x86_64` binary
 
 ### Changed
 
@@ -36,6 +41,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **PC: QR dialog no longer flashes a ghost QR below center when arriving** — the open animation now unmapped before its end-of-animation resize so the Wayland compositor does not repaint a stale buffer at the new origin (a residual one-frame self-flash at arrival is still being investigated)
 - **PC (Windows/macOS): custom tray menu width now fits its content** — the menu width is tightened to the longest item instead of the oversized default from `adjustSize()`
 - **PC (Linux): native tray menu no longer has excess right-side whitespace** — item padding is tightened via stylesheet so the menu width tracks the text instead of the over-generous default
+- **PC: failed desktop injection no longer clears phone input** — the desktop ACK only requests clearing the phone input after text was successfully injected
+- **PC: clipboard restoration now runs after failed paste/Enter attempts** — the previous clipboard and PRIMARY selection are restored in a `finally` path
+- **Android: native WiFi WebSocket close is now best-effort** — reconnect/dispose cleanup no longer leaves an unhandled Future when the native connection fails before returning an id
 
 ### Docs
 
@@ -56,12 +64,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Linux 启动检查现在会在 XDG RemoteDesktop portal 暴露键盘能力时允许 Wayland 会话启动
   - GNOME Wayland 文本粘贴保持手机端和 WebSocket 协议不变，通过 portal 键盘事件发送 Ctrl+V 和 Enter
   - Wayland 剪贴板优先使用 `wl-copy` / `wl-paste`，Windows、macOS 和 Linux X11 保持原有剪贴板与快捷键行为
+- Release 产物现在同时包含 Linux `.deb` 安装包和独立的 `voicing-linux-x86_64` 二进制
 
 ### 变更
 
 - PC 文本注入逻辑集中到平台键盘层，不再由 `voice_coding.py` 直接操作剪贴板和粘贴快捷键
 - Linux 运行时错误改为提示缺少 RemoteDesktop portal 键盘能力，不再无条件阻断所有 Wayland 会话
 - GNOME Wayland 粘贴默认使用自动模式：通过 AT-SPI 检测到终端焦点时发送 Ctrl+Shift+V，普通输入框发送 Ctrl+V；托盘菜单可手动切换为普通、终端或兼容模式
+
+### 修复
+
+- **PC: 桌面注入失败时不再清空手机输入** —— 只有文本成功注入后，桌面端 ACK 才会要求手机清空输入
+- **PC: 粘贴或 Enter 失败后仍会恢复剪贴板** —— 旧剪贴板和 PRIMARY selection 恢复逻辑进入 `finally` 路径
+- **Android: native WiFi WebSocket close 改为 best-effort** —— native 连接尚未返回 id 就失败时，重连/释放路径不会留下未处理 Future
 
 ### 文档
 

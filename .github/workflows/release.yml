@@ -47,14 +47,15 @@ jobs:
           | `voicing.apk` | Android | 手机安装包 |
           | `voicing-windows-x64.exe` | Windows | Windows 10/11 (64-bit) |
           | `voicing-macos-arm64.dmg` | macOS | Apple Silicon / arm64 |
-          | `voicing-linux-x86_64` | Ubuntu | Ubuntu 22.04 GNOME on X11 |
+          | `voicing-linux-amd64.deb` | Ubuntu | Ubuntu 22.04+ GNOME |
+          | `voicing-linux-x86_64` | Ubuntu | Standalone Linux binary |
 
           ### 系统要求
 
           - Windows 10/11 (64位)
           - Android 5.0+ (API 21+)
           - macOS 14+（Apple Silicon / arm64，首次打开需右键→打开，并授予 Accessibility 权限）
-          - Ubuntu 22.04 GNOME on X11（Wayland 不在支持范围内）
+          - Ubuntu 22.04+ GNOME on X11, or GNOME Wayland with RemoteDesktop portal
 
           ### 完整性校验
 
@@ -303,11 +304,58 @@ jobs:
       - name: Rename artifact
         run: cp pc/dist/Voicing pc/dist/voicing-linux-x86_64
 
+      - name: Build DEB package
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          PKG_ROOT="pc/dist/deb-root"
+          mkdir -p \
+            "$PKG_ROOT/DEBIAN" \
+            "$PKG_ROOT/opt/voicing" \
+            "$PKG_ROOT/usr/bin" \
+            "$PKG_ROOT/usr/share/applications" \
+            "$PKG_ROOT/usr/share/icons/hicolor/1024x1024/apps"
+
+          install -m 0755 pc/dist/Voicing "$PKG_ROOT/opt/voicing/voicing"
+          install -m 0644 pc/assets/icon_1024.png "$PKG_ROOT/usr/share/icons/hicolor/1024x1024/apps/voicing.png"
+          ln -s /opt/voicing/voicing "$PKG_ROOT/usr/bin/voicing"
+
+          cat > "$PKG_ROOT/usr/share/applications/voicing.desktop" <<'EOF'
+          [Desktop Entry]
+          Type=Application
+          Name=Voicing
+          Comment=Phone to desktop voice input bridge
+          Exec=/opt/voicing/voicing
+          Icon=voicing
+          Terminal=false
+          Categories=Utility;
+          EOF
+
+          cat > "$PKG_ROOT/DEBIAN/control" <<EOF
+          Package: voicing
+          Version: $VERSION
+          Section: utils
+          Priority: optional
+          Architecture: amd64
+          Maintainer: Kevin <kevinlasnh@users.noreply.github.com>
+          Depends: libegl1, libdbus-1-3, libxkbcommon-x11-0, libxcb-cursor0
+          Description: Phone to desktop voice input bridge
+           Voicing receives text from an Android phone and injects it at the
+           current desktop cursor position.
+          EOF
+
+          dpkg-deb --build "$PKG_ROOT" "pc/dist/voicing-linux-amd64.deb"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: linux-bin
           path: pc/dist/voicing-linux-x86_64
+
+      - name: Upload DEB workflow artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: linux-deb
+          path: pc/dist/voicing-linux-amd64.deb
 
   publish-release:
     name: Publish GitHub Release
@@ -352,6 +400,12 @@ jobs:
           name: linux-bin
           path: release-assets/linux
 
+      - name: Download Linux DEB artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: linux-deb
+          path: release-assets/linux
+
       - name: Generate release checksums
         run: |
           cd release-assets
@@ -359,6 +413,7 @@ jobs:
             android/voicing.apk \
             windows/voicing-windows-x64.exe \
             macos/voicing-macos-arm64.dmg \
+            linux/voicing-linux-amd64.deb \
             linux/voicing-linux-x86_64 > SHA256SUMS.txt
 
       - name: Create GitHub Release
@@ -370,6 +425,7 @@ jobs:
             release-assets/android/voicing.apk
             release-assets/windows/voicing-windows-x64.exe
             release-assets/macos/voicing-macos-arm64.dmg
+            release-assets/linux/voicing-linux-amd64.deb
             release-assets/linux/voicing-linux-x86_64
             release-assets/SHA256SUMS.txt
           fail_on_unmatched_files: true

@@ -234,14 +234,20 @@ class _NativeWifiWebSocketSink implements VoicingWebSocketSink {
 
   @override
   Future<void> close([int? closeCode, String? closeReason]) async {
-    final id = await _idFuture;
-    await _methodChannel.invokeMethod<void>(
-      'closeWebSocket',
-      <String, Object?>{
-        'id': id,
-        'code': closeCode ?? 1000,
-        'reason': closeReason ?? '',
-      },
-    );
+    try {
+      final id = await _idFuture;
+      await _methodChannel.invokeMethod<void>(
+        'closeWebSocket',
+        <String, Object?>{
+          'id': id,
+          'code': closeCode ?? 1000,
+          'reason': closeReason ?? '',
+        },
+      );
+    } catch (_) {
+      // close() is used as best-effort cleanup when reconnecting or disposing.
+      // If the native connection failed before producing an id, there is
+      // nothing left to close and callers should not see an unhandled Future.
+    }
   }
 }

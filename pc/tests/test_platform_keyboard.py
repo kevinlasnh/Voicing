@@ -80,6 +80,21 @@ class PlatformKeyboardTests(unittest.TestCase):
         mock_enter.assert_not_called()
         event_factory.return_value.wait.assert_called_once_with(0.1)
 
+    def test_type_text_at_cursor_restores_clipboard_when_paste_fails(self):
+        clipboard = MagicMock()
+        clipboard.paste.return_value = "old"
+        with patch("platform_keyboard.ensure_runtime_supported"):
+            with patch("platform_keyboard._get_clipboard_backend", return_value=clipboard):
+                with patch("platform_keyboard.paste_from_clipboard", side_effect=RuntimeError("boom")):
+                    with patch("platform_keyboard.threading.Event") as event_factory:
+                        event_factory.return_value.wait = MagicMock()
+                        with self.assertRaises(RuntimeError):
+                            platform_keyboard.type_text_at_cursor("hello")
+
+        self.assertEqual(clipboard.copy.call_args_list[0].args, ("hello",))
+        self.assertEqual(clipboard.copy.call_args_list[1].args, ("old",))
+        event_factory.return_value.wait.assert_called_once_with(0.1)
+
     def test_remote_desktop_portal_availability_checks_keyboard_bit(self):
         backend = platform_keyboard.RemoteDesktopPortalKeyboardBackend()
         with patch.object(backend, "_available_device_types", return_value=7):

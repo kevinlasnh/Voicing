@@ -94,7 +94,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.4"
+APP_VERSION = "2.9.5"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.15
 NATIVE_FONT_FAMILY = get_native_font_family()
@@ -763,7 +763,7 @@ SERVER_INTERFACES_INITIALIZED = False
 # ============================================================
 # Text Input / 文本输入
 # ============================================================
-def type_text(text: str, auto_enter: bool = False):
+def type_text(text: str, auto_enter: bool = False) -> bool:
     """
     Type text at current cursor position.
     在当前光标位置输入文本。
@@ -775,7 +775,7 @@ def type_text(text: str, auto_enter: bool = False):
         auto_enter: If True, press Enter after typing
     """
     if not text or not state.sync_enabled:
-        return
+        return False
 
     try:
         type_text_at_cursor(
@@ -784,9 +784,11 @@ def type_text(text: str, auto_enter: bool = False):
             enter_delay_sec=AUTO_ENTER_SETTLE_DELAY_SEC,
             restore_delay_sec=0.1,
         )
+        return True
 
     except Exception as e:
         logging.error(f"Error typing text: {e}")
+        return False
 
 
 # ============================================================
@@ -838,10 +840,10 @@ async def handle_client(websocket):
                         )))
                     elif text:
                         # Type the received text (run in thread to avoid blocking event loop)
-                        await asyncio.to_thread(type_text, text, auto_enter)
+                        typed = await asyncio.to_thread(type_text, text, auto_enter)
                         # Send acknowledgment
                         await websocket.send(json.dumps(build_ack_message(
-                            clear_input=send_mode == TEXT_SEND_MODE_SUBMIT,
+                            clear_input=typed and send_mode == TEXT_SEND_MODE_SUBMIT,
                         )))
 
                 elif msg_type == TYPE_PING:

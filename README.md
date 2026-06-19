@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.4-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.5-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -49,7 +49,7 @@ Grab the right file from [Releases](https://github.com/kevinlasnh/Voicing/releas
 |------|------|------|
 | Windows | `voicing-windows-x64.exe` | Win 10/11 (64-bit) |
 | macOS | `voicing-macos-arm64.dmg` | Apple Silicon (M1+) |
-| Linux | `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11, or GNOME Wayland with RemoteDesktop portal |
+| Linux | `voicing-linux-amd64.deb` or `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11, or GNOME Wayland with RemoteDesktop portal |
 | Android | `voicing.apk` | Android 5.0+ |
 
 Each release also ships `SHA256SUMS.txt` so you can verify the SHA-256 digest before installing.
@@ -62,7 +62,7 @@ Run the desktop app → start a hotspot / Internet sharing / join the same LAN �
 
 - **Windows**: run `voicing-windows-x64.exe` and turn on "Mobile hotspot"
 - **macOS**: open `voicing-macos-arm64.dmg`, drag to Applications (right-click → Open the first time), enable "Internet Sharing" or join the same LAN
-- **Linux**: `chmod +x voicing-linux-x86_64` and run; start a Wi-Fi hotspot or join the same LAN. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session the first time text is pasted.
+- **Linux**: install `voicing-linux-amd64.deb`, or run the standalone binary with `chmod +x voicing-linux-x86_64`; start a Wi-Fi hotspot or join the same LAN. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session the first time text is pasted.
 
 When the status bar shows "Connected" you're good to go.
 
@@ -172,8 +172,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.4
-git push origin v2.9.4
+git tag v2.9.5
+git push origin v2.9.5
 ```
 
 Local debug builds:
@@ -205,7 +205,7 @@ Note: a local Android release build needs a compatible JDK 17/21 and a valid sig
 3. First-time setup or a new PC: run "Show QR code" on the desktop and "Scan to connect" on the phone
 4. After the screen wakes up the phone enters fast-reconnect mode automatically — usually no manual refresh is needed
 5. Right after switching to a new LAN, the desktop refreshes the QR and listener automatically; if it still fails, tap "Refresh connection" on the phone or re-scan the desktop QR to merge the new IP into the candidate pool
-6. If the PC is on macOS, make sure Voicing has been restarted after updating to v2.9.4 so QR codes no longer prefer a misclassified `en0/en1` interface
+6. If the PC is on macOS, make sure Voicing has been restarted after updating to v2.9.4 or later so QR codes no longer prefer a misclassified `en0/en1` interface
 
 **Local Flutter APK build fails with a Java / Gradle error?**
 If your default Java is 25, `flutter build apk --release` will fail. Install JDK 17/21 and set `org.gradle.java.home=...` in `android/voice_coding/android/local.properties`. Production releases use the Java 17 environment in GitHub Actions.

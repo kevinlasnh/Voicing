@@ -127,6 +127,13 @@
 - [x] 用户手动启动实测：普通输入框和 terminal 均可自动输入
 - **状态：** complete（已实测通过）
 
+### 阶段 17：最新 PC / Android 代码全面逻辑复查
+- [x] 复查 PC 端 WebSocket、托盘/QR、同步状态和平台输入逻辑
+- [x] 复查 Android 端连接状态机、扫码、WebSocket 发送和文本提交逻辑
+- [x] 运行当前环境可用的 PC/Android 验证命令
+- [x] 汇总确定 bug、残余风险和测试缺口
+- **状态：** complete
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？

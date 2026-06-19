@@ -555,5 +555,53 @@
 - 用户手动启动 PC 端测试后确认：当前版本在 terminal 里面也能自动输入。
 - 该结果说明 GNOME Wayland Auto 粘贴模式在用户当前 terminal 环境中可识别 terminal 焦点并正确走 `Ctrl+Shift+V` 路径；普通输入框路径此前保持可用。
 
+## 会话：2026-06-19 CST — 最新 PC / Android 代码全面逻辑复查
+
+### 全面 review 与边界修复
+- **状态：** implemented + verified，待用户确认是否提交/push
+- 复查范围：
+  - PC：`voice_coding.py` WebSocket 消息处理、ACK 清空策略、同步状态广播、托盘/QR、`platform_keyboard.py` 剪贴板/Wayland portal 粘贴路径。
+  - Android：`voicing_connection_controller.dart` 连接/重连/扫码/shadow/commit 状态机、`voicing_websocket.dart` native WiFi WebSocket wrapper、Kotlin native bridge、主 UI 绑定。
+- 修复的确定问题：
+  - PC 输入层：若剪贴板已写入新文本后粘贴或 Auto Enter 失败，旧剪贴板/PRIMARY 可能不恢复；已将恢复逻辑放入 `finally`。
+  - PC WebSocket ACK：文本注入失败时仍可能返回默认 `clear_input=true`，导致手机端清空尚未成功到达 PC 的输入；已改为仅注入成功时清空。
+  - Android native WebSocket：重连/释放时调用 `close()`，若 native 连接尚未返回 id 或连接已失败，可能留下未处理 Future 错误；已改为 best-effort 幂等关闭。
+- 新增测试：
+  - `pc/tests/test_platform_keyboard.py` 覆盖粘贴失败仍恢复剪贴板。
+  - `pc/tests/test_voice_coding_server.py` 覆盖 PC 注入失败时 ACK 不清空手机输入。
+  - `android/voice_coding/test/voicing_websocket_test.dart` 覆盖 native sink `close()` 在 id 失败和 id 可用两种情况下的行为。
+- 验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：88 tests OK。
+  - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0；仍只有既有 4 个 `withOpacity` info。
+  - `git diff --check`：通过。
+  - `dart format --output=none --set-exit-if-changed lib/voicing_websocket.dart test/voicing_websocket_test.dart`：通过。
+- 本轮未执行 APK 编译。
+- 本轮未执行 deb 编译。
+
+## 会话：2026-06-19 CST — v2.9.5 Release 触发准备
+
+### GitHub Actions APK / DEB 构建触发
+- **状态：** ready to commit and push tag
+- 确认 `.github/workflows/release.yml` 仅在推送 `v*` tag 时触发 release 构建；直接 push `main` 不会编 APK / Linux 包。
+- 准备新版本 `v2.9.5`，因为现有最新 tag `v2.9.4` 已存在，不能复用。
+- 已更新版本号：
+  - PC `APP_VERSION=2.9.5`
+  - Android `pubspec.yaml version=2.9.5+6`
+  - README / README.zh-CN 徽章与 release tag 示例更新为 `2.9.5`
+  - CHANGELOG 增加 `2.9.5` bilingual release block
+- 已补 GitHub Actions Linux `.deb` 打包：
+  - `build-linux` 继续上传 `voicing-linux-x86_64`
+  - 新增 `voicing-linux-amd64.deb`
+  - Release notes、SHA256SUMS 和 GitHub Release assets 均加入 `.deb`
+- 本地验证：
+  - `py_compile`：通过
+  - `flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info
+  - `flutter test`：24 tests passed
+  - `dart format --output=none --set-exit-if-changed lib/voicing_websocket.dart test/voicing_websocket_test.dart`：通过
+  - `git diff --check`：通过
+- 按用户要求，本地未编 APK / deb；将通过 GitHub Actions 编译。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
