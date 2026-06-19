@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 19（complete）
+阶段 20（complete）
 
 ## 各阶段
 
@@ -152,6 +152,14 @@
 - [x] 完成本地单元测试、Android analyze/test 和 frozen smoke test
 - [x] 提交、推送并触发 `v2.9.6` release workflow
 - [x] 确认新 Release 资产，尤其是 `voicing-linux-amd64.deb`
+- **状态：** complete
+
+### 阶段 20：公开文档同步 Linux 自动粘贴与自启边界
+- [x] 审查 `README.md`、`README.zh-CN.md`、Android README 和 `CHANGELOG.md`
+- [x] 补充 GNOME Wayland 默认自动粘贴、终端 Ctrl+Shift+V、手动粘贴模式说明
+- [x] 补充 Linux GNOME autostart `.desktop` 与 Wayland RemoteDesktop 授权边界
+- [x] 同步 Android 端使用文档中用户需要知道的 Linux 桌面端行为
+- [x] 运行文档 diff 和 `git diff --check`
 - **状态：** complete
 
 ## 关键问题

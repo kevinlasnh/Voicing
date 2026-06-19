@@ -692,5 +692,26 @@
 - 已复核本机错误 deb 卸载状态：`dpkg-query` 无 `voicing` 包记录，`/opt/voicing` 和 `voicing` 命令入口均不存在；未清理用户配置、日志或源码目录。
 - 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
 
+## 会话：2026-06-19 17:42 CST — 公开文档同步 Linux 使用说明
+
+### README / Android README / CHANGELOG 更新
+- **状态：** complete
+- 按用户要求更新公开文档，范围：
+  - `README.md`
+  - `README.zh-CN.md`
+  - `android/README.md`
+  - `android/README.zh-CN.md`
+  - `CHANGELOG.md`
+- 更新内容：
+  - 说明 Linux/GNOME Wayland 日常推荐保持桌面端"自动粘贴"。
+  - 说明自动粘贴会对普通输入框发送 Ctrl+V，对 terminal 焦点发送 Ctrl+Shift+V。
+  - 说明托盘菜单包含粘贴模式，可手动切换自动 / 普通 / 终端 / 兼容。
+  - 修正 Linux 开机自启说明：Ubuntu GNOME 通过 `~/.config/autostart/voicing.desktop` 登录后启动，不是 Windows 注册表。
+  - 说明 GNOME Wayland 下程序可以自启，但 RemoteDesktop 键盘授权仍可能在登录或启动后要求用户手动允许。
+  - Android README 补充手机端用户在 Linux/GNOME Wayland 桌面端配合使用时需要知道的自动粘贴与授权提示。
+- 验证结果：
+  - `git diff --check -- README.md README.zh-CN.md android/README.md android/README.zh-CN.md CHANGELOG.md`：通过。
+  - `rg` 检查确认旧的"注册表方式" Linux 自启描述已移除。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

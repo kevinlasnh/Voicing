@@ -170,3 +170,9 @@
 - 本机已用 `sudo -n apt-get remove -y voicing` 卸载错误的 `voicing 2.9.5` deb；未清理用户数据 `~/.local/share/Voicing`。
 - 本地 frozen smoke test 结果：临时 PyInstaller 二进制在 GNOME Wayland 上能进入 WebSocket 监听阶段，不再失败于 portal 能力检查；`QT_QPA_PLATFORM=offscreen` 下的系统托盘不可用错误是无界面测试环境预期结果。
 - `v2.9.6` 发布确认：GitHub Actions run `27817118952` 首次只有 macOS `Create DMG` 因 `hdiutil: create failed - Resource busy` 失败，failed-job rerun 后全部通过。Release 已发布，`voicing-linux-amd64.deb` 资产存在，GitHub 给出的 asset digest 为 `sha256:1e08c2bad8a068f74b776dee4f84d0eb27efff6376fb4d4b06bf69a4ea37558a`。
+
+## 2026-06-19 公开文档同步 Linux 自动粘贴与自启边界
+
+- 公开文档需要明确：Linux/GNOME Wayland 下日常推荐使用"自动粘贴"，它会在普通输入框使用 Ctrl+V，在 terminal 焦点使用 Ctrl+Shift+V；手动终端/兼容模式只是兜底。
+- Linux 开机自启不是 Windows 注册表路径，而是 GNOME autostart `.desktop`；公开中文 README 原先"注册表方式"的泛化描述会误导 Linux 用户，已改为按系统机制分别说明。
+- GNOME Wayland 的 RemoteDesktop 键盘授权无法静默永久保存，因此自启只保证程序登录后启动；输入前仍可能需要用户允许 GNOME 的授权提示。

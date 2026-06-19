@@ -13,6 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Docs
+
+- Clarified Linux/GNOME Wayland usage in the public docs:
+  - Auto paste is the recommended default; normal fields use Ctrl+V and terminal focus uses Ctrl+Shift+V
+  - Linux auto-start uses GNOME autostart `.desktop`, while GNOME Wayland RemoteDesktop keyboard permission may still require user approval after login or app start
+
+### 文档
+
+- 补充公开文档中的 Linux/GNOME Wayland 使用说明：
+  - 日常推荐保持自动粘贴；普通输入框走 Ctrl+V，终端焦点走 Ctrl+Shift+V
+  - Linux 开机自启使用 GNOME autostart `.desktop`；GNOME Wayland 的 RemoteDesktop 键盘授权在登录或启动后仍可能需要用户手动允许
+
 ---
 
 ## [2.9.6] - 2026-06-19
