@@ -185,3 +185,10 @@
 - 取舍：未知焦点改为 terminal-safe 可能让少数普通应用收到 `Ctrl+Shift+V`；公开文档已说明可手动切到“普通粘贴”。这个取舍优先避免 terminal 输入失败。
 - 同步扩展 terminal app 名称集合（如 Black Box、Foot、Rio、Tabby、generic terminal/console 等），并保持主进程和系统 Python AT-SPI helper 的识别表一致。
 - 验证：`py_compile` 通过；`pc.tests.test_platform_keyboard` 39 项通过；`unittest discover -s pc/tests` 97 项通过；`git diff --check` 通过；本机 GNOME Wayland terminal 焦点压力测试连续 12 次均解析为 terminal。
+
+## 2026-06-19 v2.9.7 Release 发布结果
+
+- `v2.9.7` tag 指向 commit `30854a1 Improve Linux terminal paste detection`，已推送并触发 GitHub Actions release workflow。
+- GitHub Actions run `27824263798` 成功完成，URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27824263798`。
+- GitHub Release 已发布：`https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.7`。
+- Release 资产已确认齐全：`voicing.apk`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`SHA256SUMS.txt`。

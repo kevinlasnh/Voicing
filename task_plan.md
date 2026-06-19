@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 21（complete）
+阶段 22（complete）
 
 ## 各阶段
 
@@ -169,6 +169,15 @@
 - [x] 扩展 terminal app 名称识别并同步系统 Python AT-SPI helper
 - [x] 更新 README / Android README / CHANGELOG 的 Auto 粘贴边界说明
 - [x] 补充 PC 单元测试并完成验证
+- **状态：** complete
+
+### 阶段 22：v2.9.7 Release 发布
+- [x] 更新 PC / Android 版本号到 `2.9.7`
+- [x] 将 CHANGELOG Unreleased 内容落到 `2.9.7` 发布块
+- [x] 运行 PC 和 Android 发布前验证
+- [x] 提交并推送 `main`
+- [x] 推送 `v2.9.7` tag 触发 GitHub Actions release workflow
+- [x] 确认 Actions 成功并发布 GitHub Release 资产
 - **状态：** complete
 
 ## 关键问题

@@ -738,5 +738,37 @@
   - 本机 GNOME Wayland terminal 焦点压力测试：连续 12 次 `_resolve_auto_paste_mode()` 均返回 `terminal`。
 - 本轮未执行 Android analyze/test，也未执行 APK 或 DEB 编译。
 
+## 会话：2026-06-19 CST — v2.9.7 Release 发布
+
+### GitHub Actions release workflow
+- **状态：** complete
+- 执行的操作：
+  - 更新版本号：PC `APP_VERSION=2.9.7`，Android `pubspec.yaml version=2.9.7+8`。
+  - 更新 README / README.zh-CN 的版本徽章与 release tag 示例。
+  - 将 CHANGELOG 的 Unreleased 修复说明落到 `2.9.7` 发布块。
+  - 本地验证：
+    - `.venv/bin/python -m py_compile ...`：通过。
+    - `.venv/bin/python -m unittest discover -s pc/tests`：97 tests OK。
+    - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仍有既有 4 个 `withOpacity` info。
+    - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+    - `git diff --check`：通过。
+  - 提交并推送 `30854a1 Improve Linux terminal paste detection` 到 `origin/main`。
+  - 推送 `v2.9.7` tag 触发 GitHub Actions。
+- Actions 结果：
+  - Run ID：`27824263798`
+  - URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27824263798`
+  - 结论：success。
+  - Windows EXE、macOS DMG、Linux binary/DEB、Android APK 和 Publish GitHub Release jobs 均成功。
+- 发布页面：
+  - `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.7`
+- 已确认 Release assets：
+  - `voicing.apk`
+  - `voicing-linux-amd64.deb`
+  - `voicing-linux-x86_64`
+  - `voicing-windows-x64.exe`
+  - `voicing-macos-arm64.dmg`
+  - `SHA256SUMS.txt`
+- 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
