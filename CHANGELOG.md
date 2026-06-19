@@ -15,6 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.6] - 2026-06-19
+
+### Fixed
+
+- **PC (Linux): packaged Wayland builds now detect RemoteDesktop portal keyboard capability correctly**
+  - The Linux `.deb` and standalone binary no longer inherit PyInstaller's bundled `LD_LIBRARY_PATH` when probing the system `gdbus` command
+  - This fixes a false startup error on GNOME Wayland where the portal was available, but the packaged app reported no RemoteDesktop keyboard capability
+
+### Tests
+
+- PC:
+  - `QT_QPA_PLATFORM=offscreen ../.venv/bin/python -m unittest discover -s tests`
+  - Local frozen PyInstaller smoke test: the packaged binary reaches WebSocket startup on GNOME Wayland instead of failing the portal capability check
+
+### 修复
+
+- **PC (Linux): 打包后的 Wayland 版本现在能正确检测 RemoteDesktop portal 键盘能力**
+  - Linux `.deb` 和独立二进制在探测系统 `gdbus` 命令时不再继承 PyInstaller 注入的 `LD_LIBRARY_PATH`
+  - 修复 GNOME Wayland 上 portal 明明可用，但打包版启动时误报没有 RemoteDesktop 键盘能力的问题
+
+### 测试
+
+- PC:
+  - `QT_QPA_PLATFORM=offscreen ../.venv/bin/python -m unittest discover -s tests`
+  - 本地 frozen PyInstaller smoke test：打包二进制在 GNOME Wayland 上能进入 WebSocket 启动阶段，不再失败于 portal 能力检查
+
+---
+
 ## [2.9.5] - 2026-06-19
 
 ### Added

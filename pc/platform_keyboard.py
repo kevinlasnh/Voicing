@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from platform_utils import ensure_runtime_supported, get_platform, is_wayland_session
+from platform_utils import ensure_runtime_supported, get_platform, is_wayland_session, system_subprocess_env
 
 
 _PYAUTOGUI = None
@@ -163,6 +163,7 @@ def _paste_primary_selection_if_supported() -> str | None:
     try:
         return subprocess.check_output(
             ["wl-paste", "--primary", "--no-newline"],
+            env=system_subprocess_env(),
             text=True,
             stderr=subprocess.DEVNULL,
         )
@@ -177,6 +178,7 @@ def _copy_to_primary_selection_if_supported(text: str) -> bool:
         subprocess.run(
             ["wl-copy", "--primary"],
             input=text,
+            env=system_subprocess_env(),
             text=True,
             check=True,
         )
@@ -234,10 +236,20 @@ class _PyperclipClipboardBackend:
 
 class _WlClipboardBackend:
     def paste(self) -> str:
-        return subprocess.check_output(["wl-paste", "--no-newline"], text=True)
+        return subprocess.check_output(
+            ["wl-paste", "--no-newline"],
+            env=system_subprocess_env(),
+            text=True,
+        )
 
     def copy(self, text: str) -> None:
-        subprocess.run(["wl-copy"], input=text, text=True, check=True)
+        subprocess.run(
+            ["wl-copy"],
+            input=text,
+            env=system_subprocess_env(),
+            text=True,
+            check=True,
+        )
 
 
 def _get_clipboard_backend():
@@ -556,6 +568,7 @@ def _get_focused_accessible_info_from_system_python() -> dict[str, str] | None:
             [python, "-c", _ATSPI_FOCUS_HELPER],
             text=True,
             capture_output=True,
+            env=system_subprocess_env(),
             timeout=ATSPI_FOCUS_TIMEOUT_SEC,
             check=False,
         )

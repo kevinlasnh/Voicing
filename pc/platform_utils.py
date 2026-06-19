@@ -125,6 +125,7 @@ def _get_remote_desktop_available_device_types() -> int:
 
 
 def _get_remote_desktop_available_device_types_with_gdbus(gdbus: str) -> int:
+    env = system_subprocess_env()
     result = subprocess.run(
         [
             gdbus,
@@ -141,6 +142,7 @@ def _get_remote_desktop_available_device_types_with_gdbus(gdbus: str) -> int:
         ],
         capture_output=True,
         check=True,
+        env=env,
         text=True,
         timeout=3,
     )
@@ -148,6 +150,23 @@ def _get_remote_desktop_available_device_types_with_gdbus(gdbus: str) -> int:
     if not match:
         return 0
     return int(match.group(1))
+
+
+def system_subprocess_env() -> dict[str, str]:
+    """Return an environment suitable for launching host system tools.
+
+    PyInstaller sets LD_LIBRARY_PATH to its extraction directory so the frozen
+    app loads bundled libraries. That path can break external system tools such
+    as gdbus by forcing them to load Voicing's bundled GLib stack instead of
+    the distro-matched system libraries.
+    """
+    env = os.environ.copy()
+    original_library_path = env.get("LD_LIBRARY_PATH_ORIG")
+    if original_library_path is not None:
+        env["LD_LIBRARY_PATH"] = original_library_path
+    elif getattr(sys, "frozen", False):
+        env.pop("LD_LIBRARY_PATH", None)
+    return env
 
 
 def _get_remote_desktop_available_device_types_with_qtdbus() -> int:

@@ -238,13 +238,25 @@ class PlatformKeyboardTests(unittest.TestCase):
 
     def test_wl_clipboard_backend_uses_wl_tools(self):
         backend = platform_keyboard._WlClipboardBackend()
-        with patch("platform_keyboard.subprocess.check_output", return_value="old") as mock_paste:
-            self.assertEqual(backend.paste(), "old")
-        mock_paste.assert_called_once_with(["wl-paste", "--no-newline"], text=True)
+        with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+            with patch("platform_keyboard.subprocess.check_output", return_value="old") as mock_paste:
+                self.assertEqual(backend.paste(), "old")
+        mock_paste.assert_called_once_with(
+            ["wl-paste", "--no-newline"],
+            env={"PATH": "/usr/bin"},
+            text=True,
+        )
 
-        with patch("platform_keyboard.subprocess.run") as mock_run:
-            backend.copy("new")
-        mock_run.assert_called_once_with(["wl-copy"], input="new", text=True, check=True)
+        with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+            with patch("platform_keyboard.subprocess.run") as mock_run:
+                backend.copy("new")
+        mock_run.assert_called_once_with(
+            ["wl-copy"],
+            input="new",
+            env={"PATH": "/usr/bin"},
+            text=True,
+            check=True,
+        )
 
     def test_type_text_at_cursor_copies_wayland_text_to_primary_selection(self):
         clipboard = MagicMock()
@@ -255,12 +267,14 @@ class PlatformKeyboardTests(unittest.TestCase):
                     with patch("platform_keyboard._is_linux_wayland", return_value=True):
                         with patch("platform_keyboard.shutil.which", return_value="/usr/bin/wl-copy"):
                             with patch("platform_keyboard._paste_primary_selection_if_supported", return_value=None):
-                                with patch("platform_keyboard.subprocess.run") as mock_run:
-                                    platform_keyboard.type_text_at_cursor("hello")
+                                with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+                                    with patch("platform_keyboard.subprocess.run") as mock_run:
+                                        platform_keyboard.type_text_at_cursor("hello")
 
         mock_run.assert_called_once_with(
             ["wl-copy", "--primary"],
             input="hello",
+            env={"PATH": "/usr/bin"},
             text=True,
             check=True,
         )
@@ -274,12 +288,27 @@ class PlatformKeyboardTests(unittest.TestCase):
                     with patch("platform_keyboard._is_linux_wayland", return_value=True):
                         with patch("platform_keyboard.shutil.which", return_value="/usr/bin/wl-copy"):
                             with patch("platform_keyboard._paste_primary_selection_if_supported", return_value="old-primary"):
-                                with patch("platform_keyboard.subprocess.run") as mock_run:
-                                    platform_keyboard.type_text_at_cursor("hello")
+                                with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+                                    with patch("platform_keyboard.subprocess.run") as mock_run:
+                                        platform_keyboard.type_text_at_cursor("hello")
 
         self.assertEqual(mock_run.call_count, 2)
         self.assertEqual(mock_run.call_args_list[0].kwargs["input"], "hello")
+        self.assertEqual(mock_run.call_args_list[0].kwargs["env"], {"PATH": "/usr/bin"})
         self.assertEqual(mock_run.call_args_list[1].kwargs["input"], "old-primary")
+        self.assertEqual(mock_run.call_args_list[1].kwargs["env"], {"PATH": "/usr/bin"})
+
+    def test_atspi_system_python_uses_system_env(self):
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = '{"app_name": "ghostty", "role": "terminal", "name": ""}'
+        with patch("platform_keyboard._find_system_python_with_atspi", return_value="/usr/bin/python3"):
+            with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+                with patch("platform_keyboard.subprocess.run", return_value=result) as mock_run:
+                    info = platform_keyboard._get_focused_accessible_info_from_system_python()
+
+        self.assertEqual(info["app_name"], "ghostty")
+        self.assertEqual(mock_run.call_args.kwargs["env"], {"PATH": "/usr/bin"})
 
     def test_is_current_focus_terminal_detects_terminal_role(self):
         with patch("platform_keyboard._get_focused_accessible_info", return_value={"role": "terminal"}):

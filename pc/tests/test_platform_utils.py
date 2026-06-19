@@ -87,12 +87,41 @@ class PlatformUtilsTests(unittest.TestCase):
         self.assertEqual(value, 7)
         mock_run.assert_called_once()
 
+    def test_remote_desktop_device_types_gdbus_uses_system_env(self):
+        result = MagicMock()
+        result.stdout = "(<uint32 7>,)"
+        with patch("platform_utils.subprocess.run", return_value=result) as mock_run:
+            with patch("platform_utils.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+                platform_utils._get_remote_desktop_available_device_types_with_gdbus("/usr/bin/gdbus")
+        self.assertEqual(mock_run.call_args.kwargs["env"], {"PATH": "/usr/bin"})
+
     def test_remote_desktop_device_types_gdbus_returns_zero_without_number(self):
         result = MagicMock()
         result.stdout = "(<uint32>,)"
         with patch("platform_utils.subprocess.run", return_value=result):
             value = platform_utils._get_remote_desktop_available_device_types_with_gdbus("/usr/bin/gdbus")
         self.assertEqual(value, 0)
+
+    def test_system_subprocess_env_restores_pyinstaller_original_library_path(self):
+        with patch.dict(
+            os.environ,
+            {
+                "LD_LIBRARY_PATH": "/tmp/_MEI12345",
+                "LD_LIBRARY_PATH_ORIG": "/usr/lib",
+            },
+            clear=False,
+        ):
+            with patch.object(platform_utils.sys, "frozen", True, create=True):
+                env = platform_utils.system_subprocess_env()
+        self.assertEqual(env["LD_LIBRARY_PATH"], "/usr/lib")
+
+    def test_system_subprocess_env_removes_pyinstaller_library_path_without_original(self):
+        with patch.dict(os.environ, {"LD_LIBRARY_PATH": "/tmp/_MEI12345"}, clear=False):
+            with patch.dict(os.environ, {"LD_LIBRARY_PATH_ORIG": ""}, clear=False):
+                del os.environ["LD_LIBRARY_PATH_ORIG"]
+                with patch.object(platform_utils.sys, "frozen", True, create=True):
+                    env = platform_utils.system_subprocess_env()
+        self.assertNotIn("LD_LIBRARY_PATH", env)
 
     def test_known_hotspot_prefixes_cover_all_platforms(self):
         self.assertEqual(

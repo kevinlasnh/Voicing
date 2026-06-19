@@ -161,3 +161,11 @@
 - 修复决策：Linux release job 显式设置 `QT_QPA_PLATFORM=offscreen`，并在 `pc/tests/test_voice_coding_tray.py` 导入 PyQt 前设置同样默认值。该改动仅影响 CI/headless 测试环境，不改变用户机器上发布应用的运行平台选择。
 - 发布策略：GitHub 上尚未创建 `v2.9.5` release，因此可把失败构建用过的 `v2.9.5` tag 移到修复提交后重新触发同版本 release workflow，避免为 CI 环境变量修复单独升版本。
 - 最终结果：新 run `27815951469` 全部成功，GitHub Release `v2.9.5` 已发布，包含 Android APK、Linux DEB、Linux standalone binary、Windows EXE、macOS DMG 和 SHA256 校验文件。
+
+## 2026-06-19 v2.9.5 Linux deb 运行时误报 portal 不可用
+
+- 用户安装 `v2.9.5` 的 `voicing-linux-amd64.deb` 后，在 GNOME Wayland 启动时弹出“没有可用的 RemoteDesktop portal 键盘能力”。同一系统中 `/usr/bin/gdbus ... AvailableDeviceTypes` 返回 `(<uint32 7>,)`，portal 服务也在运行，说明 portal 本身正常。
+- 本机复现 `/opt/voicing/voicing --dev`：打包版误报 portal 不可用；源码版和系统 `gdbus` 检测正常。根因是 PyInstaller frozen app 会把自身解包目录注入 `LD_LIBRARY_PATH`，外部系统命令 `gdbus` 被迫加载打包应用自带/不匹配的动态库后失败，而错误被 `has_remote_desktop_keyboard_portal()` 捕获为 false。
+- 修复决策：新增 `system_subprocess_env()`，调用系统命令时恢复 `LD_LIBRARY_PATH_ORIG`，无原始值时在 frozen app 中移除 `LD_LIBRARY_PATH`。该环境清理用于 `gdbus` portal 探测、`wl-copy` / `wl-paste` Wayland 剪贴板，以及系统 Python AT-SPI helper，避免打包态后续输入路径继续受同一问题影响。
+- 本机已用 `sudo -n apt-get remove -y voicing` 卸载错误的 `voicing 2.9.5` deb；未清理用户数据 `~/.local/share/Voicing`。
+- 本地 frozen smoke test 结果：临时 PyInstaller 二进制在 GNOME Wayland 上能进入 WebSocket 监听阶段，不再失败于 portal 能力检查；`QT_QPA_PLATFORM=offscreen` 下的系统托盘不可用错误是无界面测试环境预期结果。

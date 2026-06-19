@@ -643,5 +643,32 @@
   - `SHA256SUMS.txt`
 - 本轮没有在本地执行 APK 或 DEB 编译，所有发布产物均由 GitHub Actions 构建。
 
+## 会话：2026-06-19 CST — v2.9.6 Linux deb 启动修复
+
+### deb 运行时误报修复
+- **状态：** implemented + verified，准备提交并触发 `v2.9.6`
+- 用户反馈：安装 `v2.9.5` 的 `voicing-linux-amd64.deb` 后，GNOME Wayland 启动弹出“没有可用的 RemoteDesktop portal 键盘能力”。
+- 本机确认：
+  - `dpkg -s voicing` 显示已安装版本为 `2.9.5`。
+  - `/usr/bin/gdbus ... AvailableDeviceTypes` 返回 `(<uint32 7>,)`，portal 键盘能力本身可用。
+  - `/opt/voicing/voicing --dev` 可复现打包版误报。
+- 已按用户要求卸载错误 deb：
+  - `sudo -n apt-get remove -y voicing`
+  - 卸载后 `/opt/voicing` 与 `/usr/bin/voicing` 不再存在。
+  - 未清理用户配置、日志或源码目录。
+- 修复内容：
+  - 新增 `platform_utils.system_subprocess_env()`，用于恢复/清理 PyInstaller frozen app 的 `LD_LIBRARY_PATH`。
+  - `platform_utils` 的 `gdbus` portal 能力探测改用系统命令环境。
+  - `platform_keyboard` 的 `wl-copy`、`wl-paste` 和系统 Python AT-SPI helper 也改用系统命令环境。
+  - 版本更新到 `2.9.6`：PC `APP_VERSION=2.9.6`，Android `pubspec.yaml version=2.9.6+7`，README / README.zh-CN / CHANGELOG 对齐。
+- 验证结果：
+  - `../.venv/bin/python -m py_compile ...`：通过。
+  - `QT_QPA_PLATFORM=offscreen ../.venv/bin/python -m unittest discover -s tests`：92 tests OK。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：No issues found。
+  - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+  - 本地临时 PyInstaller frozen smoke test：能进入 WebSocket 监听阶段，不再报 portal 键盘能力不可用；offscreen 下系统托盘不可用为预期。
+  - `git diff --check`：通过。
+- 本轮未在本地打 APK 或 DEB；后续通过 GitHub Actions 产出 `v2.9.6`。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

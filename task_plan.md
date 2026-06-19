@@ -143,6 +143,17 @@
 - [x] 等待 Actions 完成并确认 APK / DEB / 其他产物发布结果
 - **状态：** complete
 
+### 阶段 19：v2.9.6 Linux deb Wayland 启动修复
+- [x] 复现已发布 `v2.9.5` deb 在 GNOME Wayland 上误报 RemoteDesktop portal 键盘能力不可用
+- [x] 卸载本机已安装的错误 `voicing 2.9.5` deb 包
+- [x] 修复 PyInstaller 打包态调用系统命令时的 `LD_LIBRARY_PATH` 污染
+- [x] 覆盖 `gdbus`、`wl-copy` / `wl-paste`、系统 Python AT-SPI helper 的系统命令环境
+- [x] 更新版本号、README 和 CHANGELOG 到 `2.9.6`
+- [x] 完成本地单元测试、Android analyze/test 和 frozen smoke test
+- [ ] 提交、推送并触发 `v2.9.6` release workflow
+- [ ] 确认新 Release 资产，尤其是 `voicing-linux-amd64.deb`
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -166,6 +177,7 @@
 | GNOME Wayland 不支持直接复用现有 pyautogui 全局按键路径 | 1 | 研究 RemoteDesktop portal/libei 与 ydotool 等替代输入后端 |
 | Android debug APK 构建缺 Android SDK | 1 | 已补 SDK，但本任务未改 Android native，用户确认无需继续 APK 构建；停止构建，仅保留 analyze/test |
 | GitHub Actions Linux release job 在 headless runner 中 Qt `xcb` 初始化失败 | 1 | Linux release job 和托盘测试设置 `QT_QPA_PLATFORM=offscreen`，本地 88 项 PC 测试通过 |
+| 已发布 `v2.9.5` deb 在 GNOME Wayland 下误报 RemoteDesktop portal 键盘能力不可用 | 1 | 清理 PyInstaller 打包态调用系统命令时的 `LD_LIBRARY_PATH`，并发布 `v2.9.6` |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。
