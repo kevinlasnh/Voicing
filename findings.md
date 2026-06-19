@@ -128,3 +128,13 @@
 - **PC 同步广播 event loop**：`websockets` 连接对象由 server loop 创建，托盘 UI 线程切换同步状态时应使用 `asyncio.run_coroutine_threadsafe()` 投递回 `state.server_loop`。新建 event loop 后直接 `client.send()` 属于跨 loop 操作，不能作为即时状态同步实现。
 - **QR 替换确认时序**：扫码 probe 成功不等于用户已接受替换已保存设备。对不同 `device_id` 的替换，应先确认，再展示最终成功态和保存重连；取消时应直接退出扫码锁定态，不展示“成功后取消”的矛盾状态。
 - **验证边界**：本轮只做源码与单元/静态验证，按用户要求未编译 APK 或 deb。
+
+## 2026-06-19 Linux terminal 输入失效调查
+
+- **根因判断**：当前 GNOME Wayland portal 后端固定发送 `Ctrl+V`（`KEYSYM_CTRL_L + KEYSYM_V`）。普通 GTK/浏览器输入框会把 `Ctrl+V` 解释为粘贴；GNOME Terminal 默认粘贴快捷键是 `Ctrl+Shift+V`，所以终端里不触发粘贴。这与用户现象“普通输入框生效，terminal 不生效”一致。
+- **本机证据**：`/usr/share/glib-2.0/schemas/org.gnome.Terminal.gschema.xml` 中 `org.gnome.Terminal.Legacy.Keybindings paste` 默认值为 `<Control><Shift>v`；`gsettings list-recursively` 也显示 `org.gnome.Terminal.Legacy.Keybindings paste '<Control><Shift>v'`。
+- **联网证据**：GNOME Terminal 官方帮助页 `help.gnome.org/gnome-terminal/adv-keyboard-shortcuts.html` 记录 Edit/Paste 默认是 `Shift + Ctrl + V`；XDG RemoteDesktop portal 官方文档说明 `NotifyKeyboardKeysym` 只是发送键盘事件，不提供“粘贴文本到焦点应用”的高级 API。
+- **窗口识别限制**：尝试调用 GNOME Shell `org.gnome.Shell.Introspect.GetWindows` / `GetRunningApplications` 返回 `AccessDenied: GetWindows is not allowed`。联网结果也说明普通进程不能直接访问该私有窗口 introspection，除非 unsafe mode/扩展/patch。因此不能把“自动检测当前焦点是不是 terminal”作为默认产品方案。
+- **AT-SPI 探测**：本机 `gi.repository.Atspi` 可用，能列出应用并看到 `ghostty`，但当前焦点状态可能落在 `gnome-shell` window，不能作为无需授权且稳定的 terminal 检测依据。它可以作为后续增强/heuristic，但不应作为唯一修复。
+- **wl-clipboard 探测**：`wl-copy --primary` 与 `wl-paste --primary` 在本机可用。`Shift+Insert` 在 Linux/终端生态中常用于粘贴 PRIMARY 或 CLIPBOARD，行为跨应用不完全一致；如果同时写 CLIPBOARD 和 PRIMARY，可作为 terminal 兼容 fallback，但相比直接按 terminal 配置发送 `Ctrl+Shift+V` 更像广义兼容策略。
+- **推荐修复路径**：第一版优先在 Linux Wayland portal 后端增加“terminal 粘贴快捷键”能力：默认仍保留普通 `Ctrl+V`，但提供可切换策略或 heuristic；若要立即解决用户当前 terminal，最小改动是把 Wayland portal 粘贴序列改为 `Ctrl+Shift+V` 或增加一个 terminal 模式。更稳的产品化方案是：写剪贴板时同时写 CLIPBOARD/PRIMARY，然后在 portal 后端支持三种 paste strategy：`ctrl-v`、`ctrl-shift-v`、`shift-insert`，由配置/菜单/环境变量选择，后续再加 AT-SPI heuristic 自动选择。

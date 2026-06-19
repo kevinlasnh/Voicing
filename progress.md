@@ -492,5 +492,24 @@
   - 本轮未执行 APK 编译。
   - 本轮未执行 deb 编译。
 
+### 提交与推送
+- **状态：** complete
+- Git commit：`0349c64 Fix frontend send and sync state handling`
+- Push 结果：已推送 `main -> origin/main`
+
+## 会话：2026-06-19 CST — Linux terminal 输入失效调查
+
+### 普通输入框可输入但 terminal 不生效
+- **状态：** investigation complete，待用户确认修复策略
+- 执行的操作：
+  - 阅读 `pc/platform_keyboard.py`，确认 GNOME Wayland 当前通过 RemoteDesktop portal 发送 `Ctrl+V` 来触发剪贴板粘贴。
+  - 检查本机 GNOME Terminal schema，确认默认 paste keybinding 是 `<Control><Shift>v`。
+  - 联网检索 GNOME Terminal 官方快捷键、XDG RemoteDesktop portal `NotifyKeyboardKeysym` 文档、GNOME Shell Introspect 权限限制。
+  - 本机调用 GNOME Shell `GetWindows` / `GetRunningApplications`，均返回 `AccessDenied`，说明不能默认依赖该私有接口识别当前焦点窗口。
+  - 探测 AT-SPI 和 wl-clipboard primary selection：AT-SPI 可列出应用但焦点识别不够稳定；`wl-copy --primary` / `wl-paste --primary` 可用。
+- 结论：
+  - 根因是 terminal 默认粘贴快捷键不是 `Ctrl+V`，而是 `Ctrl+Shift+V`；当前程序对所有 Wayland 目标都只发 `Ctrl+V`。
+  - 推荐后续修复：为 Linux Wayland portal 后端增加 paste strategy（`ctrl-v` / `ctrl-shift-v` / `shift-insert`），并在写剪贴板时同时写 CLIPBOARD 与 PRIMARY。短期若只修用户当前 terminal，可让 Wayland terminal 模式发送 `Ctrl+Shift+V`。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

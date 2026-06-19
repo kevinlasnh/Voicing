@@ -107,8 +107,15 @@
 - [x] 修复 Android QR 替换设备确认先成功后确认的时序问题
 - [x] 保持用户要求：不执行 APK 或 deb 编译
 - [x] 运行 PC/Android 非打包验证
-- [ ] 提交并推送到远端
-- **状态：** in_progress
+- [x] 提交并推送到远端
+- **状态：** complete
+
+### 阶段 15：Linux Terminal 输入失效调查
+- [x] 检查 PC Linux 输入后端的剪贴板与快捷键路径
+- [x] 联网检索 GNOME Terminal 粘贴快捷键、RemoteDesktop portal 和 GNOME Shell introspection 限制
+- [x] 在本机探测 GNOME Terminal gsettings、GNOME Shell Introspect、AT-SPI 和 wl-clipboard primary selection
+- [x] 形成修复方案
+- **状态：** complete
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
