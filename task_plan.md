@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 20（complete）
+阶段 21（complete）
 
 ## 各阶段
 
@@ -160,6 +160,15 @@
 - [x] 补充 Linux GNOME autostart `.desktop` 与 Wayland RemoteDesktop 授权边界
 - [x] 同步 Android 端使用文档中用户需要知道的 Linux 桌面端行为
 - [x] 运行文档 diff 和 `git diff --check`
+- **状态：** complete
+
+### 阶段 21：GNOME Wayland Auto 粘贴稳定性修复
+- [x] 复查 PC 端 Linux Auto 粘贴与 AT-SPI terminal 检测路径
+- [x] 本机复现 AT-SPI 查询偶发 `None` 导致 Auto 退回普通 `Ctrl+V`
+- [x] 将 Auto 模式改为稳定优先：重试焦点检测、缓存近期 terminal、无法可靠确认焦点时走终端安全 `Ctrl+Shift+V`
+- [x] 扩展 terminal app 名称识别并同步系统 Python AT-SPI helper
+- [x] 更新 README / Android README / CHANGELOG 的 Auto 粘贴边界说明
+- [x] 补充 PC 单元测试并完成验证
 - **状态：** complete
 
 ## 关键问题

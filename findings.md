@@ -176,3 +176,12 @@
 - 公开文档需要明确：Linux/GNOME Wayland 下日常推荐使用"自动粘贴"，它会在普通输入框使用 Ctrl+V，在 terminal 焦点使用 Ctrl+Shift+V；手动终端/兼容模式只是兜底。
 - Linux 开机自启不是 Windows 注册表路径，而是 GNOME autostart `.desktop`；公开中文 README 原先"注册表方式"的泛化描述会误导 Linux 用户，已改为按系统机制分别说明。
 - GNOME Wayland 的 RemoteDesktop 键盘授权无法静默永久保存，因此自启只保证程序登录后启动；输入前仍可能需要用户允许 GNOME 的授权提示。
+
+## 2026-06-19 GNOME Wayland Auto 粘贴稳定性修复
+
+- 用户反馈 terminal 内仍偶发执行 `Ctrl+V`，而不是 `Ctrl+Shift+V`。复查后确认问题不在 RemoteDesktop portal 发送键位，而在 Auto 模式每次粘贴前只做一次 AT-SPI 焦点判断；AT-SPI 查询偶发返回 `None` 时，旧逻辑会把未知状态当普通输入框处理。
+- 本机复现：连续调用当前 AT-SPI 查询时，`_get_focused_accessible_info()` 可间歇返回 `None`，同一 terminal 焦点下 `is_current_focus_terminal()` 因第二次查询失败返回 `False`。将 helper timeout 从 `0.35s` 提高到 `0.8s` 后稳定性改善，但空缓存第一次判断仍可能遇到未知状态。
+- 修复决策按用户要求以“稳定识别 terminal”为最高优先级：Auto 模式现在最多重试 3 次焦点检测；明确识别 terminal 时记入短期缓存；明确识别普通 app 时清缓存并走 `Ctrl+V`；如果焦点无法可靠确认，则走终端安全的 `Ctrl+Shift+V`，避免 terminal 内再次误发 `Ctrl+V`。
+- 取舍：未知焦点改为 terminal-safe 可能让少数普通应用收到 `Ctrl+Shift+V`；公开文档已说明可手动切到“普通粘贴”。这个取舍优先避免 terminal 输入失败。
+- 同步扩展 terminal app 名称集合（如 Black Box、Foot、Rio、Tabby、generic terminal/console 等），并保持主进程和系统 Python AT-SPI helper 的识别表一致。
+- 验证：`py_compile` 通过；`pc.tests.test_platform_keyboard` 39 项通过；`unittest discover -s pc/tests` 97 项通过；`git diff --check` 通过；本机 GNOME Wayland terminal 焦点压力测试连续 12 次均解析为 terminal。

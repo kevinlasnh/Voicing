@@ -713,5 +713,30 @@
   - `git diff --check -- README.md README.zh-CN.md android/README.md android/README.zh-CN.md CHANGELOG.md`：通过。
   - `rg` 检查确认旧的"注册表方式" Linux 自启描述已移除。
 
+## 会话：2026-06-19 CST — GNOME Wayland Auto 粘贴稳定性修复
+
+### Terminal 偶发退回 Ctrl+V 调查与修复
+- **状态：** complete
+- 用户反馈：PC 端输入在 terminal 里仍偶发执行 `Ctrl+V`，没有稳定使用 `Ctrl+Shift+V`。
+- 执行的操作：
+  - 恢复 PWF 上下文，确认此前阶段 16 已实现 AT-SPI Auto terminal 检测和手动粘贴模式。
+  - 复查 `pc/platform_keyboard.py`、`pc/voice_coding.py`、`pc/tests/test_platform_keyboard.py` 中 Auto 粘贴分支。
+  - 本机 GNOME Wayland 下连续探测 `_get_focused_accessible_info()`，复现 AT-SPI 查询偶发 `None`，导致旧 Auto 逻辑把未知状态当普通输入框并发送 `Ctrl+V`。
+  - 按用户“稳定识别最高优先级”的要求修改 `pc/platform_keyboard.py`：
+    - AT-SPI helper timeout 从 `0.35s` 提高到 `0.8s`。
+    - Auto 模式最多重试 3 次焦点检测。
+    - 最近确认过 terminal 时保留短期 terminal 记忆。
+    - 明确普通 app 才走 `Ctrl+V`；焦点未知或不可靠时走终端安全的 `Ctrl+Shift+V`。
+    - 扩展 terminal app 名称集合，并同步系统 Python AT-SPI helper 内的识别表。
+  - 更新 `README.md`、`README.zh-CN.md`、`android/README.md`、`android/README.zh-CN.md`、`CHANGELOG.md`，说明 Auto 模式在无法稳定确认焦点时会优先使用 terminal-safe `Ctrl+Shift+V`。
+  - 补充 `pc/tests/test_platform_keyboard.py`，覆盖 retry、terminal cache、明确普通 app 清缓存、未知焦点 terminal-safe 等行为。
+- 验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py`：通过。
+  - `.venv/bin/python -m unittest pc.tests.test_platform_keyboard`：39 tests OK。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：97 tests OK。
+  - `git diff --check`：通过。
+  - 本机 GNOME Wayland terminal 焦点压力测试：连续 12 次 `_resolve_auto_paste_mode()` 均返回 `terminal`。
+- 本轮未执行 Android analyze/test，也未执行 APK 或 DEB 编译。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

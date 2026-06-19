@@ -13,16 +13,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [2.9.7] - 2026-06-19
+
+### Fixed
+
+- PC (Linux): GNOME Wayland Auto paste now prioritizes stable terminal handling by retrying AT-SPI focus detection and using the terminal-safe Ctrl+Shift+V path when focus cannot be resolved reliably
+
 ### Docs
 
 - Clarified Linux/GNOME Wayland usage in the public docs:
-  - Auto paste is the recommended default; normal fields use Ctrl+V and terminal focus uses Ctrl+Shift+V
+  - Auto paste is the recommended default; confirmed normal fields use Ctrl+V, while terminal or unresolved focus uses Ctrl+Shift+V
   - Linux auto-start uses GNOME autostart `.desktop`, while GNOME Wayland RemoteDesktop keyboard permission may still require user approval after login or app start
+
+### 修复
+
+- PC (Linux): GNOME Wayland 自动粘贴现在优先保证终端处理稳定性，会重试 AT-SPI 焦点检测，并在焦点无法可靠确认时走终端安全的 Ctrl+Shift+V 路径
 
 ### 文档
 
 - 补充公开文档中的 Linux/GNOME Wayland 使用说明：
-  - 日常推荐保持自动粘贴；普通输入框走 Ctrl+V，终端焦点走 Ctrl+Shift+V
+  - 日常推荐保持自动粘贴；确认的普通输入框走 Ctrl+V，终端或无法稳定确认的焦点走 Ctrl+Shift+V
   - Linux 开机自启使用 GNOME autostart `.desktop`；GNOME Wayland 的 RemoteDesktop 键盘授权在登录或启动后仍可能需要用户手动允许
 
 ---

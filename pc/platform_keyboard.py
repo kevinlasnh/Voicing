@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import uuid
 from dataclasses import dataclass
 from enum import Enum
@@ -29,7 +30,10 @@ KEYSYM_V = 0x0076
 
 REMOTE_DESKTOP_DEVICE_KEYBOARD = 1
 PORTAL_REQUEST_TIMEOUT_MS = 60000
-ATSPI_FOCUS_TIMEOUT_SEC = 0.35
+ATSPI_FOCUS_TIMEOUT_SEC = 0.8
+ATSPI_FOCUS_PROBE_ATTEMPTS = 3
+ATSPI_FOCUS_RETRY_DELAY_SEC = 0.06
+TERMINAL_FOCUS_FALLBACK_CACHE_SEC = 3.0
 
 
 class PasteMode(str, Enum):
@@ -49,7 +53,12 @@ PASTE_MODE_LABELS = {
 TERMINAL_APP_NAMES = {
     "alacritty",
     "com.mitchellh.ghostty",
+    "com.raggesilver.blackbox",
+    "blackbox",
+    "console",
+    "foot",
     "ghostty",
+    "gnome-console",
     "gnome-terminal",
     "gnome-terminal-server",
     "io.elementary.terminal",
@@ -59,10 +68,14 @@ TERMINAL_APP_NAMES = {
     "org.gnome.console",
     "org.gnome.ptyxis",
     "org.gnome.terminal",
+    "org.gnome.terminal.legacy",
     "org.kde.konsole",
     "org.wezfurlong.wezterm",
     "ptyxis",
     "qterminal",
+    "rio",
+    "tabby",
+    "terminal",
     "terminator",
     "tilix",
     "wezterm",
@@ -70,6 +83,8 @@ TERMINAL_APP_NAMES = {
 }
 
 _PASTE_MODE = PasteMode.AUTO
+_LAST_TERMINAL_FOCUS_SEEN_AT = 0.0
+_LAST_TERMINAL_FOCUS_INFO: dict[str, str] | None = None
 
 
 def _dbus_uint(value: int):
@@ -483,7 +498,7 @@ class RemoteDesktopPortalKeyboardBackend:
 def _resolve_wayland_paste_sequence() -> tuple[tuple[int, int], ...]:
     mode = get_paste_mode()
     if mode == PasteMode.AUTO:
-        mode = PasteMode.TERMINAL if is_current_focus_terminal() else PasteMode.NORMAL
+        mode = _resolve_auto_paste_mode()
     if mode == PasteMode.TERMINAL:
         return _ctrl_shift_v_sequence()
     if mode == PasteMode.COMPAT:
@@ -521,14 +536,56 @@ def _shift_insert_sequence() -> tuple[tuple[int, int], ...]:
 
 
 def is_current_focus_terminal() -> bool:
-    info = _get_focused_accessible_info()
-    if not info:
+    return _resolve_auto_paste_mode() == PasteMode.TERMINAL
+
+
+def _resolve_auto_paste_mode() -> PasteMode:
+    uncertain_info: dict[str, str] | None = None
+
+    for attempt in range(ATSPI_FOCUS_PROBE_ATTEMPTS):
+        info = _get_focused_accessible_info()
+
+        if info and _is_terminal_accessible_info(info):
+            _remember_terminal_focus(info)
+            return PasteMode.TERMINAL
+
+        if _is_uncertain_focus_info(info):
+            uncertain_info = info
+            if attempt < ATSPI_FOCUS_PROBE_ATTEMPTS - 1:
+                time.sleep(ATSPI_FOCUS_RETRY_DELAY_SEC)
+                continue
+            break
+
+        _clear_terminal_focus_cache()
+        return PasteMode.NORMAL
+
+    if _is_uncertain_focus_info(uncertain_info) and _has_recent_terminal_focus(TERMINAL_FOCUS_FALLBACK_CACHE_SEC):
+        return PasteMode.TERMINAL
+    if _is_uncertain_focus_info(uncertain_info):
+        return PasteMode.TERMINAL
+    return PasteMode.NORMAL
+
+
+def _remember_terminal_focus(info: dict[str, str]) -> None:
+    global _LAST_TERMINAL_FOCUS_SEEN_AT, _LAST_TERMINAL_FOCUS_INFO
+    _LAST_TERMINAL_FOCUS_SEEN_AT = time.monotonic()
+    _LAST_TERMINAL_FOCUS_INFO = dict(info)
+
+
+def _clear_terminal_focus_cache() -> None:
+    global _LAST_TERMINAL_FOCUS_SEEN_AT, _LAST_TERMINAL_FOCUS_INFO
+    _LAST_TERMINAL_FOCUS_SEEN_AT = 0.0
+    _LAST_TERMINAL_FOCUS_INFO = None
+
+
+def _has_recent_terminal_focus(max_age_sec: float) -> bool:
+    if _LAST_TERMINAL_FOCUS_SEEN_AT <= 0:
         return False
-    role = str(info.get("role", "")).lower()
-    if role == "terminal":
-        return True
-    app_name = _normalize_terminal_app_name(str(info.get("app_name", "")))
-    return app_name in TERMINAL_APP_NAMES
+    return time.monotonic() - _LAST_TERMINAL_FOCUS_SEEN_AT <= max_age_sec
+
+
+def _is_uncertain_focus_info(info: dict[str, str] | None) -> bool:
+    return info is None or _should_scan_active_terminal_fallback(info)
 
 
 def _normalize_terminal_app_name(value: str) -> str:
@@ -628,6 +685,8 @@ def _should_scan_active_terminal_fallback(info: dict[str, str] | None) -> bool:
         return True
     app_name = _normalize_terminal_app_name(str(info.get("app_name", "")))
     role = str(info.get("role", "")).strip().lower()
+    if not app_name:
+        return True
     return app_name in {"gnome-shell", "org.gnome.shell"} or role in {
         "desktop frame",
         "desktop icon",
@@ -748,12 +807,15 @@ def is_terminal(info):
     if app_name.endswith(".desktop"):
         app_name = app_name[:-8]
     terminals = {
-        "alacritty", "com.mitchellh.ghostty", "ghostty",
-        "gnome-terminal", "gnome-terminal-server",
+        "alacritty", "blackbox", "com.mitchellh.ghostty",
+        "com.raggesilver.blackbox", "console", "foot", "ghostty",
+        "gnome-console", "gnome-terminal", "gnome-terminal-server",
         "io.elementary.terminal", "kitty", "kgx", "konsole",
         "org.gnome.console", "org.gnome.ptyxis", "org.gnome.terminal",
-        "org.kde.konsole", "org.wezfurlong.wezterm", "ptyxis",
-        "qterminal", "terminator", "tilix", "wezterm", "xfce4-terminal",
+        "org.gnome.terminal.legacy", "org.kde.konsole",
+        "org.wezfurlong.wezterm", "ptyxis", "qterminal", "rio",
+        "tabby", "terminal", "terminator", "tilix", "wezterm",
+        "xfce4-terminal",
     }
     return role == "terminal" or app_name in terminals
 
@@ -793,6 +855,7 @@ else:
         role = str(focused_info.get("role", "")).strip().lower()
     use_active_fallback = (
         focused_info is None
+        or not app_name
         or app_name in {"gnome-shell", "org.gnome.shell"}
         or role in {"desktop frame", "desktop icon"}
     )
