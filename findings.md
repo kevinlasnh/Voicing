@@ -153,3 +153,10 @@
 - **PC 输入失败恢复**：`type_text_at_cursor()` 原先在剪贴板写入新文本后，如果 `paste_from_clipboard()` 或 `press_enter()` 抛异常，会跳过旧剪贴板/PRIMARY 恢复。修复为 `finally` 恢复，避免失败后污染用户剪贴板。
 - **PC ACK 清空语义**：`handle_client()` 原先不区分 `type_text()` 是否真正注入成功，submit 文本失败后仍可能返回 `clear_input=true`。修复为 `type_text()` 返回 bool，只有成功注入时才让 Android 清空输入，失败时保留手机端文本便于重发。
 - **Android native close 语义**：`_NativeWifiWebSocketSink.close()` 原先等待 `_idFuture`；如果 native 连接还没返回 id 或已经失败，重连/释放路径可能留下未处理 Future 错误。修复为 best-effort close，id 不可用时静默完成。
+
+## 2026-06-19 v2.9.5 Release workflow 失败根因
+
+- `v2.9.5` tag 已触发 release workflow，旧 run `27815558477` 中 Android APK、Windows EXE、macOS DMG 均构建成功，但 Linux job 在 `Run desktop validation` 阶段失败，导致最终 `Publish GitHub Release` 被跳过。
+- Linux 失败根因不是打包脚本或 DEB 逻辑，而是 `python -m unittest discover -s tests` 在 GitHub `ubuntu-22.04` headless runner 中创建 `QApplication` 时尝试加载 Qt `xcb` 平台插件，因无图形会话 abort：`Could not load the Qt platform plugin "xcb"`。
+- 修复决策：Linux release job 显式设置 `QT_QPA_PLATFORM=offscreen`，并在 `pc/tests/test_voice_coding_tray.py` 导入 PyQt 前设置同样默认值。该改动仅影响 CI/headless 测试环境，不改变用户机器上发布应用的运行平台选择。
+- 发布策略：GitHub 上尚未创建 `v2.9.5` release，因此可把失败构建用过的 `v2.9.5` tag 移到修复提交后重新触发同版本 release workflow，避免为 CI 环境变量修复单独升版本。

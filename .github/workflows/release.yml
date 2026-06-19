@@ -269,6 +269,8 @@ jobs:
   build-linux:
     name: Build Linux Desktop Binary
     runs-on: ubuntu-22.04
+    env:
+      QT_QPA_PLATFORM: offscreen
 
     steps:
       - name: Checkout code

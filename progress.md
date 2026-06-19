@@ -603,5 +603,26 @@
   - `git diff --check`：通过
 - 按用户要求，本地未编 APK / deb；将通过 GitHub Actions 编译。
 
+### GitHub Actions Linux CI 修复
+- **状态：** implemented + verified，准备提交并重新触发 release workflow
+- 已推送 `v2.9.5` tag 并触发 GitHub Actions run `27815558477`。
+- 旧 run 结果：
+  - Android APK：成功，release APK 已构建并上传 workflow artifact。
+  - Windows EXE：成功。
+  - macOS DMG：成功。
+  - Linux binary / DEB：失败前被跳过。
+  - Publish GitHub Release：因 Linux job failure 被跳过。
+- 失败根因：
+  - Linux job 在 `Run desktop validation` 执行 `python -m unittest discover -s tests` 时，headless runner 无图形会话，Qt 尝试加载 `xcb` 平台插件并 abort。
+- 修复内容：
+  - `.github/workflows/release.yml` 的 `build-linux` job 增加 `QT_QPA_PLATFORM=offscreen`。
+  - `pc/tests/test_voice_coding_tray.py` 在导入 PyQt 前设置 `os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")`。
+- 本地验证：
+  - `../.venv/bin/python -m py_compile ... tests/test_voice_coding_tray.py`：通过。
+  - `QT_QPA_PLATFORM=offscreen ../.venv/bin/python -m unittest discover -s tests`：88 tests OK。
+  - `QT_QPA_PLATFORM=offscreen ../.venv/bin/python -c "from voice_coding import calculate_broadcast_addresses, get_all_local_interfaces; ..."`：通过。
+  - `git diff --check`：通过。
+- 本轮仍未在本地编译 APK 或 deb。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

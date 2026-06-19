@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 14
+阶段 18
 
 ## 各阶段
 
@@ -134,6 +134,15 @@
 - [x] 汇总确定 bug、残余风险和测试缺口
 - **状态：** complete
 
+### 阶段 18：v2.9.5 GitHub Actions 发布构建修复与重触发
+- [x] 推送 `v2.9.5` tag 触发 release workflow
+- [x] 检查 Actions 结果并定位 Linux job 失败根因
+- [x] 修复 headless Linux runner 中 Qt 单元测试无法初始化的问题
+- [x] 运行本地非打包验证
+- [ ] 提交、推送并重新触发 `v2.9.5` release workflow
+- [ ] 等待 Actions 完成并确认 APK / DEB / 其他产物发布结果
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -156,6 +165,7 @@
 | 当前源码运行环境缺少 PyQt5 和 pip | 1 | 下次补齐 Python 依赖环境后再启动 PC 端 |
 | GNOME Wayland 不支持直接复用现有 pyautogui 全局按键路径 | 1 | 研究 RemoteDesktop portal/libei 与 ydotool 等替代输入后端 |
 | Android debug APK 构建缺 Android SDK | 1 | 已补 SDK，但本任务未改 Android native，用户确认无需继续 APK 构建；停止构建，仅保留 analyze/test |
+| GitHub Actions Linux release job 在 headless runner 中 Qt `xcb` 初始化失败 | 1 | Linux release job 和托盘测试设置 `QT_QPA_PLATFORM=offscreen`，本地 88 项 PC 测试通过 |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。
