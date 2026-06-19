@@ -848,7 +848,7 @@
 ## 会话：2026-06-19 CST — v2.9.8 Release 发布
 
 ### 发布前版本与验证
-- **状态：** in_progress
+- **状态：** complete
 - 用户要求更新并推送新的 GitHub Actions release。
 - 执行的操作：
   - 检查 `.github/workflows/release.yml`，确认 release workflow 由 `v*` tag 触发，且要求 `CHANGELOG.md` 中存在对应版本块。
@@ -863,6 +863,24 @@
   - `~/development/flutter-3.27.0/bin/dart format --output=none --set-exit-if-changed lib/voicing_connection_controller.dart`：通过，0 changed。
   - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
   - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+- 提交与推送：
+  - 提交：`b80a398 Release v2.9.8 input fixes`
+  - 已推送 `main`：`4733cce..b80a398`
+  - 已推送 tag：`v2.9.8`
+- Actions 结果：
+  - Run ID：`27833313385`
+  - URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27833313385`
+  - 结论：success。
+  - Android APK、Windows EXE、macOS DMG、Linux binary/DEB 和 Publish GitHub Release jobs 均成功。
+- 发布页面：
+  - `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.8`
+- 已确认 Release assets：
+  - `voicing.apk`
+  - `voicing-linux-amd64.deb`
+  - `voicing-linux-x86_64`
+  - `voicing-windows-x64.exe`
+  - `voicing-macos-arm64.dmg`
+  - `SHA256SUMS.txt`
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

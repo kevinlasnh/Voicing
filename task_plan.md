@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 26（in_progress）
+阶段 26（complete）
 
 ## 各阶段
 
@@ -209,10 +209,10 @@
 - [x] 更新 PC / Android 版本号到 `2.9.8`
 - [x] 将 CHANGELOG Unreleased 内容落到 `2.9.8` 发布块
 - [x] 运行 PC 和 Android 发布前验证
-- [ ] 提交并推送 `main`
-- [ ] 推送 `v2.9.8` tag 触发 GitHub Actions release workflow
-- [ ] 确认 Actions 成功并发布 GitHub Release 资产
-- **状态：** in_progress
+- [x] 提交并推送 `main`
+- [x] 推送 `v2.9.8` tag 触发 GitHub Actions release workflow
+- [x] 确认 Actions 成功并发布 GitHub Release 资产
+- **状态：** complete
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？

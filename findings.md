@@ -221,3 +221,4 @@
 - 发布内容包含两组未发布修复：Auto Enter ACK/清空语义修复，以及 GNOME Wayland Auto 粘贴普通窗口误判修复。
 - 版本同步：PC `APP_VERSION` 升到 `2.9.8`；Android `pubspec.yaml` 升到 `2.9.8+9`；README 版本徽章和 tag 示例升到 `v2.9.8`。
 - Flutter 3.27.0 在本地 analyze/test 前执行依赖解析时刷新了 `pubspec.lock` 中 8 个 SDK/test 相关传递依赖；该锁文件更新随发布提交保留，以匹配当前发布验证工具链。
+- 发布结果：GitHub Actions run `27833313385` 成功；Release `v2.9.8` 已发布，包含 `voicing.apk`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64` 和 `SHA256SUMS.txt`。
