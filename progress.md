@@ -882,5 +882,24 @@
   - `voicing-macos-arm64.dmg`
   - `SHA256SUMS.txt`
 
+## 会话：2026-06-20 CST — 本机安装与自启验证记录
+
+### v2.9.8 deb 与 GNOME autostart 检查
+- **状态：** complete
+- 用户要求卸载当前电脑上的 Voicing：
+  - 检测到本机安装 `voicing 2.9.7 install ok installed`，入口 `/usr/bin/voicing`，实际文件 `/opt/voicing/voicing`。
+  - 未发现正在运行的 Voicing 进程，未发现用户自启项。
+  - 执行 `sudo -n apt-get remove -y voicing` 成功卸载旧 deb 包。
+  - 复查确认 `dpkg-query` 无 `voicing` 记录，`command -v voicing` 无输出，`/opt/voicing` 不存在，未清理用户数据/日志。
+- 用户随后安装从 GitHub 下载的最新 deb，并要求检查版本和开机自启：
+  - `dpkg-query` 确认本机为 `voicing 2.9.8 install ok installed`。
+  - GitHub latest release 确认为 `v2.9.8`。
+  - `/usr/bin/voicing` 指向 `/opt/voicing/voicing`，实际二进制存在且可执行。
+  - `~/.config/autostart/voicing.desktop` 存在，启用 `X-GNOME-Autostart-enabled=true`，并指向 `/opt/voicing/voicing`。
+  - 当前桌面为 `ubuntu:GNOME` / Wayland，匹配 `OnlyShowIn=GNOME;`。
+- 结论：
+  - 本机已安装最新 `v2.9.8` deb。
+  - GNOME 登录后自动启动已配置好；这不是系统服务级开机前启动，仍属于用户登录后的 autostart。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

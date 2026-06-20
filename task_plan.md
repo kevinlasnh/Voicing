@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 26（complete）
+阶段 27（complete）
 
 ## 各阶段
 
@@ -212,6 +212,14 @@
 - [x] 提交并推送 `main`
 - [x] 推送 `v2.9.8` tag 触发 GitHub Actions release workflow
 - [x] 确认 Actions 成功并发布 GitHub Release 资产
+- **状态：** complete
+
+### 阶段 27：本机 v2.9.8 deb 安装与 GNOME 自启确认
+- [x] 卸载旧的 `voicing 2.9.7` deb 包
+- [x] 确认用户安装的最新 GitHub deb 为 `voicing 2.9.8`
+- [x] 确认 `/usr/bin/voicing` 指向 `/opt/voicing/voicing`
+- [x] 确认 `~/.config/autostart/voicing.desktop` 存在且启用
+- [x] 确认当前桌面为 GNOME，会匹配 autostart 的 `OnlyShowIn=GNOME`
 - **状态：** complete
 
 ## 关键问题

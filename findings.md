@@ -222,3 +222,11 @@
 - 版本同步：PC `APP_VERSION` 升到 `2.9.8`；Android `pubspec.yaml` 升到 `2.9.8+9`；README 版本徽章和 tag 示例升到 `v2.9.8`。
 - Flutter 3.27.0 在本地 analyze/test 前执行依赖解析时刷新了 `pubspec.lock` 中 8 个 SDK/test 相关传递依赖；该锁文件更新随发布提交保留，以匹配当前发布验证工具链。
 - 发布结果：GitHub Actions run `27833313385` 成功；Release `v2.9.8` 已发布，包含 `voicing.apk`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64` 和 `SHA256SUMS.txt`。
+
+## 2026-06-20 本机 v2.9.8 deb 安装与 GNOME 自启确认
+
+- 本机旧 `voicing 2.9.7` deb 包已通过 `sudo -n apt-get remove -y voicing` 卸载；未删除用户数据和日志。
+- 用户从 GitHub 安装最新 deb 后，本机 `dpkg-query` 显示 `voicing 2.9.8 install ok installed`，GitHub latest release 也是 `v2.9.8`。
+- 当前安装入口为 `/usr/bin/voicing -> /opt/voicing/voicing`，`/opt/voicing/voicing` 存在且可执行。
+- GNOME 用户级自启文件存在：`~/.config/autostart/voicing.desktop`，内容包含 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`。
+- 当前桌面环境为 `XDG_CURRENT_DESKTOP=ubuntu:GNOME`、`DESKTOP_SESSION=ubuntu`、`XDG_SESSION_TYPE=wayland`，因此该自启文件会在 GNOME 登录后生效。GNOME Wayland RemoteDesktop 键盘授权仍可能需要用户在启动后允许。
