@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 29（complete）
+阶段 30（complete）
 
 ## 各阶段
 
@@ -194,6 +194,14 @@
 - [x] 提交并推送 `main`
 - [x] 推送 `v2.9.9` tag 触发 GitHub Actions release workflow
 - [x] 确认 Actions 成功并发布 GitHub Release 资产
+- **状态：** complete
+
+### 阶段 30：本机旧版卸载与 v2.9.9 安装确认
+- [x] 停止旧的 `/opt/voicing/voicing` 进程
+- [x] 卸载本机已安装的 `voicing 2.9.8` deb 包
+- [x] 删除旧的 GNOME 用户级自启文件
+- [x] 复核本机已安装 `voicing 2.9.9`
+- [x] 确认 `/usr/bin/voicing`、`/opt/voicing`、运行进程和 GNOME 自启项恢复
 - **状态：** complete
 
 ### 阶段 23：Auto Enter 可靠性修复

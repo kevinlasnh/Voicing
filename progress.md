@@ -971,5 +971,31 @@
   - `voicing-macos-arm64.dmg`
   - `SHA256SUMS.txt`
 
+## 会话：2026-06-22 CST — 本机旧版卸载与 v2.9.9 安装确认
+
+### PC deb 卸载与重装状态记录
+- **状态：** complete
+- 用户要求先卸载当前 PC 端 Voicing，以便下载新版；随后要求记录进度并 push。
+- 卸载前状态：
+  - `dpkg-query` 显示本机安装 `voicing 2.9.8 install ok installed`。
+  - `command -v voicing` 返回 `/usr/bin/voicing`。
+  - 发现两个运行中的 `/opt/voicing/voicing` 进程：`3260`、`3751`。
+  - `~/.config/autostart/voicing.desktop` 存在，指向 `/opt/voicing/voicing`。
+- 执行的卸载操作：
+  - 先向旧的 `/opt/voicing/voicing` 进程发送 `SIGTERM`，复查后旧进程已停止。
+  - 执行 `sudo -n apt-get remove -y voicing`，成功移除 `voicing 2.9.8` deb 包。
+  - 复查确认当时 `voicing` 包不存在、`voicing` 命令不存在、`/opt/voicing` 不存在。
+  - 删除旧的 `~/.config/autostart/voicing.desktop`，未删除用户数据或日志。
+- 记录进度前复核到的新状态：
+  - 用户已安装新版，`dpkg-query` 显示 `voicing 2.9.9 install ok installed`。
+  - `command -v voicing` 返回 `/usr/bin/voicing`。
+  - `/opt/voicing` 已恢复存在。
+  - 当前运行中的新版进程为 `/opt/voicing/voicing`，PID：`57593`、`57596`。
+  - GNOME 用户级自启文件已恢复存在，内容包含 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`。
+- 结论：
+  - 旧版 `2.9.8` 已卸载完成。
+  - 本机当前已安装并运行 `voicing 2.9.9`。
+  - 自启项已经随新版恢复。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*

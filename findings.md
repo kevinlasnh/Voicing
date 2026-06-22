@@ -249,3 +249,10 @@
 - GitHub Release 已发布：`https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.9`。
 - Release 资产已确认齐全：`voicing.apk`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`SHA256SUMS.txt`。
 - Android 业务代码本次未更新；Android 侧只同步了 README 文档和 `pubspec.yaml` 版本元数据到 `2.9.9+10`。
+
+## 2026-06-22 本机 v2.9.9 deb 安装状态
+
+- 本机旧 `voicing 2.9.8` deb 包已通过 `sudo -n apt-get remove -y voicing` 卸载；卸载时先停止了旧的 `/opt/voicing/voicing` 进程，并删除旧的 GNOME 用户级自启文件。
+- 记录进度前复核显示本机已经安装新版：`dpkg-query` 为 `voicing 2.9.9 install ok installed`，`/usr/bin/voicing` 可用，`/opt/voicing` 存在。
+- 当前有新版 `/opt/voicing/voicing` 进程在运行，GNOME 用户级自启文件已恢复并指向 `/opt/voicing/voicing`。
+- 用户数据和日志未被删除。
