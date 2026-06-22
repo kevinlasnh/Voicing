@@ -130,8 +130,8 @@ class PlatformKeyboardTests(unittest.TestCase):
             with patch.object(backend, "_send_key_sequence") as mock_send:
                 with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.AUTO):
                     with patch(
-                        "platform_keyboard._get_focused_accessible_info",
-                        return_value={"role": "frame", "app_name": "ghostty"},
+                        "platform_keyboard._sample_focus_infos",
+                        return_value=[{"role": "frame", "app_name": "ghostty"}],
                     ):
                         backend.paste_from_clipboard()
         mock_send.assert_called_once_with(platform_keyboard._ctrl_shift_v_sequence())
@@ -142,8 +142,8 @@ class PlatformKeyboardTests(unittest.TestCase):
             with patch.object(backend, "_send_key_sequence") as mock_send:
                 with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.AUTO):
                     with patch(
-                        "platform_keyboard._get_focused_accessible_info",
-                        return_value={"role": "entry", "app_name": "Google Chrome"},
+                        "platform_keyboard._sample_focus_infos",
+                        return_value=[{"role": "entry", "app_name": "Google Chrome"}],
                     ):
                         backend.paste_from_clipboard()
         mock_send.assert_called_once_with(platform_keyboard._ctrl_v_sequence())
@@ -319,62 +319,123 @@ class PlatformKeyboardTests(unittest.TestCase):
         self.assertEqual(info["app_name"], "ghostty")
         self.assertEqual(mock_run.call_args.kwargs["env"], {"PATH": "/usr/bin"})
 
+    def test_atspi_system_python_sample_helper_returns_multiple_samples(self):
+        result = MagicMock()
+        result.returncode = 0
+        result.stdout = (
+            '[{"app_name": "Google Chrome", "role": "frame", "name": "A"}, '
+            '{"app_name": "ghostty", "role": "frame", "name": "B"}, null]'
+        )
+        with patch("platform_keyboard._find_system_python_with_atspi", return_value="/usr/bin/python3"):
+            with patch("platform_keyboard.system_subprocess_env", return_value={"PATH": "/usr/bin"}):
+                with patch("platform_keyboard.subprocess.run", return_value=result) as mock_run:
+                    samples = platform_keyboard._sample_focus_infos_from_system_python(timeout_sec=1.3)
+
+        self.assertEqual(samples[0]["app_name"], "Google Chrome")
+        self.assertEqual(samples[1]["app_name"], "ghostty")
+        self.assertIsNone(samples[2])
+        self.assertEqual(mock_run.call_args.args[0][2], platform_keyboard._ATSPI_FOCUS_SAMPLE_HELPER)
+        self.assertEqual(mock_run.call_args.kwargs["timeout"], 1.3)
+
     def test_is_current_focus_terminal_detects_terminal_role(self):
-        with patch("platform_keyboard._get_focused_accessible_info", return_value={"role": "terminal"}):
+        with patch("platform_keyboard._sample_focus_infos", return_value=[{"role": "terminal"}]):
             self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
     def test_is_current_focus_terminal_detects_terminal_app_name(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            return_value={"role": "frame", "app_name": "org.gnome.Console.desktop"},
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "frame", "app_name": "org.gnome.Console.desktop"}],
         ):
             self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
     def test_is_current_focus_terminal_uses_recent_terminal_cache_when_probe_fails(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            return_value={"role": "frame", "app_name": "ghostty"},
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "frame", "app_name": "ghostty"}],
         ):
             self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
-        with patch("platform_keyboard._get_focused_accessible_info", return_value=None):
-            with patch("platform_keyboard.time.sleep"):
-                self.assertTrue(platform_keyboard.is_current_focus_terminal())
+        with patch("platform_keyboard._sample_focus_infos", return_value=[None]):
+            self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
-    def test_is_current_focus_terminal_retries_uncertain_probe_before_falling_back(self):
+    def test_is_current_focus_terminal_samples_until_terminal_vote_wins(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            side_effect=[
+            "platform_keyboard._sample_focus_infos",
+            return_value=[
                 None,
+                {"role": "entry", "app_name": "Google Chrome"},
+                {"role": "frame", "app_name": "ghostty"},
                 {"role": "frame", "app_name": "ghostty"},
             ],
-        ) as mock_probe:
-            with patch("platform_keyboard.time.sleep") as mock_sleep:
+        ):
+            self.assertTrue(platform_keyboard.is_current_focus_terminal())
+
+    def test_auto_paste_mode_uses_majority_normal_over_single_terminal_sample(self):
+        with patch(
+            "platform_keyboard._sample_focus_infos",
+            return_value=[
+                {"role": "frame", "app_name": "ghostty"},
+                {"role": "entry", "app_name": "Google Chrome"},
+                {"role": "entry", "app_name": "Google Chrome"},
+            ],
+        ):
+            self.assertEqual(
+                platform_keyboard._resolve_auto_paste_mode(),
+                platform_keyboard.PasteMode.NORMAL,
+            )
+
+    def test_auto_paste_mode_uses_terminal_cache_for_tied_votes(self):
+        with patch(
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "frame", "app_name": "ghostty"}],
+        ):
+            with patch("platform_keyboard.time.monotonic", return_value=1.0):
                 self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
-        self.assertEqual(mock_probe.call_count, 2)
-        mock_sleep.assert_called_once_with(platform_keyboard.ATSPI_FOCUS_RETRY_DELAY_SEC)
-
-    def test_auto_paste_mode_treats_unresolved_focus_as_normal_without_terminal_cache(self):
-        with patch("platform_keyboard._get_focused_accessible_info", return_value=None):
-            with patch("platform_keyboard.time.sleep"):
+        with patch(
+            "platform_keyboard._sample_focus_infos",
+            return_value=[
+                {"role": "frame", "app_name": "ghostty"},
+                {"role": "entry", "app_name": "Google Chrome"},
+            ],
+        ):
+            with patch("platform_keyboard.time.monotonic", return_value=2.0):
                 self.assertEqual(
                     platform_keyboard._resolve_auto_paste_mode(),
-                    platform_keyboard.PasteMode.NORMAL,
+                    platform_keyboard.PasteMode.TERMINAL,
                 )
+
+    def test_auto_paste_mode_treats_unresolved_focus_as_normal_without_terminal_cache(self):
+        with patch("platform_keyboard._sample_focus_infos", return_value=[None]):
+            self.assertEqual(
+                platform_keyboard._resolve_auto_paste_mode(),
+                platform_keyboard.PasteMode.NORMAL,
+            )
+
+    def test_collect_focus_samples_uses_window_and_max_samples(self):
+        monotonic_values = [10.0]
+        monotonic_values.extend(10.01 + index * 0.01 for index in range(20))
+        probe = MagicMock(return_value={"role": "entry", "app_name": "Google Chrome"})
+        with patch("platform_keyboard.time.monotonic", side_effect=monotonic_values):
+            with patch("platform_keyboard.time.sleep") as mock_sleep:
+                samples = platform_keyboard._collect_focus_samples(probe)
+
+        self.assertEqual(len(samples), platform_keyboard.ATSPI_FOCUS_MAX_SAMPLES)
+        self.assertEqual(probe.call_count, platform_keyboard.ATSPI_FOCUS_MAX_SAMPLES)
+        self.assertEqual(mock_sleep.call_count, platform_keyboard.ATSPI_FOCUS_MAX_SAMPLES - 1)
 
     def test_is_current_focus_terminal_clears_cache_for_normal_focused_app(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            return_value={"role": "frame", "app_name": "ghostty"},
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "frame", "app_name": "ghostty"}],
         ):
             self.assertTrue(platform_keyboard.is_current_focus_terminal())
 
         with patch("platform_keyboard.time.monotonic", return_value=10.0):
             platform_keyboard._LAST_TERMINAL_FOCUS_SEEN_AT = 9.0
             with patch(
-                "platform_keyboard._get_focused_accessible_info",
-                return_value={"role": "entry", "app_name": "Google Chrome"},
+                "platform_keyboard._sample_focus_infos",
+                return_value=[{"role": "entry", "app_name": "Google Chrome"}],
             ):
                 self.assertFalse(platform_keyboard.is_current_focus_terminal())
         self.assertEqual(platform_keyboard._LAST_TERMINAL_FOCUS_SEEN_AT, 0.0)
@@ -382,25 +443,24 @@ class PlatformKeyboardTests(unittest.TestCase):
     def test_resolve_auto_paste_sequence_uses_terminal_cache_after_probe_failure(self):
         with patch("platform_keyboard.get_paste_mode", return_value=platform_keyboard.PasteMode.AUTO):
             with patch(
-                "platform_keyboard._get_focused_accessible_info",
-                return_value={"role": "frame", "app_name": "ghostty"},
+                "platform_keyboard._sample_focus_infos",
+                return_value=[{"role": "frame", "app_name": "ghostty"}],
             ):
                 self.assertEqual(
                     platform_keyboard._resolve_wayland_paste_sequence(),
                     platform_keyboard._ctrl_shift_v_sequence(),
                 )
 
-            with patch("platform_keyboard._get_focused_accessible_info", return_value=None):
-                with patch("platform_keyboard.time.sleep"):
-                    self.assertEqual(
-                        platform_keyboard._resolve_wayland_paste_sequence(),
-                        platform_keyboard._ctrl_shift_v_sequence(),
-                    )
+            with patch("platform_keyboard._sample_focus_infos", return_value=[None]):
+                self.assertEqual(
+                    platform_keyboard._resolve_wayland_paste_sequence(),
+                    platform_keyboard._ctrl_shift_v_sequence(),
+                )
 
     def test_is_current_focus_terminal_rejects_unknown_focus(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            return_value={"role": "entry", "app_name": "Google Chrome"},
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "entry", "app_name": "Google Chrome"}],
         ):
             self.assertFalse(platform_keyboard.is_current_focus_terminal())
 
@@ -446,8 +506,8 @@ class PlatformKeyboardTests(unittest.TestCase):
 
     def test_auto_paste_mode_uses_normal_for_shell_focus_with_active_normal_app(self):
         with patch(
-            "platform_keyboard._get_focused_accessible_info",
-            return_value={"role": "entry", "app_name": "Google Chrome"},
+            "platform_keyboard._sample_focus_infos",
+            return_value=[{"role": "entry", "app_name": "Google Chrome"}],
         ):
             self.assertEqual(
                 platform_keyboard._resolve_auto_paste_mode(),

@@ -178,6 +178,23 @@
 - [x] 提交并推送 `main`
 - [x] 推送 `v2.9.7` tag 触发 GitHub Actions release workflow
 - [x] 确认 Actions 成功并发布 GitHub Release 资产
+
+### 阶段 28：GNOME Wayland Auto 粘贴采样投票稳定性修复
+- [x] 调研当前 AT-SPI focused/active fallback 稳定性与 RemoteDesktop portal 能力边界
+- [x] 将 Auto 粘贴从单次明确结果决策改为 500ms 窗口采样投票
+- [x] 系统 Python AT-SPI helper 改为单进程内批量采样，避免每个样本重复启动 Python
+- [x] 补充 PC 单元测试并更新公开文档
+- [x] 运行 PC 编译、单元测试和 diff 检查
+- **状态：** complete
+
+### 阶段 29：v2.9.9 Release 发布
+- [x] 更新 PC / Android 版本号到 `2.9.9`
+- [x] 将 CHANGELOG Unreleased 内容落到 `2.9.9` 发布块
+- [x] 运行 PC 和 Android 发布前验证
+- [ ] 提交并推送 `main`
+- [ ] 推送 `v2.9.9` tag 触发 GitHub Actions release workflow
+- [ ] 确认 Actions 成功并发布 GitHub Release 资产
+- **状态：** in_progress
 - **状态：** complete
 
 ### 阶段 23：Auto Enter 可靠性修复

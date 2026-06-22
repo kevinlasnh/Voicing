@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.8-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.9-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -75,7 +75,7 @@ After a successful scan the phone remembers this PC and its candidate IP pool. O
 2. On the phone, switch to a voice keyboard and start talking
 3. The text appears on the computer
 
-On Linux/GNOME Wayland, keep the desktop paste mode on **Auto paste** for normal use. Auto paste sends Ctrl+V to normal input fields and switches to Ctrl+Shift+V when the focused app is detected as a terminal. If focus detection is temporarily unresolved, Auto paste uses Ctrl+V unless a terminal was detected very recently; switch to Terminal paste only if a specific terminal is not detected.
+On Linux/GNOME Wayland, keep the desktop paste mode on **Auto paste** for normal use. Auto paste samples focus briefly, sends Ctrl+V to normal input fields, and switches to Ctrl+Shift+V when the focused app is detected as a terminal. If focus detection is temporarily unresolved, Auto paste uses Ctrl+V unless a terminal was detected very recently; switch to Terminal paste only if a specific terminal is not detected.
 
 > **Recommended setup**: [Doubao Input](https://shurufa.doubao.com/) + [DJI Mic Mini](https://www.dji.com/mic-mini) + [DJI Mic Mobile Receiver](https://store.dji.com/product/dji-mic-series-mobile-receiver) — accurate ASR, lavalier mic plugged straight into the phone, best overall experience.
 
@@ -177,8 +177,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.8
-git push origin v2.9.8
+git tag v2.9.9
+git push origin v2.9.9
 ```
 
 Local debug builds:

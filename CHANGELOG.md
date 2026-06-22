@@ -15,6 +15,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.9] - 2026-06-22
+
+### Fixed
+
+- PC (Linux): GNOME Wayland Auto paste now samples AT-SPI focus for a 500 ms window and votes on terminal vs normal focus, reducing one-off focus glitches that could send the wrong paste shortcut
+
+### 修复
+
+- PC (Linux): GNOME Wayland 自动粘贴现在会在 500ms 窗口内采样 AT-SPI 焦点并投票判断终端/普通窗口，减少单次焦点抖动导致发错粘贴快捷键的情况
+
+---
+
 ## [2.9.8] - 2026-06-19
 
 ### Fixed

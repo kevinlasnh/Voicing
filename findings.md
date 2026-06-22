@@ -230,3 +230,14 @@
 - 当前安装入口为 `/usr/bin/voicing -> /opt/voicing/voicing`，`/opt/voicing/voicing` 存在且可执行。
 - GNOME 用户级自启文件存在：`~/.config/autostart/voicing.desktop`，内容包含 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`。
 - 当前桌面环境为 `XDG_CURRENT_DESKTOP=ubuntu:GNOME`、`DESKTOP_SESSION=ubuntu`、`XDG_SESSION_TYPE=wayland`，因此该自启文件会在 GNOME 登录后生效。GNOME Wayland RemoteDesktop 键盘授权仍可能需要用户在启动后允许。
+
+## 2026-06-22 GNOME Wayland Auto 粘贴 AT-SPI 稳定性调研
+
+- 本机原始 AT-SPI 采样显示：当前 Chrome 前台时，`FOCUSED` 连续 20 次返回 `gnome-shell/window`，真实窗口只能从 `ACTIVE` fallback 取得 Chrome。因此不能把 raw focused accessible 当作可靠焦点来源。
+- 当前 `pc/platform_keyboard.py` 封装后的 `_get_focused_accessible_info()` 会在 focused 为 shell/desktop/空 app 时扫描 active 窗口；本机 Chrome 前台 20/20 次返回 Chrome 并判定 normal，Ghostty 前台 80/80 次返回 `ghostty/frame` 并判定 terminal。
+- 现有 `_resolve_auto_paste_mode()` 是“一次明确结果立刻决策”：明确 terminal 立即返回 terminal；明确 normal 立即清 terminal cache 并返回 normal；只有 uncertain 才重试。这会让一次短暂旧窗口/错误窗口样本直接决定快捷键。
+- 推荐改造方向：用 300-500ms 小时间窗口进行多次采样，按归一化类别投票，而不是按窗口标题投票。窗口标题会变化，例如 Ghostty title 中 spinner 字符每次不同。
+- 推荐分类：`terminal`（role terminal 或 app_name 命中终端名单）、`normal`（app/role 明确且不是 shell/desktop/空值）、`uncertain`（None、gnome-shell、desktop frame/icon、空 app_name）。
+- 推荐决策：terminal 达到最小置信票数且不低于 normal 时判 terminal；normal 达到最小置信票数且高于 terminal 时判 normal；票数打平或全 uncertain 时才使用 3 秒 terminal cache，否则默认 normal。这样避免 terminal cache 覆盖已经明确识别出的普通窗口。
+- RemoteDesktop portal 官方能力只发送键盘事件，不提供“当前目标窗口/控件类型”接口；窗口类型判断仍必须来自 AT-SPI、桌面环境私有 API 或用户显式模式。GNOME Shell introspection 普通进程通常不可用，因此短期最现实方案是改进 AT-SPI 采样策略。
+- 实现时发现 venv/packaged app 通常无法 in-process 导入 `gi`，会走 `/usr/bin/python3` helper。若每个样本都启动一次系统 Python，500ms 窗口通常只能拿到 1-2 个样本；因此最终实现必须让系统 Python helper 在单个子进程内部循环采样并输出 JSON list，才是真正的窗口内多样本投票。

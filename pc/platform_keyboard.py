@@ -31,8 +31,9 @@ KEYSYM_V = 0x0076
 REMOTE_DESKTOP_DEVICE_KEYBOARD = 1
 PORTAL_REQUEST_TIMEOUT_MS = 60000
 ATSPI_FOCUS_TIMEOUT_SEC = 0.8
-ATSPI_FOCUS_PROBE_ATTEMPTS = 3
-ATSPI_FOCUS_RETRY_DELAY_SEC = 0.06
+ATSPI_FOCUS_SAMPLE_WINDOW_SEC = 0.5
+ATSPI_FOCUS_SAMPLE_INTERVAL_SEC = 0.04
+ATSPI_FOCUS_MAX_SAMPLES = 8
 TERMINAL_FOCUS_FALLBACK_CACHE_SEC = 3.0
 
 
@@ -41,6 +42,12 @@ class PasteMode(str, Enum):
     NORMAL = "normal"
     TERMINAL = "terminal"
     COMPAT = "compat"
+
+
+class _FocusKind(str, Enum):
+    TERMINAL = "terminal"
+    NORMAL = "normal"
+    UNCERTAIN = "uncertain"
 
 
 PASTE_MODE_LABELS = {
@@ -540,30 +547,83 @@ def is_current_focus_terminal() -> bool:
 
 
 def _resolve_auto_paste_mode() -> PasteMode:
-    uncertain_info: dict[str, str] | None = None
+    samples = _sample_focus_infos()
+    terminal_votes = 0
+    normal_votes = 0
+    terminal_info: dict[str, str] | None = None
 
-    for attempt in range(ATSPI_FOCUS_PROBE_ATTEMPTS):
-        info = _get_focused_accessible_info()
+    for info in samples:
+        kind = _classify_focus_info(info)
+        if kind == _FocusKind.TERMINAL:
+            terminal_votes += 1
+            terminal_info = info
+        elif kind == _FocusKind.NORMAL:
+            normal_votes += 1
 
-        if info and _is_terminal_accessible_info(info):
-            _remember_terminal_focus(info)
-            return PasteMode.TERMINAL
+    if terminal_votes > normal_votes:
+        if terminal_info:
+            _remember_terminal_focus(terminal_info)
+        return PasteMode.TERMINAL
 
-        if _is_uncertain_focus_info(info):
-            uncertain_info = info
-            if attempt < ATSPI_FOCUS_PROBE_ATTEMPTS - 1:
-                time.sleep(ATSPI_FOCUS_RETRY_DELAY_SEC)
-                continue
-            break
-
+    if normal_votes > terminal_votes:
         _clear_terminal_focus_cache()
         return PasteMode.NORMAL
 
-    if _is_uncertain_focus_info(uncertain_info) and _has_recent_terminal_focus(TERMINAL_FOCUS_FALLBACK_CACHE_SEC):
-        return PasteMode.TERMINAL
-    if _is_uncertain_focus_info(uncertain_info):
-        _clear_terminal_focus_cache()
+    if terminal_votes == normal_votes:
+        if _has_recent_terminal_focus(TERMINAL_FOCUS_FALLBACK_CACHE_SEC):
+            return PasteMode.TERMINAL
+
+    _clear_terminal_focus_cache()
     return PasteMode.NORMAL
+
+
+def _sample_focus_infos() -> list[dict[str, str] | None]:
+    samples = _sample_focus_infos_in_process()
+    if samples:
+        return samples
+    samples = _sample_focus_infos_from_system_python()
+    if samples:
+        return samples
+    return [_get_focused_accessible_info()]
+
+
+def _sample_focus_infos_in_process() -> list[dict[str, str] | None]:
+    try:
+        import gi
+
+        gi.require_version("Atspi", "2.0")
+        from gi.repository import Atspi
+    except Exception:
+        return []
+    return _collect_focus_samples(lambda: _scan_atspi_desktop(Atspi))
+
+
+def _collect_focus_samples(probe) -> list[dict[str, str] | None]:
+    samples: list[dict[str, str] | None] = []
+    deadline = time.monotonic() + ATSPI_FOCUS_SAMPLE_WINDOW_SEC
+
+    while len(samples) < ATSPI_FOCUS_MAX_SAMPLES:
+        try:
+            samples.append(probe())
+        except Exception:
+            samples.append(None)
+
+        if len(samples) >= ATSPI_FOCUS_MAX_SAMPLES:
+            break
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            break
+        time.sleep(min(ATSPI_FOCUS_SAMPLE_INTERVAL_SEC, remaining))
+
+    return samples
+
+
+def _classify_focus_info(info: dict[str, str] | None) -> _FocusKind:
+    if info and _is_terminal_accessible_info(info):
+        return _FocusKind.TERMINAL
+    if _is_uncertain_focus_info(info):
+        return _FocusKind.UNCERTAIN
+    return _FocusKind.NORMAL
 
 
 def _remember_terminal_focus(info: dict[str, str]) -> None:
@@ -595,11 +655,17 @@ def _normalize_terminal_app_name(value: str) -> str:
     return normalized
 
 
-def _get_focused_accessible_info() -> dict[str, str] | None:
+def _get_focused_accessible_info(deadline: float | None = None) -> dict[str, str] | None:
     info = _get_focused_accessible_info_in_process()
     if info is not None:
         return info
-    return _get_focused_accessible_info_from_system_python()
+    return _get_focused_accessible_info_from_system_python(timeout_sec=_remaining_atspi_timeout(deadline))
+
+
+def _remaining_atspi_timeout(deadline: float | None) -> float:
+    if deadline is None:
+        return ATSPI_FOCUS_TIMEOUT_SEC
+    return max(0.05, min(ATSPI_FOCUS_TIMEOUT_SEC, deadline - time.monotonic()))
 
 
 def _get_focused_accessible_info_in_process() -> dict[str, str] | None:
@@ -616,29 +682,50 @@ def _get_focused_accessible_info_in_process() -> dict[str, str] | None:
         return None
 
 
-def _get_focused_accessible_info_from_system_python() -> dict[str, str] | None:
+def _get_focused_accessible_info_from_system_python(timeout_sec: float | None = None) -> dict[str, str] | None:
+    samples = _sample_focus_infos_from_system_python(timeout_sec=timeout_sec, single_sample=True)
+    if not samples:
+        return None
+    return samples[0]
+
+
+def _sample_focus_infos_from_system_python(
+    timeout_sec: float | None = None,
+    single_sample: bool = False,
+) -> list[dict[str, str] | None]:
     python = _find_system_python_with_atspi()
     if not python:
-        return None
+        return []
+    if timeout_sec is None:
+        timeout_sec = ATSPI_FOCUS_SAMPLE_WINDOW_SEC + ATSPI_FOCUS_TIMEOUT_SEC
+    helper = _ATSPI_SINGLE_FOCUS_HELPER if single_sample else _ATSPI_FOCUS_SAMPLE_HELPER
     try:
         result = subprocess.run(
-            [python, "-c", _ATSPI_FOCUS_HELPER],
+            [python, "-c", helper],
             text=True,
             capture_output=True,
             env=system_subprocess_env(),
-            timeout=ATSPI_FOCUS_TIMEOUT_SEC,
+            timeout=timeout_sec,
             check=False,
         )
     except Exception:
-        return None
+        return []
     if result.returncode != 0 or not result.stdout.strip():
-        return None
+        return []
     try:
         data = json.loads(result.stdout)
     except Exception:
-        return None
-    if not isinstance(data, dict):
-        return None
+        return []
+    if single_sample:
+        if not isinstance(data, dict):
+            return []
+        return [_normalize_accessible_info(data)]
+    if not isinstance(data, list):
+        return []
+    return [_normalize_accessible_info(item) if isinstance(item, dict) else None for item in data]
+
+
+def _normalize_accessible_info(data: dict[str, Any]) -> dict[str, str]:
     return {
         "app_name": str(data.get("app_name", "")),
         "role": str(data.get("role", "")),
@@ -770,12 +857,17 @@ def _accessible_info(Atspi, accessible) -> dict[str, str]:
     return {"app_name": app_name, "role": role, "name": name}
 
 
-_ATSPI_FOCUS_HELPER = r"""
+_ATSPI_FOCUS_HELPER_COMMON = r"""
 import json
+import time
 import gi
 
 gi.require_version("Atspi", "2.0")
 from gi.repository import Atspi
+
+SAMPLE_WINDOW_SEC = 0.5
+SAMPLE_INTERVAL_SEC = 0.04
+MAX_SAMPLES = 8
 
 def info(accessible):
     app_name = ""
@@ -853,12 +945,13 @@ def find_active(root, max_depth=4):
                 pass
     return None
 
-desktop = Atspi.get_desktop(0)
-focused = find_focused(desktop)
-focused_info = info(focused) if focused is not None else None
-if focused_info and is_terminal(focused_info):
-    print(json.dumps(focused_info))
-else:
+def scan_desktop():
+    desktop = Atspi.get_desktop(0)
+    focused = find_focused(desktop)
+    focused_info = info(focused) if focused is not None else None
+    if focused_info and is_terminal(focused_info):
+        return focused_info
+
     app_name = ""
     role = ""
     if focused_info:
@@ -875,11 +968,31 @@ else:
     if use_active_fallback:
         active = find_active(desktop)
         if active is not None:
-            print(json.dumps(info(active)))
-        elif focused_info:
-            print(json.dumps(focused_info))
-    elif focused_info:
-        print(json.dumps(focused_info))
+            return info(active)
+        return focused_info
+    return focused_info
+"""
+
+
+_ATSPI_SINGLE_FOCUS_HELPER = _ATSPI_FOCUS_HELPER_COMMON + r"""
+result = scan_desktop()
+if result is not None:
+    print(json.dumps(result))
+"""
+
+
+_ATSPI_FOCUS_SAMPLE_HELPER = _ATSPI_FOCUS_HELPER_COMMON + r"""
+samples = []
+deadline = time.monotonic() + SAMPLE_WINDOW_SEC
+while len(samples) < MAX_SAMPLES:
+    samples.append(scan_desktop())
+    if len(samples) >= MAX_SAMPLES:
+        break
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        break
+    time.sleep(min(SAMPLE_INTERVAL_SEC, remaining))
+print(json.dumps(samples))
 """
 
 

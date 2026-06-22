@@ -901,5 +901,58 @@
   - 本机已安装最新 `v2.9.8` deb。
   - GNOME 登录后自动启动已配置好；这不是系统服务级开机前启动，仍属于用户登录后的 autostart。
 
+## 会话：2026-06-22 CST — Auto 粘贴 AT-SPI 稳定性调研
+
+### GNOME Wayland 自动识别逻辑复查
+- **状态：** complete，未改代码
+- 用户反馈：当前自动粘贴仍不够稳定，要求先调研现有自动识别逻辑及改法。
+- 执行的操作：
+  - 阅读 `pc/platform_keyboard.py` 中 `PasteMode`、`_resolve_wayland_paste_sequence()`、`_resolve_auto_paste_mode()`、AT-SPI in-process/system-python helper、active fallback 和 terminal cache 逻辑。
+  - 阅读 `pc/voice_coding.py` 中托盘粘贴模式切换逻辑，确认菜单仅循环切换 Auto/Normal/Terminal/Compat。
+  - 本机采样 raw AT-SPI：Chrome 前台时 `FOCUSED` 连续返回 `gnome-shell/window`，`ACTIVE` 返回 Chrome。
+  - 本机采样项目封装后的 `_get_focused_accessible_info()`：Chrome 前台 20/20 返回 Chrome/normal；Ghostty 前台 80/80 返回 ghostty/terminal，单次耗时约 289-575ms。
+  - 联网查阅 AT-SPI/GNOME/RemoteDesktop portal 资料，确认 portal 只负责键盘事件，不能提供目标窗口类型；GNOME 私有窗口 introspection 不适合作为普通应用默认方案。
+- 调研结论：
+  - AT-SPI raw focused 不是稳定真相；当前 active fallback 在本机常用应用中有效，但“一次明确结果立刻决策”仍容易被短暂旧窗口/错误窗口影响。
+  - 推荐把 `_resolve_auto_paste_mode()` 改成小时间窗口采样 + terminal/normal/uncertain 分类投票，保留 terminal cache 作为打平/全不确定兜底。
+
+## 会话：2026-06-22 CST — GNOME Wayland Auto 粘贴采样投票实现
+
+### 500ms 窗口采样投票
+- **状态：** complete，未提交
+- 用户确认采用 500ms 时间窗口，在稳定基础上窗口内能采几次采几次，并要求实现和测试。
+- 执行的操作：
+  - 修改 `pc/platform_keyboard.py`：
+    - 新增 500ms AT-SPI 采样窗口、40ms 采样间隔、最多 8 个样本。
+    - `_resolve_auto_paste_mode()` 改为对 `terminal` / `normal` / `uncertain` 分类投票，terminal 多数走 `Ctrl+Shift+V`，normal 多数走 `Ctrl+V`。
+    - 票数打平或全不确定时保留 3 秒 terminal cache 作为兜底；明确 normal 多数会清 terminal cache。
+    - 系统 Python AT-SPI helper 改为一次子进程内循环采样并输出 JSON list，避免每个样本重复启动 Python 导致 500ms 窗口实际只能采到 1 次。
+  - 更新 `pc/tests/test_platform_keyboard.py`，覆盖 terminal 多数、normal 多数、打平使用 terminal cache、系统 helper 多样本解析、采样窗口 max samples 等路径。
+  - 更新 `CHANGELOG.md`、`README.md`、`README.zh-CN.md`、`android/README.md`、`android/README.zh-CN.md`。
+- 验证结果：
+  - `.venv/bin/python -m unittest pc.tests.test_platform_keyboard`：45 tests OK。
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：105 tests OK。
+  - `git diff --check`：通过。
+  - 本机 sanity check：系统 Python helper 单次进程内采到 3 个 Ghostty 样本，Auto 判定 terminal；当前安装版 `/opt/voicing/voicing` 正在运行并占用 9527，因此未启动源码版覆盖用户当前会话。
+
+## 会话：2026-06-22 CST — v2.9.9 Release 发布准备
+
+### 版本同步与发布前验证
+- **状态：** in_progress
+- 用户要求推送 Actions，并确认 Android 代码是否更新。
+- 结论：Android 业务代码未更新；本次只改了 Android README 文档和 `android/voice_coding/pubspec.yaml` 版本元数据，以便 release 产物版本同步到 `2.9.9+10`。
+- 执行的操作：
+  - `CHANGELOG.md` 新增 `2.9.9` 发布块。
+  - `pc/voice_coding.py` `APP_VERSION` 更新为 `2.9.9`。
+  - `android/voice_coding/pubspec.yaml` 更新为 `2.9.9+10`。
+  - README / README.zh-CN 版本徽章和 tag 示例更新为 `v2.9.9`。
+- 发布前验证结果：
+  - `.venv/bin/python -m py_compile pc/voice_coding.py pc/platform_utils.py pc/platform_keyboard.py pc/platform_autostart.py pc/platform_instance.py pc/network_recovery.py pc/voicing_protocol.py pc/device_identity.py pc/tests/test_platform_keyboard.py pc/tests/test_voice_coding_server.py`：通过。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：105 tests OK。
+  - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
+  - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
+  - `git diff --check`：通过。
+
 ---
 *每个阶段完成后或遇到错误时更新此文件*
