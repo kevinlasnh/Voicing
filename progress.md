@@ -939,7 +939,7 @@
 ## 会话：2026-06-22 CST — v2.9.9 Release 发布准备
 
 ### 版本同步与发布前验证
-- **状态：** in_progress
+- **状态：** complete
 - 用户要求推送 Actions，并确认 Android 代码是否更新。
 - 结论：Android 业务代码未更新；本次只改了 Android README 文档和 `android/voice_coding/pubspec.yaml` 版本元数据，以便 release 产物版本同步到 `2.9.9+10`。
 - 执行的操作：
@@ -953,6 +953,23 @@
   - `~/development/flutter-3.27.0/bin/flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
   - `~/development/flutter-3.27.0/bin/flutter test`：24 tests passed。
   - `git diff --check`：通过。
+- 提交与推送：
+  - 提交：`d57313b Release v2.9.9 paste stability`
+  - 已推送 `main`：远端 `refs/heads/main` 指向 `d57313be0c19082b6bf2cd0e5ae63be44b9d2ea4`。
+  - 已推送 tag：`v2.9.9`，远端 `refs/tags/v2.9.9` 指向同一提交。
+- Actions 结果：
+  - Run ID：`27927791710`
+  - URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27927791710`
+  - 结论：success。
+- 发布页面：
+  - `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.9`
+- 已确认 Release assets：
+  - `voicing.apk`
+  - `voicing-linux-amd64.deb`
+  - `voicing-linux-x86_64`
+  - `voicing-windows-x64.exe`
+  - `voicing-macos-arm64.dmg`
+  - `SHA256SUMS.txt`
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*

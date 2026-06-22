@@ -241,3 +241,11 @@
 - 推荐决策：terminal 达到最小置信票数且不低于 normal 时判 terminal；normal 达到最小置信票数且高于 terminal 时判 normal；票数打平或全 uncertain 时才使用 3 秒 terminal cache，否则默认 normal。这样避免 terminal cache 覆盖已经明确识别出的普通窗口。
 - RemoteDesktop portal 官方能力只发送键盘事件，不提供“当前目标窗口/控件类型”接口；窗口类型判断仍必须来自 AT-SPI、桌面环境私有 API 或用户显式模式。GNOME Shell introspection 普通进程通常不可用，因此短期最现实方案是改进 AT-SPI 采样策略。
 - 实现时发现 venv/packaged app 通常无法 in-process 导入 `gi`，会走 `/usr/bin/python3` helper。若每个样本都启动一次系统 Python，500ms 窗口通常只能拿到 1-2 个样本；因此最终实现必须让系统 Python helper 在单个子进程内部循环采样并输出 JSON list，才是真正的窗口内多样本投票。
+
+## 2026-06-22 v2.9.9 Release 发布结果
+
+- `v2.9.9` tag 指向 commit `d57313b Release v2.9.9 paste stability`，已推送并触发 GitHub Actions release workflow。
+- GitHub Actions run `27927791710` 成功完成，URL：`https://github.com/kevinlasnh/Voicing/actions/runs/27927791710`。
+- GitHub Release 已发布：`https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.9`。
+- Release 资产已确认齐全：`voicing.apk`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`SHA256SUMS.txt`。
+- Android 业务代码本次未更新；Android 侧只同步了 README 文档和 `pubspec.yaml` 版本元数据到 `2.9.9+10`。
