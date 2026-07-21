@@ -85,6 +85,12 @@
 *每执行2次查看/浏览器/搜索操作后更新此文件*
 *防止视觉信息丢失*
 
+## 2026-07-21 冷启动 terminal 首次粘贴误判待验证现象
+
+- 用户现场现象：GNOME Wayland 登录/开机后的首次手机语音文本，如果此前没有在 terminal 手动执行过 Ctrl+Shift+V，会被 Voicing 按 Ctrl+V 路径发送；同一会话后续第二、第三次仍持续误判。
+- 用户观察到的恢复条件：先在 terminal 手动执行一次 Ctrl+Shift+V 并粘贴任意文本后，再使用 Voicing 时可正确走 terminal 粘贴行为。
+- 当前仅把上述内容视为待验证现场证据；需要分别排查 AT-SPI 可访问性就绪、焦点/active fallback、500ms 投票、terminal cache、RemoteDesktop portal modifier 状态及剪贴板首次 owner 建立等机制。
+
 ## 2026-06-18 GNOME Wayland 托盘改造与 portal 输入修复
 
 - 决策：Linux 托盘改用系统原生 `QMenu`，自定义 Fluent 菜单仅 Windows/macOS 保留。原因：自定义 `Qt.Popup` 菜单在 GNOME/Wayland 下有定位（GNOME 顶栏方向与 Windows 底部任务栏相反）、半透明+`QGraphicsDropShadowEffect` 黑块、Esc 失焦、`QSystemTrayIcon.geometry()` 无效等一堆问题；上次 `c2bcf71` 同时设 `setContextMenu` + Context 触发自定义菜单导致右键弹两个菜单。改原生菜单后这些问题随架构切换自动消失。
@@ -256,3 +262,17 @@
 - 记录进度前复核显示本机已经安装新版：`dpkg-query` 为 `voicing 2.9.9 install ok installed`，`/usr/bin/voicing` 可用，`/opt/voicing` 存在。
 - 当前有新版 `/opt/voicing/voicing` 进程在运行，GNOME 用户级自启文件已恢复并指向 `/opt/voicing/voicing`。
 - 用户数据和日志未被删除。
+
+## 2026-07-21 冷启动 terminal 粘贴误判 Heavy Research 综合发现
+
+- 当前源码没有 normal 判定的持久缓存：每次发送都会重新采样；只有 terminal-majority 会建立约 3 秒 terminal cache。后续持续 Ctrl+V 更可能是每轮重复得到稀疏 normal/uncertain，或故障位于 portal modifier/terminal 消费层。
+- AUTO 投票会忽略 uncertain：1 个 normal 加 7 个 uncertain 仍返回 NORMAL，全 uncertain 且无 terminal cache 也返回 NORMAL。最多 8 个样本、40ms 间隔在快速扫描时约 280ms 即结束，500ms 只是上限。
+- 首次 portal backend 会先完成 CreateSession/SelectDevices/Start，再执行 AUTO 焦点采样；首次授权或 GNOME Shell 接管焦点可能形成首发专属竞争窗口。
+- in-process AT-SPI 返回 8 个 `None` 时不会尝试 system Python；system helper 的 import、超时、stderr、return code 和 JSON 错误又会静默折叠为空样本。打包 DEB 未声明 `python3-gi`/AT-SPI GIR 依赖，自启动也没有 readiness gate。
+- 手动物理 Ctrl+Shift+V 不经过 Voicing listener，不能直接修改粘贴模式、terminal cache 或 portal session；它更可能间接改变焦点、AT-SPI accessible 状态或只是消耗了就绪时间，但当前证据无法确定真正刺激。
+- 外部平台资料确认 AT-SPI cold readiness 涉及 accessibility bus、registry、应用注册、cache 和焦点事件；RemoteDesktop portal 只逐键发送事件，不提供目标控件类型，也没有官方要求先人工粘贴一次。
+- 首选解决路线不是简单延长 500ms，也不是 unknown 全部改成 terminal，更不能先发 Ctrl+V 再补发 Ctrl+Shift+V。应先增加 attempt 级诊断，再把 AUTO 保留为 terminal/normal/unresolved 三态，在 unresolved 时做有界 readiness 重采样，并比较 portal Start 前后焦点。
+- 关键未裁决点：失败时最终 sequence 究竟是 Ctrl+V，还是 Ctrl+Shift+V 已选择但 Shift 未生效。deployment plan 必须先采集 raw samples、helper 状态、最终 mode、portal press/release 序列和冷启动对照，不能把单一根因当成已确认事实。
+- 用户已接受上述关键缺口。最终 deployment plan 将修复拆成互斥证据分支：日志确认 Ctrl+V 才改 classifier，确认 Ctrl+Shift+V 但 Shift 未生效才改 portal chord，确认 selection owner 失败才改 clipboard。
+- AUTO 目标策略确定为三态：可靠 terminal、可靠 normal、unresolved。unresolved 在总预算内重采样，超时不发任何粘贴快捷键，并沿现有失败 ACK 保留 Android 端文本。
+- 发布门槛确定为至少 10 次干净 GNOME 登录零误判，同时保护普通窗口、剪贴板恢复、modifier 释放和非 Wayland 平台行为。

@@ -109,4 +109,5 @@ AGENTS.md
 
 # Local agent memory / investigation artifacts
 .brv/
+.workflows/
 .tmp/

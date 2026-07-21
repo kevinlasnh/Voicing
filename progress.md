@@ -999,3 +999,28 @@
 
 ---
 *每个阶段完成后或遇到错误时更新此文件*
+
+## 会话：2026-07-21 CST — GNOME Wayland 冷启动 terminal 粘贴误判重型调研
+
+### Heavy Research 启动
+- **状态：** in_progress
+- 用户报告：开机后若未先在 terminal 手动触发一次 Ctrl+Shift+V，手机首次发送文本会走 Ctrl+V，且后续发送持续走 Ctrl+V。
+- 已按 heavy-research 流程完成阶段 A 范围确认，限定为当前仓库的 GNOME Wayland PC 输入链路；本轮先调研并形成 deployment plan，不直接修改业务代码。
+- 已创建会话目录 `.workflows/2026-07-21-175636/`，准备并行调查联网、源码和长期记忆三个维度。
+
+### Heavy Research 三维取证与校验
+- **状态：** complete，等待阶段 C 用户确认
+- 并行完成 `web.md`、`source.md`、`memory.md`；三份报告的 `run_id` 均为 `2026-07-21-175636`。
+- 联网报告首轮因一处代码参数使用省略号而触发格式校验失败，按流程自动重跑一次后通过。
+- 三份报告均覆盖 12/12 叶节点，子问题优先级、三个必需小节、置信度、元数据和占位符检查全部通过。
+- 已综合出首选方向：先补无文本内容的结构化诊断，随后采用 tri-state readiness gate、有界重采样和 portal 建会话前后成对采样；保留显式粘贴模式作为降级，不双发快捷键。
+- 当前关键缺口：尚无现场日志证明失败时程序实际选择的是 Ctrl+V，还是选择 Ctrl+Shift+V 后 Shift 在 portal/terminal 侧未生效；必须在 deployment plan 中作为先诊断再修复的门槛。
+
+### Deployment plan 生成与阶段收尾
+- **状态：** complete
+- 用户已明确接受 P0/P1 关键缺口，并授权生成 deployment plan、记录进度和 push。
+- 已按 Heavy Research 阶段 D 模板生成 `.workflows/2026-07-21-175636/deployment-plan.md`。
+- 计划采用诊断优先的分支部署：先记录 raw AT-SPI samples、helper 状态、最终 sequence 和 portal press/release；再根据证据只进入 classifier、portal chord 或 clipboard 中的一个修复分支。
+- 计划明确禁止 unknown 全局默认为 terminal、禁止 Ctrl+V 与 Ctrl+Shift+V 双发；unresolved 超时改为保留 Android 文本并使用显式粘贴模式降级。
+- 计划包含 13 个执行分支、逐步回滚、权限/数据/依赖风险，以及 10 次干净 GNOME 登录的实机验收门槛。
+- 模板校验通过：无尖括号或省略号占位；所有可逆性和风险等级字段合法；`git diff --check` 待提交前统一执行。

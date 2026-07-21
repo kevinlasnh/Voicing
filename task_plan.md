@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 30（complete）
+阶段 31（complete）
 
 ## 各阶段
 
@@ -246,6 +246,13 @@
 - [x] 确认当前桌面为 GNOME，会匹配 autostart 的 `OnlyShowIn=GNOME`
 - **状态：** complete
 
+### 阶段 31：GNOME Wayland 冷启动 terminal 首次粘贴误判重型调研
+- [x] 建立 Heavy Research 会话与统一调研提纲
+- [x] 并行完成联网、源码和长期记忆三维调研
+- [x] 校验调研报告并综合根因、方案与关键缺口
+- [x] 用户确认调研摘要后生成 deployment plan
+- **状态：** complete
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -271,6 +278,7 @@
 | GitHub Actions Linux release job 在 headless runner 中 Qt `xcb` 初始化失败 | 1 | Linux release job 和托盘测试设置 `QT_QPA_PLATFORM=offscreen`，本地 88 项 PC 测试通过 |
 | 已发布 `v2.9.5` deb 在 GNOME Wayland 下误报 RemoteDesktop portal 键盘能力不可用 | 1 | 清理 PyInstaller 打包态调用系统命令时的 `LD_LIBRARY_PATH`，并发布 `v2.9.6` |
 | `v2.9.6` 首次 release run 中 macOS `Create DMG` 报 `hdiutil: create failed - Resource busy` | 1 | 使用 GitHub Actions failed-job rerun 后通过，判断为 macOS runner 临时资源占用 |
+| Heavy Research 联网报告首轮含省略号占位 | 1 | 按相同维度 prompt 自动重跑，第二轮通过 12/12 结构与占位符校验 |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。
