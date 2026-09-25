@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 36（in_progress）
+阶段 37（in_progress）
 
 ## 各阶段
 
@@ -306,8 +306,23 @@
 - [x] 同步 CHANGELOG、双语文档与版本号到 2.9.12
 - [x] 更新 PWF 并提交推送 main（`72ef1c5`）
 - [x] 推送 v2.9.12 tag；Actions run `36141549843` 6/6 job 全绿，Release 六项资产齐全
-- [ ] 用户安装新 APK 并在开启 Tailscale 的情况下实测
-- **状态：** in_progress（等待用户实机验证）
+- [x] 用户安装新 APK 实测：Tailscale 开启时仍未连通，暴露出「Android 禁止绕过 VPN」场景必须走隧道
+- **状态：** complete（问题转入阶段 37）
+
+### 阶段 37：Tailscale 双通道连接修复与 v2.9.13 发布
+- [x] 定位真正根因：PC 上 Tailscale 正在运行（`100.102.136.4`），但 `tailscale0` 被三重过滤排除在 QR 与监听之外
+- [x] 联网核实 Android 9+ `setUnderlyingNetworks()` 传播行为与 Tailscale 侧已知限制
+- [x] PC 端经 `tailscale` CLI 读 CGNAT 地址，作为兜底候选追加到服务接口（局域网地址仍优先）
+- [x] `refresh_server_interfaces()` 接入追加逻辑，QR payload 与 WebSocket 绑定同时生效
+- [x] Android 端对 `100.64.0.0/10` 目标改用系统默认网络（VPN 隧道），不再绑定 WiFi
+- [x] 新增 6 个 PC 单元测试并跑通全量（92 tests OK）
+- [x] 本地构建 debug APK 验证 Kotlin 编译；flutter analyze 0 / flutter test 24 passed
+- [x] 同步 CHANGELOG、双语文档与版本号到 2.9.13
+- [ ] 更新 PWF 并提交推送 main
+- [ ] 推送 v2.9.13 tag 并确认 Actions 与 Release 资产
+- [ ] 本机安装 v2.9.13 deb 并重启 Voicing
+- [ ] 用户安装新 APK 实测 Tailscale 连接
+- **状态：** in_progress
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
@@ -328,6 +343,9 @@
 | Android 选网从「过滤」改为「分级」 | 硬要求「非 VPN」会让任何 VPN 一开就完全不可用；分级能在保持 WiFi 优先的同时不被 VPN 状态阻断 |
 | 找不到 WiFi 候选时回退 `activeNetwork` 而不是立即失败 | 立即失败让问题无法诊断；回退至少能连通，并把真实原因写进日志 |
 | 本次 PC 端不改动，只同步版本号 | 改动 100% 在 Android 原生层；PC 端没有更新提示逻辑，用户无需重装 |
+| Tailscale 地址经 CLI 读取而不是放开网卡过滤 | 放开三处过滤（VPN 名单、is_private、/32 前缀）会波动物理网卡选择这一被多个 release 修过的逻辑；CLI 读取是纯追加，零回归风险 |
+| Tailscale 地址排在局域网地址之后 | 保持 QR 首选与既有行为不变，只在「Android 禁止绕过 VPN」时才走隧道 |
+| Android 对 Tailscale 目标不绑定 WiFi | 该地址只能经隧道到达，绑定物理 WiFi 必然失败 |
 
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |

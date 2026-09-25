@@ -174,12 +174,23 @@ class MainActivity : FlutterActivity() {
             } catch (_: Exception) {
                 null
             }
-            // 2026-09-25：先按 WiFi 分级挑网络；实在没有任何 WiFi 候选时，
-            // 退回系统默认网络（activeNetwork）而不是立刻失败。用户开启
-            // Tailscale 等 VPN 后，原来「非物理 WiFi 就直接报错」的行为会让
-            // 连接完全不可用，这里改成尽量连上，并把失败原因留给后续日志。
-            val wifiNetwork = findCurrentWifiNetwork(connectivityManager, targetHost)
-            val network = wifiNetwork ?: connectivityManager.activeNetwork
+            // 2026-09-25：按目标地址分两种选路方式。
+            // 1) Tailscale CGNAT 目标（100.64.0.0/10）：PC 端现在会把 Tailscale 地址
+            //    作为兜底候选写进 QR。这类地址只能经 VPN 隧道到达，绝不能绑定物理
+            //    WiFi，否则连接必然失败；此时直接用系统默认网络（即隧道）。
+            // 2) 其它目标：先按 WiFi 分级挑网络，完全没有 WiFi 候选时退回
+            //    activeNetwork，而不是像旧实现那样直接报错结束。
+            val tailscaleTarget = isTailscaleCgnatHost(targetHost)
+            val network = if (tailscaleTarget) {
+                Log.i(
+                    logTag,
+                    "Target $targetHost is in the Tailscale CGNAT range; using the default network (VPN tunnel)"
+                )
+                connectivityManager.activeNetwork
+            } else {
+                findCurrentWifiNetwork(connectivityManager, targetHost)
+                    ?: connectivityManager.activeNetwork
+            }
             if (network == null) {
                 emitEvent(
                     id,
@@ -189,13 +200,11 @@ class MainActivity : FlutterActivity() {
                 cleanupConnection(id)
                 return id
             }
-            if (wifiNetwork == null) {
-                Log.w(
-                    logTag,
-                    "No WiFi candidate for target=$targetHost; falling back to activeNetwork=$network " +
-                        describeCapabilities(connectivityManager.getNetworkCapabilities(network))
-                )
-            }
+            Log.i(
+                logTag,
+                "Selected network=$network for target=$targetHost tailscaleTarget=$tailscaleTarget " +
+                    describeCapabilities(connectivityManager.getNetworkCapabilities(network))
+            )
             openWifiBoundWebSocket(id, url, timeoutMs, network, connectivityManager)
         } catch (error: Exception) {
             emitEvent(
@@ -357,6 +366,23 @@ class MainActivity : FlutterActivity() {
             ((bytes[1].toInt() and 0xff) shl 16) or
             ((bytes[2].toInt() and 0xff) shl 8) or
             (bytes[3].toInt() and 0xff)
+    }
+
+    /**
+     * 2026-09-25 新增：判断目标地址是否属于 Tailscale 使用的 100.64.0.0/10（CGNAT）段。
+     *
+     * PC 端现在把 Tailscale 地址作为兜底候选写入 QR payload。手机在 VPN lockdown
+     * 模式下无法绕过 VPN 访问局域网，但走隧道可以到达该地址，因此这类目标必须使用
+     * 系统默认网络（VPN），而不能绑定物理 WiFi —— 否则连接必然失败。
+     */
+    private fun isTailscaleCgnatHost(host: String?): Boolean {
+        val address = parseIpv4Address(host) ?: return false
+        val value = ipv4ToInt(address)
+        // 100.64.0.0/10（RFC 6598 共享地址段）：
+        // 掩码 0xFFC00000 的有符号 Int 表示为 -4194304，基址 0x64400000 即 100.64.0.0。
+        val cgnatMask = -4194304
+        val cgnatBase = 0x64400000
+        return (value and cgnatMask) == cgnatBase
     }
 
     private fun openWifiBoundWebSocket(

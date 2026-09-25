@@ -15,6 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.13] - 2026-09-25
+
+### Fixed
+
+- PC (Linux/Windows/macOS): the Tailscale IPv4 address is now advertised in the QR payload and bound by the WebSocket server as a fallback candidate, after the local network addresses. `tailscale0` was previously filtered out three times over (interface name matched the VPN prefix list, `100.64.0.0/10` is not reported as private, and the `/32` prefix is outside the accepted `1..30` range), so the phone had no route to the desktop once the VPN was active
+- Android: a target inside the Tailscale CGNAT range (`100.64.0.0/10`) is now reached through the system default network instead of a WiFi-bound socket, because that address is only reachable through the VPN tunnel
+- Android: network selection for other targets is unchanged from v2.9.12 (ranked WiFi candidates plus an `activeNetwork` fallback)
+- Combined effect: without a VPN the phone uses the LAN address; with a VPN that permits bypass it still uses the LAN address; with Android's "Block connections without VPN" enabled it uses the Tailscale address over the tunnel
+
+### 修复
+
+- PC (Linux/Windows/macOS): Tailscale IPv4 地址现在会写进 QR payload，并由 WebSocket 服务器一并绑定，排在局域网地址之后作为兜底候选。此前 `tailscale0` 会被三重过滤挡掉（接口名命中 VPN 前缀、`100.64.0.0/10` 不被判定为 private、`/32` 前缀超出允许的 `1..30` 范围），导致 VPN 一开手机就完全无路可走
+- Android: 目标落在 Tailscale CGNAT 段（`100.64.0.0/10`）时改用系统默认网络，而不是绑定 WiFi 的 socket，因为该地址只能经 VPN 隧道到达
+- Android: 其它目标的选路逻辑与 v2.9.12 一致（WiFi 候选分级 + `activeNetwork` 兜底）
+- 综合效果：未开 VPN 时走局域网地址；开了 VPN 且允许绕过时仍走局域网地址；开了 Android「阻止不经过 VPN 的连接」时走 Tailscale 隧道地址
+
+### Notes
+
+- Requires the phone to be signed in to the same tailnet as the desktop. If the desktop has no `tailscale` CLI available, behaviour is exactly as before.
+- Only the Android APK and the desktop build need updating; the wire protocol is unchanged.
+
+### 说明
+
+- 需要手机与电脑登录同一个 tailnet。若电脑上没有可用的 `tailscale` 命令，行为与改动前完全一致。
+- 通信协议未变，更新桌面端与 Android APK 即可。
+
+---
+
 ## [2.9.12] - 2026-09-25
 
 ### Fixed

@@ -589,3 +589,12 @@
 - Android 9 起，VPN 应用调用 `setUnderlyingNetworks()` 后系统会把底层网络的 transports/capabilities 传播给 VPN 网络，因此 `TRANSPORT_WIFI` 不再专属于物理网络，`TRANSPORT_WIFI && TRANSPORT_VPN` 可以同时出现在一个网络对象上。[联网·Android 9 行为变更文档·confirmed]
 - Tailscale 侧有三个相关已知限制：Android 的 "Block connections without VPN" 会阻止本地设备访问（tailscale#13407）；exit node 模式下 "Allow LAN access" 开关会消失或失效（tailscale#16187、#17720）；官方另有 "Can't connect to local area network" 故障排查页。也就是说「VPN 开着还能连局域网」在部分配置下本身就是 Tailscale/Android 的限制，不是应用能单方面解决的。[联网·confirmed]
 - 结论：应用侧能做到的是「不再因为 VPN 而拒绝连接」——分级选网 + activeNetwork 回退 + 可诊断日志；做不到的是绕过 Android 的 VPN lockdown，那属于系统安全特性。[源码 + 联网·confirmed]
+
+## 2026-09-25 Tailscale 阻断 Voicing 连接的真正根因（v2.9.12 未解决）
+
+- v2.9.12 的分级选网只覆盖「Android 允许 socket 绕过 VPN」的情形；用户实测在 Tailscale 开启时仍连不上，说明其环境属于「禁止绕过」。[用户实测·confirmed]
+- 关键事实：**PC 本身就在 tailnet 里** —— `tailscale status` 显示 `100.102.136.4 kevinlasnh-thinkpad-x13-gen-4 linux -`，本机存在 `tailscale0 100.102.136.4/32` 接口。而 Voicing 只监听 `192.168.50.113:9527`。[本地命令输出·confirmed]
+- 三重过滤把 `tailscale0` 完全排除（`pc/voice_coding.py`）：`_is_vpn_or_virtual_interface()` 的 `unix_vpn_prefixes` 含 `"tailscale"`；`_is_discoverable_private_ip()` 里 `100.64.0.0/10` 的 `is_private` 为 False（Python `ipaddress` 不把 CGNAT 段算作 private）；前缀长度要求 `1..30` 而 tailscale0 是 `/32`。[源码 + 本地 Python 验证·confirmed]
+- 所以「开了 VPN 还能连」的唯一可行通道是 Tailscale 隧道，而该通道在改动前既不在 QR 里也不在监听地址里 —— 这是 v2.9.5 起的长期缺口，只是此前没人把 PC 侧 Tailscale 与手机侧 VPN 联系起来。[源码·confirmed]
+- 选型结论：用 `tailscale ip -4` 读地址做**纯追加**，而不是放开三处过滤。原因是网络接口排序被 v2.9.5–v2.9.11 多个 release 专门修过（stale IP、bound-IP 安全、macOS 分类、VPN 路由），大改风险高；追加方式保持局域网优先且零回归。[工程决策]
+- Android 侧对 `100.64.0.0/10` 目标必须使用默认网络：该地址只能经隧道到达，绑定物理 WiFi 必然失败。[源码 + 联网·confirmed]

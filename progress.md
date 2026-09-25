@@ -1350,3 +1350,42 @@
 - Release `v2.9.12`（created 2026-09-25T13:24:35Z）资产齐全：`SHA256SUMS.txt`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-macos-arm64.dmg`、`voicing-windows-x64.exe`、`voicing.apk`。
 - 本机 PC 端保持 v2.9.11 运行不变（本次 PC 端无功能改动，无需重装）；待办为用户安装新 APK 并在开启 Tailscale 的情况下实测。
 - 实机排查指引：诊断日志 tag 为 `VoicingNativeWs`，关键行包括 `WiFi candidate network=... tier=... iface=... transports=... caps=...`、`Selected routed WiFi network=...`、`Selected best-effort WiFi network=...`、`No WiFi candidate ... falling back to activeNetwork=...`、`No WiFi-capable network found among N networks`。
+
+## 会话：2026-09-25 CST — Tailscale 双通道连接修复与 v2.9.13 发布
+
+### v2.9.12 实机验证失败与真正根因
+- **状态：** complete
+- 用户装上 v2.9.12 APK 后反馈：手机开着 Tailscale 仍然连不上 PC。说明 v2.9.12 的分级选网只覆盖了「Android 允许绕过 VPN」的情形。
+- 复查本机发现关键事实：**PC 上装有 Tailscale 并正在运行**，自身地址 `100.102.136.4`（接口 `tailscale0`，`/32`），而 Voicing 只监听 `192.168.50.113:9527`。
+- 根因是 `pc/voice_coding.py` 的**三重过滤**把 `tailscale0` 完全排除在服务接口之外：
+  1. `_is_vpn_or_virtual_interface()`：`unix_vpn_prefixes` 含 `"tailscale"` → 命中即排除。
+  2. `_is_discoverable_private_ip()`：`100.102.136.4` 属 `100.64.0.0/10`（CGNAT），`is_private=False` → 排除。
+  3. 前缀长度要求 `1 <= prefix <= 30`，而 tailscale0 是 `/32` → 排除。
+- 结果：Android 在 VPN lockdown 下无法绕过 VPN 访问局域网，而唯一可达的隧道地址 Voicing 既不监听也不广播，手机无路可走。
+
+### PC 端改动
+- **状态：** complete
+- 新增 `_is_tailscale_cgnat_ip()`、`_get_tailscale_ipv4()`（经 `tailscale ip -4`，带 3 秒超时与异常兜底）、`_append_tailscale_interface()`。
+- `refresh_server_interfaces()` 在计算完广播地址后追加 Tailscale 地址（`/32` 无广播地址，用空字符串占位）。
+- 采用「纯追加」而不是放开三重过滤：不触碰被多个 release 修过的物理网卡枚举与排序逻辑，回归风险最低。
+- 新增 `import shutil`（探测 CLI）与 `system_subprocess_env` 导入（打包态调用系统命令需清理 `LD_LIBRARY_PATH`）。
+- 端到端验证：`get_qr_advertised_server_ips()` 返回 `['192.168.50.113', '100.102.136.4']`，`get_primary_server_ip()` 仍是局域网 IP。
+
+### Android 端改动
+- **状态：** complete
+- `MainActivity.kt` 新增 `isTailscaleCgnatHost()`：用 `100.64.0.0/10` 掩码（`0xFFC00000` 的有符号 Int 为 `-4194304`，基址 `0x64400000`）判断目标。
+- `connectWifiWebSocket()` 改为按目标分路：Tailscale CGNAT 目标用 `activeNetwork`（即 VPN 隧道），其它目标沿用 v2.9.12 的分级 WiFi 选择；两者的网络能力都写进日志。
+
+### 验证结果
+- **状态：** complete
+- `.venv/bin/python -m unittest discover -s pc/tests`：**92 tests OK**（新增 6 个 Tailscale 用例；另给既有 3 个精确列表断言补了 `_get_tailscale_ipv4` 屏蔽，避免结果随运行环境变化）。
+- 本地 `flutter build apk --debug`：成功（71.3 秒，Gradle 缓存已热）。
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
+- `flutter test`：24 tests passed。
+
+### 文档与版本
+- **状态：** complete
+- `CHANGELOG.md`：新增双语 `2.9.13` 块，写清三重过滤根因、Android 分路策略与三种 VPN 情形下的行为。
+- `README.md` / `README.zh-CN.md`：特性行改为「物理网卡优先 + Tailscale 兜底」，工作原理第 7 条同步。
+- `android/README.md` / `android/README.zh-CN.md`：原生 WebSocket 说明同步。
+- 版本号：PC `2.9.13`，Android `2.9.13+14`。

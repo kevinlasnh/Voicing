@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -22,6 +23,15 @@ from voice_coding import (
 
 
 class NetworkInterfaceParsingTests(unittest.TestCase):
+    def setUp(self):
+        # 2026-09-25：refresh_server_interfaces 现在会追加本机 Tailscale 地址。
+        # 这些用例断言的是精确接口列表，必须屏蔽该追加，否则结果会随运行环境
+        # （CI 无 tailscale、开发机可能已登录）而变化。Tailscale 自身行为由
+        # TailscaleInterfaceTests 单独覆盖。
+        tailscale_patcher = patch("voice_coding._get_tailscale_ipv4", return_value=None)
+        tailscale_patcher.start()
+        self.addCleanup(tailscale_patcher.stop)
+
     def test_extract_command_interfaces_windows_filters_tentative_link_local_and_slash_32(self):
         output = """
 [
@@ -260,3 +270,93 @@ en5: flags=8863<UP,BROADCAST,SMART,RUNNING,SIMPLEX,MULTICAST> mtu 1500
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TailscaleInterfaceTests(unittest.TestCase):
+    """2026-09-25 新增：Tailscale 双通道连接的 PC 端行为。
+
+    背景：用户手机开启 Tailscale 后连不上 PC。Android 在 VPN lockdown 模式下禁止
+    socket 绕过 VPN，唯一可达路径是 Tailscale 隧道；但 tailscale0 是 /32 的 CGNAT
+    地址，会被既有的 VPN/私有地址过滤全部挡掉，QR 与监听地址里都没有它。这里覆盖
+    新增的识别、取值与「局域网优先、Tailscale 兜底」的追加逻辑。
+    """
+
+    def test_is_tailscale_cgnat_ip_matches_only_cgnat_range(self):
+        self.assertTrue(voice_coding._is_tailscale_cgnat_ip("100.102.136.4"))
+        self.assertTrue(voice_coding._is_tailscale_cgnat_ip("100.64.0.1"))
+        self.assertTrue(voice_coding._is_tailscale_cgnat_ip("100.127.255.254"))
+        self.assertFalse(voice_coding._is_tailscale_cgnat_ip("100.63.255.255"))
+        self.assertFalse(voice_coding._is_tailscale_cgnat_ip("100.128.0.1"))
+        self.assertFalse(voice_coding._is_tailscale_cgnat_ip("192.168.50.113"))
+        self.assertFalse(voice_coding._is_tailscale_cgnat_ip("not-an-ip"))
+
+    def test_get_tailscale_ipv4_reads_cli_output(self):
+        with patch("voice_coding.subprocess.check_output", return_value="100.102.136.4\n") as mock_run:
+            self.assertEqual(voice_coding._get_tailscale_ipv4(), "100.102.136.4")
+        self.assertEqual(mock_run.call_args.args[0], ["tailscale", "ip", "-4"])
+
+    def test_get_tailscale_ipv4_returns_none_when_cli_missing(self):
+        with patch("voice_coding.subprocess.check_output", side_effect=FileNotFoundError()):
+            self.assertIsNone(voice_coding._get_tailscale_ipv4())
+
+    def test_get_tailscale_ipv4_rejects_non_cgnat_output(self):
+        with patch("voice_coding.subprocess.check_output", return_value="192.168.1.5\n"):
+            self.assertIsNone(voice_coding._get_tailscale_ipv4())
+
+    def test_tailscale_ip_is_appended_after_lan_interface(self):
+        original_get_all_network_candidates = voice_coding.get_all_network_candidates
+        original_server_interfaces = voice_coding.SERVER_INTERFACES
+        original_initialized = voice_coding.SERVER_INTERFACES_INITIALIZED
+        try:
+            voice_coding.SERVER_INTERFACES = []
+            voice_coding.SERVER_INTERFACES_INITIALIZED = False
+            voice_coding.get_all_network_candidates = lambda: [
+                NetworkInterfaceCandidate(
+                    ip="192.168.50.113",
+                    prefix_length=24,
+                    name="wlp0s20f3",
+                    interface_type="wifi",
+                )
+            ]
+            with patch("voice_coding._get_tailscale_ipv4", return_value="100.102.136.4"):
+                interfaces = refresh_server_interfaces(log_changes=False)
+
+            # 局域网地址必须保持第一优先，Tailscale 只作为兜底候选追加在末尾；
+            # Tailscale 是 /32 点对点地址，没有广播地址，因此用空字符串占位。
+            self.assertEqual(
+                interfaces,
+                [("192.168.50.113", "192.168.50.255"), ("100.102.136.4", "")],
+            )
+            self.assertEqual(get_primary_server_ip(), "192.168.50.113")
+            self.assertEqual(
+                get_advertised_server_ips(),
+                ["192.168.50.113", "100.102.136.4"],
+            )
+        finally:
+            voice_coding.get_all_network_candidates = original_get_all_network_candidates
+            voice_coding.SERVER_INTERFACES = original_server_interfaces
+            voice_coding.SERVER_INTERFACES_INITIALIZED = original_initialized
+
+    def test_tailscale_ip_is_not_appended_twice(self):
+        original_get_all_network_candidates = voice_coding.get_all_network_candidates
+        original_server_interfaces = voice_coding.SERVER_INTERFACES
+        original_initialized = voice_coding.SERVER_INTERFACES_INITIALIZED
+        try:
+            voice_coding.SERVER_INTERFACES = []
+            voice_coding.SERVER_INTERFACES_INITIALIZED = False
+            voice_coding.get_all_network_candidates = lambda: [
+                NetworkInterfaceCandidate(
+                    ip="192.168.50.113",
+                    prefix_length=24,
+                    name="wlp0s20f3",
+                    interface_type="wifi",
+                )
+            ]
+            with patch("voice_coding._get_tailscale_ipv4", return_value="192.168.50.113"):
+                interfaces = refresh_server_interfaces(log_changes=False)
+
+            self.assertEqual(interfaces, [("192.168.50.113", "192.168.50.255")])
+        finally:
+            voice_coding.get_all_network_candidates = original_get_all_network_candidates
+            voice_coding.SERVER_INTERFACES = original_server_interfaces
+            voice_coding.SERVER_INTERFACES_INITIALIZED = original_initialized

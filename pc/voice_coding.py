@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
@@ -72,6 +73,7 @@ from platform_utils import (
     get_preferred_hotspot_prefixes,
     open_file_in_default_app,
     open_file_in_text_editor,
+    system_subprocess_env,
 )
 from voicing_protocol import (
     QR_SCAN_PING_SOURCE,
@@ -92,7 +94,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.12"
+APP_VERSION = "2.9.13"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.35
 NATIVE_FONT_FAMILY = get_native_font_family()
@@ -660,6 +662,61 @@ def _ip_sort_key(ip: str) -> tuple[int, str]:
     return (2, ip)
 
 
+def _is_tailscale_cgnat_ip(ip: str) -> bool:
+    """2026-09-25 新增：判断地址是否落在 Tailscale 使用的 100.64.0.0/10 段。"""
+    try:
+        return ipaddress.IPv4Address(ip) in ipaddress.IPv4Network("100.64.0.0/10")
+    except ipaddress.AddressValueError:
+        return False
+
+
+def _get_tailscale_ipv4() -> Optional[str]:
+    """2026-09-25 新增：读取本机 Tailscale IPv4，取不到返回 None。
+
+    背景：用户手机开启 Tailscale 后完全连不上 PC。Android 在 VPN lockdown 模式下
+    会禁止 socket 绕过 VPN，此时唯一可达的路径是 Tailscale 隧道；但 tailscale0 是
+    /32 的 CGNAT 地址，会被 _is_vpn_or_virtual_interface（接口名含 tailscale）和
+    _is_discoverable_private_ip（is_private 为假、前缀长度 32 超出 1..30）过滤掉，
+    于是 QR 与 WebSocket 监听地址里都没有它，手机无路可走。
+
+    这里改用 tailscale CLI 直接读地址，作为「额外候选」追加，不改动原有物理网卡
+    枚举与排序，避免影响既有的 IP 选择行为。未安装、未登录或超时都静默返回 None，
+    保持改动前的行为不变。
+    """
+    try:
+        output = subprocess.check_output(
+            ["tailscale", "ip", "-4"],
+            env=system_subprocess_env(),
+            text=True,
+            stderr=subprocess.DEVNULL,
+            timeout=3,
+        )
+    except Exception:
+        return None
+    for line in str(output).splitlines():
+        candidate = line.strip()
+        if candidate and _is_tailscale_cgnat_ip(candidate):
+            return candidate
+    return None
+
+
+def _append_tailscale_interface(
+    interfaces: list[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    """2026-09-25 新增：把 Tailscale 地址追加到服务接口列表末尾。
+
+    顺序很关键：局域网/热点地址继续排在前面（QR 首选与既有行为不变），Tailscale
+    地址只作为「开了 VPN 时仍然连得上」的兜底候选。Tailscale 是 /32 点对点地址，
+    没有广播地址，这里用空字符串占位，调用方只用它取 IP 并做绑定。
+    """
+    tailscale_ip = _get_tailscale_ipv4()
+    if not tailscale_ip:
+        return interfaces
+    if any(ip == tailscale_ip for ip, _broadcast in interfaces):
+        return interfaces
+    return [*interfaces, (tailscale_ip, "")]
+
+
 def refresh_server_interfaces(*, log_changes: bool = True) -> list[tuple[str, str]]:
     """Refresh the QR/WS interface snapshot from the current OS network state."""
     global SERVER_INTERFACES, SERVER_INTERFACES_INITIALIZED
@@ -668,6 +725,8 @@ def refresh_server_interfaces(*, log_changes: bool = True) -> list[tuple[str, st
     latest_interfaces = calculate_broadcast_addresses(
         [(candidate.ip, candidate.prefix_length) for candidate in discovered_interfaces]
     )
+    # 2026-09-25：追加 Tailscale 地址作为 VPN 场景下的兜底通道（局域网地址仍优先）。
+    latest_interfaces = _append_tailscale_interface(latest_interfaces)
 
     with SERVER_INTERFACES_LOCK:
         was_initialized = SERVER_INTERFACES_INITIALIZED

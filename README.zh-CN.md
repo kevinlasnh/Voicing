@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.12-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.13-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -30,7 +30,7 @@ Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说�
 - **无广播依赖** — 手机端启动后直接尝试已保存设备的 IP 池，不再依赖 UDP 广播发现
 - **PC 端运行时刷新网络地址** — 电脑切换到新局域网后，QR 码和 WebSocket 监听会自动刷新，无需重启桌面端
 - **QR 只发布实际监听 IP** — WebSocket 监听启动后，二维码只优先展示桌面端实际绑定成功的地址
-- **物理网卡优先** — 双端尽量绕开 VPN/代理虚拟网卡，优先走真实 WiFi/LAN；Android 端即使开着 Tailscale 等 VPN 也仍然按 WiFi 网络连接 PC
+- **物理网卡优先 + Tailscale 兜底** — 双端优先走真实 WiFi/LAN；PC 端另外把 Tailscale 地址写进 QR 作为兜底，手机侧对该地址走 VPN 隧道，因此即使 Android 禁止 socket 绕过 VPN 也仍然连得上
 - **语音自动发送** — 说完话文字自动打过去，不需要手动操作
 - **自动 Enter** — 可选开关，开启后说完话文字就被自动提交给 Agent 执行，无需手动在键盘上按回车键
 - **手动发送也行** — 按回车手动发送，适合需要编辑的场景
@@ -114,7 +114,7 @@ Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端�
 4. 后续启动或手动刷新时，手机直接按保存的 IP 池逐个尝试连接，不再依赖 UDP 广播发现
 5. PC 端 WebSocket server 会在地址池变化后重新绑定当前局域网 IP，避免继续监听旧网络地址
 6. QR payload 避免发布绑定失败的地址；macOS 网卡命名按保守策略处理，不再假设 `en0` 一定是 WiFi
-7. Android 端即使开着 VPN 也会绑定到 WiFi Network：候选网络按优先级排序（纯物理 WiFi → capability 受 VPN 影响的 WiFi → 继承 WiFi transport 的 VPN 网络）而不是要求「非 VPN」，因此开启 Tailscale 不再阻断连接；PC 端继续过滤 VPN/虚拟网卡
+7. PC 端把局域网地址排在首位，并把 Tailscale 地址（经 `tailscale` CLI 读取）作为兜底候选一起写入 QR 且一并监听；Android 端对局域网目标按优先级绑定 WiFi Network（物理 WiFi → capability 受 VPN 影响的 WiFi → 继承 WiFi transport 的 VPN 网络），对 Tailscale CGNAT 段目标则走系统默认网络即 VPN 隧道
 8. 手机上的文字（语音输入或手动输入）实时发送到桌面端
 9. 桌面端通过剪贴板粘贴文本，并在需要时补发一次 Enter；Linux X11 走常规 Ctrl+V 路径，GNOME Wayland 走 RemoteDesktop portal 键盘授权
 10. GNOME Wayland 统一发送普通 Ctrl+V：不再做终端焦点探测，也不再提供粘贴模式切换，粘贴行为完全确定
@@ -176,8 +176,8 @@ Voicing/
 正式发布通过 GitHub Actions 自动构建（四平台：Android / Windows / macOS / Linux）：
 
 ```bash
-git tag v2.9.12
-git push origin v2.9.12
+git tag v2.9.13
+git push origin v2.9.13
 ```
 
 本地调试用：
