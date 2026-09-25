@@ -1250,3 +1250,49 @@
 - 本次开始时工作区干净，当前分支为 `main`；本地 `HEAD` 与 `origin/main` 均为 `e0c0074fd6f9a62ec725636e0d10be92d6f9b162`。
 - 阶段 33 已完整结束：发布提交 `fa09391`、`v2.9.10` tag、Actions run `30330984843`、GitHub Release 六个资产及修正版扁平 `SHA256SUMS.txt` 均已完成并通过验收。
 - 本次没有业务代码、版本、tag 或 Release 资产变更，不重新运行 PC/Flutter 测试，也不重新触发 Release；最终 checkpoint 仅增量更新并提交 `task_plan.md`、`progress.md`、`findings.md`。
+
+## 会话：2026-09-25 CST — Wayland 粘贴统一 Ctrl+V 与 v2.9.11 发布
+
+### 关键冲突发现：远端已有另一条路线的 v2.9.10
+- **状态：** complete
+- 本地 `main` 停在 `6fd3902`，但 `git push` 被拒；`git fetch` 后发现远端 `main` 已领先 4 个提交并附带 `v2.9.10` tag：
+  - `f53b198 docs: record repository audit and agent setup`
+  - `fa09391 fix(linux): stabilize terminal-aware Wayland paste`（`pc/platform_keyboard.py` 从 1046 行扩到 1571 行）
+  - `e0c0074 fix(release): use flat checksum asset names`
+  - `c741469 docs: record final v2.9.10 checkpoint`
+- 核实 `gh release view v2.9.10`：`created=2026-07-28T05:12:31Z`，资产为 `SHA256SUMS.txt`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-macos-arm64.dmg`、`voicing-windows-x64.exe`、`voicing.apk`。
+- 远端 v2.9.10 的内容正是阶段 31 那份 deployment plan 的实施（ACTIVE 窗口优先、Ghostty 进程 basename 识别、三态判定、portal 授权前后协调、DEB 加 AT-SPI/GI/wl-clipboard 依赖），与本次「删除终端探测、统一 Ctrl+V」方向完全相反。
+- 用户确认：作为 `v2.9.11` 发布，保留远端打包修复；本机安装新发布的版本。
+
+### 实施方式：revert 而非手工删除
+- **状态：** complete
+- 先把本次删除工作保护到分支 `keep/unify-ctrl-v`（`6e9351a`），再 `git reset --hard origin/main`。
+- 用 `git revert --no-commit fa09391` 撤销 AT-SPI 强化：5 个代码/文档文件精确回到 `6fd3902` 基线（行数逐文件核对一致），只有 3 个 PWF 文件冲突。
+- PWF 冲突按「保留远端完整历史」处理：`git checkout HEAD -- findings.md progress.md task_plan.md`。
+- 从远端取回需要保留的改进：`release.yml`（`--root-owner-group`、0755/0644 规范化、`SHA256SUMS.txt` 平铺命名）与 `CHANGELOG.md`，再手工移除其中的 AT-SPI/GI/wl-clipboard 依赖声明。
+- 文档取远端最新版（保留 APK 约 32MB、桌面端 50–60MB 等事实更新）后重新应用改写，避免丢失远端的事实性更新。
+- 代码文件从 `keep/unify-ctrl-v` 取回，`android/voice_coding/pubspec.yaml` 因 revert 退回到 `2.9.9+10`，从远端取回后再升到 `2.9.11+12`。
+
+### 代码改动
+- **状态：** complete
+- `pc/platform_keyboard.py`（1571 → 490 行）彻底删除：`PasteMode` / `_FocusKind` / `_AutoPasteDecision` / `_AutoPasteResolution`、`PASTE_MODE_LABELS`、`TERMINAL_APP_NAMES` / `IGNORED_ATSPI_APP_NAMES` / `UNRELIABLE_ATSPI_APP_NAMES`、全部 `ATSPI_*` 与 `AUTO_PASTE_*` 常量、`start_wayland_focus_prewarm`、`_prewarm_wayland_focus_probe`、`_resolve_wayland_paste_sequence`、`_ctrl_shift_v_sequence`、`_shift_insert_sequence`、`_sequence_name`、三态判定与重试、`_reconcile/_log/summarize` 诊断、整段 AT-SPI 采样与进程名解析链路、`_ATSPI_*_HELPER` 脚本常量。
+- `RemoteDesktopPortalKeyboardBackend.paste_from_clipboard()` 固定调用 `_ctrl_v_sequence()`；`_ctrl_v_sequence()` 保留。
+- `pc/voice_coding.py`：删除 `start_wayland_focus_prewarm` 导入与 `main()` 中的预热调用、粘贴模式菜单项、`cycle_paste_mode()` 与相关状态同步。
+- 测试：`test_platform_keyboard.py`（935 → 340 行）、`test_voice_coding_tray.py`、`test_voice_coding_server.py` 同步删除 AT-SPI 用例，新增三个回归用例。
+
+### 验证结果
+- **状态：** complete（本机 Ubuntu 24.04.4 LTS / GNOME Wayland / Python 3.12.3）
+- `.venv/bin/python -m py_compile`（PC 主模块 + 全部测试模块）：通过。
+- `.venv/bin/python -m unittest discover -s pc/tests`：86 tests OK。
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
+- `flutter test`：24 tests passed。
+- PyInstaller frozen 冒烟（offscreen）：启动到 `server listening on 192.168.50.113:9527`，无 AT-SPI 相关报错。
+- Python 3.10 兼容性静态扫描：无 3.11+/3.12+ 专属语法或标准库成员。
+- Ubuntu 22.04 本地容器验证受宿主代理与 TLS 拦截阻塞（`502 Bad Gateway`、证书不受信任），用户已确认只需保证本机可用，22.04 交由 CI 的 `ubuntu-22.04` runner 覆盖。
+
+### 文档与版本
+- **状态：** complete
+- `CHANGELOG.md`：保留 v2.9.10 历史块，新增双语 `2.9.11` 块（Changed / 变更 + Notes / 说明，说明本版取代 v2.9.10 的终端感知行为）。
+- `README.md` / `README.zh-CN.md`：特性行、Linux 安装依赖说明、使用流程段落、托盘菜单表格行、工作原理第 10 条、FAQ 全部改写；徽章与 tag 示例升到 `v2.9.11`。
+- `android/README.md` / `android/README.zh-CN.md`：第 7 条同步。
+- 版本号：PC `2.9.11`，Android `2.9.11+12`。

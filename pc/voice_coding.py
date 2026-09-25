@@ -55,13 +55,10 @@ except Exception:
 from device_identity import get_or_create_device_identity
 from platform_autostart import is_startup_enabled, set_startup_enabled
 from platform_instance import check_single_instance, show_already_running_message
+# 2026-09-25：PasteMode / get_paste_mode / set_paste_mode / get_paste_mode_label 已移除。
+# Wayland 输入统一走 Ctrl+V，PC 端不再需要「粘贴模式」这一用户可切换概念。
 from platform_keyboard import (
-    PasteMode,
-    get_paste_mode,
-    get_paste_mode_label,
     press_enter,
-    set_paste_mode,
-    start_wayland_focus_prewarm,
     type_text_at_cursor,
 )
 from platform_utils import (
@@ -95,7 +92,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.10"
+APP_VERSION = "2.9.11"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.35
 NATIVE_FONT_FAMILY = get_native_font_family()
@@ -783,6 +780,7 @@ def type_text(text: str, auto_enter: bool = False) -> bool:
             text,
             auto_enter=auto_enter,
             enter_delay_sec=AUTO_ENTER_SETTLE_DELAY_SEC,
+            restore_delay_sec=0.1,
         )
         return True
 
@@ -1148,10 +1146,9 @@ class ModernMenuWidget(QWidget):
         self.sync_btn.clicked.connect(self.toggle_sync)
         container_layout.addWidget(self.sync_btn)
 
-        self.paste_mode_btn = MenuItemWidget("⌨", get_paste_mode_label())
-        self.paste_mode_btn.clicked.connect(self.cycle_paste_mode)
-        container_layout.addWidget(self.paste_mode_btn)
-
+        # 2026-09-25：此处原有「粘贴模式」循环切换项（自动/普通/终端/兼容）。
+        # 终端 agent 场景移除后，Wayland 侧固定发送 Ctrl+V，该切换项已无存在意义，
+        # 因此整项删除；如需恢复请从 git 历史取回 v2.9.9。
         # 开机自启
         self.startup_btn = MenuItemWidget("🚀", "开机自启", has_toggle=True, is_checked=False)
         self.startup_btn.clicked.connect(self.toggle_startup)
@@ -1286,7 +1283,6 @@ class ModernMenuWidget(QWidget):
         """更新菜单状态"""
         self.sync_btn.update_toggle_status(state.sync_enabled)
         self.startup_btn.update_toggle_status(is_startup_enabled())
-        self.paste_mode_btn.text_label.setText(get_paste_mode_label())
 
     def toggle_sync(self):
         """切换同步状态"""
@@ -1298,19 +1294,6 @@ class ModernMenuWidget(QWidget):
             update_tray_icon_pyqt(state.tray_icon)
         self.close_with_animation()
         schedule_sync_state_broadcast()
-
-    def cycle_paste_mode(self):
-        modes = (
-            PasteMode.AUTO,
-            PasteMode.NORMAL,
-            PasteMode.TERMINAL,
-            PasteMode.COMPAT,
-        )
-        current_index = modes.index(get_paste_mode())
-        next_mode = modes[(current_index + 1) % len(modes)]
-        set_paste_mode(next_mode)
-        self.paste_mode_btn.text_label.setText(get_paste_mode_label(next_mode))
-        self.close_with_animation()
 
     def toggle_startup(self):
         """切换开机自启"""
@@ -1910,9 +1893,6 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.native_sync_action.setCheckable(True)
         self.native_sync_action.triggered.connect(self.menu_widget.toggle_sync)
 
-        self.native_paste_mode_action = self.native_menu.addAction(get_paste_mode_label())
-        self.native_paste_mode_action.triggered.connect(self.menu_widget.cycle_paste_mode)
-
         self.native_startup_action = self.native_menu.addAction("开机自启")
         self.native_startup_action.setCheckable(True)
         self.native_startup_action.triggered.connect(self.menu_widget.toggle_startup)
@@ -1931,8 +1911,6 @@ class ModernTrayIcon(QSystemTrayIcon):
         self.menu_widget.update_state()
         if hasattr(self, "native_sync_action"):
             self.native_sync_action.setChecked(state.sync_enabled)
-        if hasattr(self, "native_paste_mode_action"):
-            self.native_paste_mode_action.setText(get_paste_mode_label())
         if hasattr(self, "native_startup_action"):
             self.native_startup_action.setChecked(is_startup_enabled())
 
@@ -2107,10 +2085,6 @@ def main():
         logging.error(str(exc))
         show_fatal_message("Voicing 无法启动", str(exc))
         return
-
-    # Read-only warm-up: samples AT-SPI in the background, but never creates
-    # a RemoteDesktop portal session, sends keys, or caches a paste decision.
-    start_wayland_focus_prewarm()
 
     # Detect QR-advertisable interfaces at startup; the server thread refreshes
     # this snapshot at runtime for network changes.

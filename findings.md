@@ -564,3 +564,13 @@
 - 本次进度记录没有产生新的技术发现、实现变更或阻断项；阶段 33 与 `v2.9.10` 发布闭环保持完成状态。
 - 本次 checkpoint 前的可恢复 Git 基线为 `e0c0074fd6f9a62ec725636e0d10be92d6f9b162`，对应已推送的 checksum workflow 防回归修复；`v2.9.10` tag 继续固定指向发布提交 `fa09391`，无需移动或重建。
 - 对外最终交付基线为 GitHub Actions run `30330984843` 成功、Release `v2.9.10` 六个资产齐全，且修正版 `SHA256SUMS.txt` 可在扁平下载目录直接验证五个 payload。
+
+## 2026-09-25 v2.9.10 双路线冲突与 v2.9.11 决策
+
+- 本地 `main` 停在 `6fd3902` 时推送被拒，说明存在「本地不是最新」的并发写入。核实结果：远端已由另一会话完成阶段 33，发布 `v2.9.10`（`fa09391`，2026-07-28），走的是强化 AT-SPI 终端识别路线，`pc/platform_keyboard.py` 达 1571 行。[git + gh CLI·confirmed]
+- `gh release view v2.9.10` 确认六类资产齐全（apk / deb / linux binary / windows exe / macos dmg / SHA256SUMS），因此 v2.9.10 这个版本号不可复用，本次改动必须走 `v2.9.11`。[gh CLI·confirmed]
+- 「删除终端探测」与远端「强化终端探测」是同一块代码的两个相反方向，无法用普通 merge 表达；把撤销做成 `git revert fa09391` 后，代码逐文件精确回到 `6fd3902` 基线（`platform_keyboard.py` 1046 行、`voice_coding.py` 2148 行、`test_platform_keyboard.py` 576 行），删除边界因此可复核。[git·confirmed]
+- 远端 v2.9.10 里有两项与粘贴逻辑无关的打包改进必须保留：`e0c0074` 的 `SHA256SUMS.txt` 平铺命名（`sed -E 's#  (android|windows|macos|linux)/#  #'`），以及 `fa09391` 里的 `dpkg-deb --root-owner-group`、目录 0755、DEB control/desktop 0644 规范化。前者天然保留（提交在被 revert 的提交之后），后者需要从远端单独取回。[git·confirmed]
+- 远端 README 除 AT-SPI 描述外还包含事实性更新（APK 约 32MB、桌面端 50–60MB），因此文档改写必须基于远端最新版本重新应用，不能直接用本地旧基线的改写结果覆盖。[git·confirmed]
+- 删除 AT-SPI 后，DEB 重新回到只声明 `libegl1, libdbus-1-3, libxkbcommon-x11-0, libxcb-cursor0`，与打包产物真实依赖一致；v2.9.10 期间加入的 `at-spi2-core, gir1.2-atspi-2.0, python3-gi, wl-clipboard` 依赖声明已移除。[源码·confirmed]
+- 本机终端为 Ghostty 1.3.1，`ghostty +show-config --default` 的默认粘贴键位是 `ctrl+shift+v=paste_from_clipboard`，`ctrl+v` 未绑定；用户配置只额外绑定了 `ctrl+shift+x=close_surface`。所以统一发送 Ctrl+V 后终端内不会粘贴，这是用户已知并接受的结果。[本地命令输出·confirmed]

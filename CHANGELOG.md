@@ -15,6 +15,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.11] - 2026-09-25
+
+### Changed
+
+- PC (Linux): GNOME Wayland input now always sends a plain Ctrl+V. AT-SPI focus sampling, ACTIVE-window selection, terminal/normal/unresolved classification, bounded retries, terminal focus cache, in-process GI probing, the system Python helper and the startup focus prewarm were all removed
+- PC (Linux): The "Paste mode" tray entry was removed from both the custom and the native menu, because there is no longer a paste mode to switch
+- PC (Linux): Pasting no longer waits for a focus sampling window or an unresolved-retry budget, so every paste is immediate and behaves identically on each send
+- PC (Linux): `python3-gi`, `gir1.2-atspi-2.0`, `at-spi2-core` and `wl-clipboard` are no longer required or declared, because the packaged build no longer shells out to a system Python for AT-SPI
+- Packaging (Linux): kept the v2.9.10 DEB normalization (`--root-owner-group`, 0755/0644) and the flat `SHA256SUMS.txt` asset naming
+
+### 变更
+
+- PC (Linux): GNOME Wayland 输入现在固定发送普通 Ctrl+V；AT-SPI 焦点采样、ACTIVE 窗口选择、terminal/normal/unresolved 三态判定、有界重试、终端焦点缓存、进程内 GI 探测、系统 Python helper 与启动预热全部删除
+- PC (Linux): 托盘菜单的「粘贴模式」项已从自定义菜单和原生菜单中移除，因为不再有粘贴模式可切换
+- PC (Linux): 粘贴不再等待焦点采样窗口或 unresolved 重试预算，每次粘贴都立即生效且行为一致
+- PC (Linux): 不再需要也不再声明 `python3-gi`、`gir1.2-atspi-2.0`、`at-spi2-core` 与 `wl-clipboard`，因为打包产物不再为 AT-SPI 调用系统 Python
+- Packaging (Linux): 保留 v2.9.10 的 DEB 规范化（`--root-owner-group`、0755/0644）与 `SHA256SUMS.txt` 平铺命名
+
+### Notes
+
+- This release supersedes the terminal-aware paste behavior introduced in v2.9.10. Terminal emulators do not treat Ctrl+V as paste by default (GNOME Terminal and Ghostty use Ctrl+Shift+V), so pasting inside a terminal is no longer a supported scenario. Browsers, editors, and chat windows are unaffected.
+- Background: v2.9.10 and the earlier v2.9.5-v2.9.9 releases tried to detect terminal focus through AT-SPI and switch shortcuts accordingly. That detection proved unreliable on cold GNOME logins and whenever the accessibility bus was not ready, so the scenario was removed entirely instead of being tuned further.
+
+### 说明
+
+- 本版本取代 v2.9.10 引入的终端感知粘贴行为。终端程序默认不把 Ctrl+V 当粘贴（GNOME Terminal / Ghostty 使用 Ctrl+Shift+V），因此终端内粘贴不再是支持场景；浏览器、编辑器、聊天窗口等普通输入界面不受影响。
+- 背景：v2.9.10 以及更早的 v2.9.5–v2.9.9 都尝试通过 AT-SPI 探测终端焦点并切换快捷键。该判定在 GNOME 冷启动以及辅助功能总线未就绪时不可靠，因此整体移除该场景，而不是继续调优。
+
+---
+
 ## [2.9.10] - 2026-07-28
 
 ### Fixed

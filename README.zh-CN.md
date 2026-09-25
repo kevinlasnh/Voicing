@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.10-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.11-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -36,7 +36,7 @@ Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说�
 - **手动发送也行** — 按回车手动发送，适合需要编辑的场景
 - **撤回支持** — 发错了？一键撤回上次输入
 - **断线自动恢复** — 手机息屏再亮屏，优先保持已连接显示并快速恢复
-- **稳定的 Linux 终端感知粘贴** — GNOME Wayland 自动粘贴跟随当前 ACTIVE 窗口，普通窗口发送 Ctrl+V，终端发送 Ctrl+Shift+V，无法可靠判断时安全取消
+- **Linux 粘贴稳定** — GNOME Wayland 下统一发送普通 Ctrl+V，不再探测终端焦点，粘贴结果不受辅助功能总线状态影响
 - **跨平台** — 支持 Windows / macOS / Linux 桌面端，Android 手机端
 - **体积小巧** — APK 约 32MB、桌面端约 50–60MB；Linux DEB 会自动安装声明的桌面集成依赖
 
@@ -63,7 +63,7 @@ Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要�
 
 - **Windows**：运行 `voicing-windows-x64.exe`，开启"移动热点"
 - **macOS**：打开 `voicing-macos-arm64.dmg`，拖入 Applications（首次打开需右键→打开），开启"互联网共享"或连接同一局域网
-- **Linux**：安装 `voicing-linux-amd64.deb`，或对独立二进制执行 `chmod +x voicing-linux-x86_64` 后运行；开启 Wi-Fi 热点或连接同一局域网。DEB 会安装所需的 AT-SPI、Python GI 和 `wl-clipboard` 依赖，独立二进制用户需要自行提供。GNOME Wayland 在 Voicing 启动或首次粘贴文字时可能会要求授权 RemoteDesktop 键盘会话
+- **Linux**：安装 `voicing-linux-amd64.deb`，或对独立二进制执行 `chmod +x voicing-linux-x86_64` 后运行；开启 Wi-Fi 热点或连接同一局域网。GNOME Wayland 在 Voicing 启动或首次粘贴文字时可能会要求授权 RemoteDesktop 键盘会话
 
 状态栏显示"已连接"就说明连上了
 
@@ -75,7 +75,7 @@ Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要�
 2. 手机上切换到语音输入法，开始说话
 3. 文字自动出现在电脑上
 
-Linux/GNOME Wayland 日常使用保持桌面端"自动粘贴"即可。自动粘贴会采样当前 ACTIVE 窗口，对普通输入框发送 Ctrl+V，检测到终端时自动切到 Ctrl+Shift+V。Ghostty 这类只暴露通用 `Unnamed` AT-SPI frame 的终端会通过进程可执行文件 basename 识别，不读取窗口标题或剪贴板正文。如果焦点证据持续稀疏或冲突，Voicing 不会发送任何快捷键，并通过失败 ACK 让手机保留文本供重试，避免粘贴到错误应用；只有特定终端无法提供可靠 AT-SPI 状态时再手动切到"终端粘贴"。
+Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端和普通窗口，也不需要任何终端侧配置。注意终端程序默认不把 Ctrl+V 当粘贴（GNOME Terminal / Ghostty 等的粘贴快捷键是 Ctrl+Shift+V），所以桌面端现在面向的是浏览器、编辑器、聊天窗口等普通输入场景；终端内的粘贴请用终端自己的快捷键。
 
 > **推荐搭配**：[豆包输入法](https://shurufa.doubao.com/) + [大疆 Mic Mini](https://www.dji.com/cn/mic-mini) + [DJI Mic 系列手机接收器](https://store.dji.com/cn/product/dji-mic-series-mobile-receiver?vid=200571) —— 语音识别准确，领夹麦克风直连手机，体验最佳
 
@@ -97,7 +97,6 @@ Linux/GNOME Wayland 日常使用保持桌面端"自动粘贴"即可。自动粘�
 |--------|------|
 | 显示 QR 码 | 展示当前电脑的 Voicing 配对二维码 |
 | 同步输入 | 开关是否接收手机文字 |
-| 粘贴模式 | 在自动 / 普通 / 终端 / 兼容粘贴模式之间切换；日常推荐自动粘贴 |
 | 开机自启 | 通过系统机制登录后自动启动：Windows Run 注册表、macOS LaunchAgent、Linux GNOME autostart `.desktop` |
 | 打开日志 | 用记事本打开当天日志 |
 | 退出应用 | 关闭程序 |
@@ -118,7 +117,7 @@ Linux/GNOME Wayland 日常使用保持桌面端"自动粘贴"即可。自动粘�
 7. Android 端 WebSocket 优先绑定物理 WiFi Network，PC 端过滤 VPN/虚拟网卡，Android 端显式要求非 VPN 的 WiFi Network，降低双端开代理时的误路由
 8. 手机上的文字（语音输入或手动输入）实时发送到桌面端
 9. 桌面端通过剪贴板粘贴文本，并在需要时补发一次 Enter；Linux X11 走常规 Ctrl+V 路径，GNOME Wayland 走 RemoteDesktop portal 键盘授权
-10. GNOME Wayland 默认使用自动粘贴：普通窗口发送 Ctrl+V，检测到的终端焦点发送 Ctrl+Shift+V，无法可靠判断时安全取消并保留手机输入；托盘菜单可手动切换为普通、终端或兼容粘贴模式
+10. GNOME Wayland 统一发送普通 Ctrl+V：不再做终端焦点探测，也不再提供粘贴模式切换，粘贴行为完全确定
 
 ## 开发
 
@@ -177,8 +176,8 @@ Voicing/
 正式发布通过 GitHub Actions 自动构建（四平台：Android / Windows / macOS / Linux）：
 
 ```bash
-git tag v2.9.10
-git push origin v2.9.10
+git tag v2.9.11
+git push origin v2.9.11
 ```
 
 本地调试用：
@@ -218,8 +217,8 @@ cd android/voice_coding && flutter build apk --release
 **文字打到了错误位置？**
 发送前确保电脑光标在正确的输入框里
 
-**Linux 应该用哪个粘贴模式？**
-默认使用"自动粘贴"。它会自动处理普通输入框和终端。只有终端未被识别时才切到"终端粘贴"，或者在某些偏好 Shift+Insert 的软件里切到"兼容粘贴"。
+**Linux 下终端里粘不上？**
+这是预期行为。Voicing 现在统一发送普通 Ctrl+V，而终端默认不把 Ctrl+V 当粘贴。终端内的粘贴请使用终端自身快捷键（例如 GNOME Terminal / Ghostty 的 Ctrl+Shift+V）。
 
 **Linux 开机自启正常吗？**
 Ubuntu GNOME 下正常。Voicing 会写入 `~/.config/autostart/voicing.desktop`，由 GNOME 在登录后启动。GNOME Wayland 下程序可以自启，但 RemoteDesktop 键盘授权仍由 GNOME 控制；登录或启动后如果弹出授权提示，需要手动允许。

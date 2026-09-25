@@ -68,10 +68,11 @@ class CustomMenuLayoutTests(unittest.TestCase):
 
     def test_custom_menu_has_no_separator_items(self):
         # 自定义 Fluent 菜单（Windows/macOS）不再在项之间插入分隔横条。
-        # container 内应恰好 6 个功能项：QR / 同步输入 / 粘贴模式 / 开机自启 / 打开日志 / 退出应用。
+        # 2026-09-25：粘贴模式项已删除，container 内应恰好 5 个功能项：
+        # QR / 同步输入 / 开机自启 / 打开日志 / 退出应用。
         from voice_coding import ModernMenuWidget
         menu = ModernMenuWidget()
-        self.assertEqual(menu.container.layout().count(), 6)
+        self.assertEqual(menu.container.layout().count(), 5)
 
     def test_custom_menu_width_tightens_to_content(self):
         # 菜单内容尺寸应等于 sizeHint；setFixedWidth(sizeHint) 收紧掉 adjustSize 的多余宽度。
@@ -83,24 +84,14 @@ class CustomMenuLayoutTests(unittest.TestCase):
         # 宽度应在最长项内容附近，不应是 adjustSize 默认的偏大值（约 200）。
         self.assertLess(menu.width(), 190)
 
-    def test_custom_menu_cycles_paste_mode(self):
-        import voice_coding
-        import platform_keyboard
-
+    def test_custom_menu_has_no_paste_mode_entry(self):
+        # 2026-09-25：Wayland 输入固定 Ctrl+V 后，粘贴模式切换项已从两种菜单中移除。
         from voice_coding import ModernMenuWidget
-        old_mode = platform_keyboard.get_paste_mode()
         menu = ModernMenuWidget()
         try:
-            platform_keyboard.set_paste_mode(platform_keyboard.PasteMode.AUTO)
-            with patch.object(menu, "close_with_animation"):
-                menu.cycle_paste_mode()
-            self.assertEqual(
-                platform_keyboard.get_paste_mode(),
-                platform_keyboard.PasteMode.NORMAL,
-            )
-            self.assertEqual(menu.paste_mode_btn.text_label.text(), "普通粘贴")
+            self.assertFalse(hasattr(menu, "paste_mode_btn"))
+            self.assertFalse(hasattr(menu, "cycle_paste_mode"))
         finally:
-            platform_keyboard.set_paste_mode(old_mode)
             menu.hide()
             menu.deleteLater()
 
@@ -185,49 +176,6 @@ class SyncStateBroadcastTests(unittest.TestCase):
             run_coroutine_threadsafe.assert_not_called()
         finally:
             voice_coding.state.server_loop = old_loop
-
-
-class MainStartupTests(unittest.TestCase):
-    def test_main_starts_focus_prewarm_before_network_and_server(self):
-        import voice_coding
-
-        events = []
-        server_thread = MagicMock()
-        with (
-            patch.object(voice_coding, "setup_logging"),
-            patch.object(
-                voice_coding,
-                "ensure_runtime_supported",
-                side_effect=lambda: events.append("runtime"),
-            ),
-            patch.object(
-                voice_coding,
-                "start_wayland_focus_prewarm",
-                side_effect=lambda: events.append("prewarm"),
-            ) as prewarm,
-            patch.object(
-                voice_coding,
-                "refresh_server_interfaces",
-                side_effect=lambda **_kwargs: events.append("network"),
-            ),
-            patch.object(voice_coding, "get_primary_server_ip", return_value="127.0.0.1"),
-            patch.object(
-                voice_coding.threading,
-                "Thread",
-                return_value=server_thread,
-            ) as thread_factory,
-            patch.object(
-                voice_coding,
-                "run_tray",
-                side_effect=lambda: events.append("tray"),
-            ),
-        ):
-            voice_coding.main()
-
-        self.assertEqual(events, ["runtime", "prewarm", "network", "tray"])
-        prewarm.assert_called_once_with()
-        thread_factory.assert_called_once_with(target=voice_coding.run_server, daemon=True)
-        server_thread.start.assert_called_once_with()
 
 
 if __name__ == "__main__":

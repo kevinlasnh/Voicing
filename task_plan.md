@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 34（complete）
+阶段 35（in_progress）
 
 ## 各阶段
 
@@ -279,6 +279,21 @@
 - [x] 增量同步本次最终交接记录，并只提交 PWF 三件套
 - **状态：** complete
 
+### 阶段 35：Wayland 粘贴统一 Ctrl+V 与 v2.9.11 发布
+- [x] 确认用户不再使用终端内 agent，终端粘贴场景整体移除
+- [x] 发现远端已由阶段 33 发布 v2.9.10（AT-SPI 强化路线）且与本次方向相反，经用户确认改发 v2.9.11
+- [x] 撤销 `fa09391`（AT-SPI 强化），保留 `e0c0074` 的 checksum 平铺修复与 DEB 规范化
+- [x] `pc/platform_keyboard.py` 删除 AT-SPI 焦点探测链路，Wayland 固定发送 Ctrl+V
+- [x] `pc/voice_coding.py` 删除托盘「粘贴模式」菜单项
+- [x] 同步 PC 测试并跑通全量单测
+- [x] 保留远端 APK/体积等事实更新，改写四份文档为统一 Ctrl+V 说明
+- [x] CHANGELOG 保留 v2.9.10 历史并新增 v2.9.11 块；版本号 PC `2.9.11` / Android `2.9.11+12`
+- [x] 运行 Android analyze / test 回归与本机 frozen 冒烟
+- [ ] 更新 PWF 并提交推送 main
+- [ ] 推送 v2.9.11 tag 并确认 Actions 与 Release 资产
+- [ ] 本机安装 v2.9.11 deb 并配置 GNOME 开机自启
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -291,6 +306,10 @@
 | 同步新增 `CLAUDE.md` 与 `AGENTS.md` | 仓库级 agent 配置新增时两份文件必须全文一致，H1 均为 `# Repository Agent Markdown` |
 | Linux 托盘改用系统原生 `QMenu` | 自定义 `Qt.Popup` 菜单在 GNOME/Wayland 下定位/半透明黑块/Esc/几何无效等问题多，原生菜单更稳 |
 | 保持 GNOME portal 输入后端，接受每次启动一次授权 | portal 在安全/零部署/可分发/跨发行版/前瞻性上全面优于 ydotool；ydotool 仅"无弹窗"占优但代价是 `/dev/uinput` 权限降级，不可作为已发布应用的默认 |
+| 删除终端粘贴场景，而不是继续修复 AT-SPI 判定 | 用户确认不再使用终端内 agent，目标场景消失后删除比继续调优更彻底、更快、更稳 |
+| 以 v2.9.11 覆盖 v2.9.10 的 AT-SPI 路线，不回退远端提交 | v2.9.10 已公开发布且资产齐全，保留其历史并发布新版本，不移动或删除已公开的 tag |
+| 用 `git revert fa09391` 而不是在 1571 行代码上手工删除 | AT-SPI 强化集中在单一提交里，revert 后代码精确回到 `6fd3902` 基线，删除边界可靠且可复核 |
+| 保留 Wayland 的 PRIMARY selection 写入 | 它属于剪贴板兼容层而不是焦点探测，删除它超出本次范围且有行为回归风险 |
 
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |
