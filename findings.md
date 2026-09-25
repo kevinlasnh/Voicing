@@ -574,3 +574,10 @@
 - 远端 README 除 AT-SPI 描述外还包含事实性更新（APK 约 32MB、桌面端 50–60MB），因此文档改写必须基于远端最新版本重新应用，不能直接用本地旧基线的改写结果覆盖。[git·confirmed]
 - 删除 AT-SPI 后，DEB 重新回到只声明 `libegl1, libdbus-1-3, libxkbcommon-x11-0, libxcb-cursor0`，与打包产物真实依赖一致；v2.9.10 期间加入的 `at-spi2-core, gir1.2-atspi-2.0, python3-gi, wl-clipboard` 依赖声明已移除。[源码·confirmed]
 - 本机终端为 Ghostty 1.3.1，`ghostty +show-config --default` 的默认粘贴键位是 `ctrl+shift+v=paste_from_clipboard`，`ctrl+v` 未绑定；用户配置只额外绑定了 `ctrl+shift+x=close_surface`。所以统一发送 Ctrl+V 后终端内不会粘贴，这是用户已知并接受的结果。[本地命令输出·confirmed]
+
+## 2026-09-25 本机实际会话类型为 X11（重要修正）
+
+- 此前多次会话记录都假设本机是 GNOME Wayland，但本次实测 `loginctl show-session 2 -p Type` 返回 `x11`，桌面进程环境里 `XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`XDG_CURRENT_DESKTOP=ubuntu:GNOME`，`/run/user/1000/` 下也不存在 `wayland-0` socket。[本地命令输出·confirmed]
+- 这个事实让本次改造的动机更清晰：X11 会话下 `_is_linux_wayland()` 为假，`paste_from_clipboard()` 走 `pyautogui.hotkey("ctrl","v")`，`_paste_primary_selection_if_supported()` 直接返回 None，**AT-SPI 检测与 RemoteDesktop portal 根本不会被调用**。历史那些不稳定性都来自 Wayland 分支，而用户日常并不在那个分支上。[源码 + 本地命令输出·confirmed]
+- 同时这也意味着「终端内 Ctrl+V 不会粘贴」在本机同样成立（Ghostty 默认 `ctrl+shift+v` 才是粘贴），与用户的取舍一致。[本地命令输出·confirmed]
+- 本机验证结论：`/opt/voicing/voicing` 2.9.11 在真实 X11 会话下常驻、`192.168.50.113:9527` 正常监听、托盘无报错、日志零 AT-SPI 记录。[本地命令输出·confirmed]

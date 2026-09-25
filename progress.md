@@ -1296,3 +1296,16 @@
 - `README.md` / `README.zh-CN.md`：特性行、Linux 安装依赖说明、使用流程段落、托盘菜单表格行、工作原理第 10 条、FAQ 全部改写；徽章与 tag 示例升到 `v2.9.11`。
 - `android/README.md` / `android/README.zh-CN.md`：第 7 条同步。
 - 版本号：PC `2.9.11`，Android `2.9.11+12`。
+
+### v2.9.11 发布与本机安装
+- **状态：** complete
+- 提交 `8607d60 Release v2.9.11: unify Wayland paste on plain Ctrl+V` 已推送 `main`（`c741469..8607d60`）；tag `v2.9.11` 已推送并触发 Actions run `36130314847`。
+- Actions 结果：6/6 job 全部 success（Prepare Release Notes、Build macOS App、Build Windows EXE、Build Linux Desktop Binary、Build Android APK、Publish GitHub Release）。
+  - 其中 `Build Linux Desktop Binary` 在 `ubuntu-22.04` runner 上完整跑过 `python -m unittest discover -s tests` 与 PyInstaller/DEB 构建，这就是 Ubuntu 22.04 的权威验证（本地容器方案因宿主代理与 TLS 拦截而放弃）。
+- Release `v2.9.11`（created 2026-09-25T11:36:23Z）资产齐全：`SHA256SUMS.txt`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-macos-arm64.dmg`、`voicing-windows-x64.exe`、`voicing.apk`。
+- 本机安装流程：
+  - `gh release download v2.9.11` 下载 deb 与 `SHA256SUMS.txt`，`sha256sum -c` 校验通过。
+  - `sudo -n apt-get install -y /tmp/voicing-install/voicing-linux-amd64.deb` 从 `2.9.9` 升级到 `2.9.11`，`dpkg-query` 确认 `voicing 2.9.11 install ok installed`，`/usr/bin/voicing` 指向 `/opt/voicing/voicing`。
+  - 四个 DEB 依赖（`libegl1`、`libdbus-1-3`、`libxkbcommon-x11-0`、`libxcb-cursor0`）本机均已安装。
+  - 写入 `~/.config/autostart/voicing.desktop`（`Exec=/opt/voicing/voicing`、`TryExec`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`、`Terminal=false`，权限 0644），`desktop-file-validate` 通过。
+- 真实桌面会话验证：本机当前会话实际为 **X11**（`XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`loginctl Type=x11`），并非此前记录的 GNOME Wayland。用会话环境变量启动 `/opt/voicing/voicing` 后进程常驻、`192.168.50.113:9527` 监听成功、日志无托盘错误、无任何 AT-SPI 记录。
