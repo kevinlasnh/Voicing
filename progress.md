@@ -1400,3 +1400,14 @@
   - 日志：`QR/WS 网络接口刷新: none -> 192.168.50.113, 100.102.136.4`、`server listening on 192.168.50.113:9527`、`server listening on 100.102.136.4:9527`。
   - `ss -tnp` 显示手机 `192.168.50.56` 已建立连接（当前经局域网地址）。
 - 待用户完成：安装 v2.9.13 APK 后**必须重新扫描一次 QR 码** —— 旧配对记录里只保存了 `192.168.50.113`，不重新配对就不会把 Tailscale 地址纳入候选池。
+
+### 用户实机验证通过 —— 任务闭环
+- **状态：** complete
+- 用户反馈：安装 v2.9.13 APK 并重新扫码配对后，**在开启 Tailscale 的情况下连接正常**，问题解决。
+- 至此本次「手机开 VPN 连不上 PC」的完整链路闭环：v2.9.12 修 Android 分级选网（覆盖允许绕过 VPN 的情形）→ 实测不足 → v2.9.13 补齐 PC 端 Tailscale 广播/绑定与 Android 隧道分路（覆盖禁止绕过 VPN 的情形）→ v2.9.13 实机通过。
+- 本次交付物汇总：
+  - 代码：`pc/voice_coding.py`（Tailscale 地址读取与追加）、`pc/tests/test_network_interfaces.py`（6 个新用例）、`android/.../MainActivity.kt`（CGNAT 目标分路）。
+  - 文档：`CHANGELOG.md`（2.9.12 与 2.9.13 双语块）、`README.md`、`README.zh-CN.md`、`android/README.md`、`android/README.zh-CN.md`、`android/voice_coding/pubspec.yaml`。
+  - 提交：`72ef1c5`（v2.9.12 代码）、`d15d55b`（v2.9.12 记录）、`eb43ffe`（v2.9.13 代码）、`26a7b77`（v2.9.13 记录）。
+  - Release：`v2.9.12` 与 `v2.9.13`，Actions run `36141549843`、`36146092747` 均 6/6 全绿。
+  - 本机：已安装 v2.9.13，双地址监听（`192.168.50.113:9527` + `100.102.136.4:9527`），GNOME 开机自启保留。

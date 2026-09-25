@@ -598,3 +598,10 @@
 - 所以「开了 VPN 还能连」的唯一可行通道是 Tailscale 隧道，而该通道在改动前既不在 QR 里也不在监听地址里 —— 这是 v2.9.5 起的长期缺口，只是此前没人把 PC 侧 Tailscale 与手机侧 VPN 联系起来。[源码·confirmed]
 - 选型结论：用 `tailscale ip -4` 读地址做**纯追加**，而不是放开三处过滤。原因是网络接口排序被 v2.9.5–v2.9.11 多个 release 专门修过（stale IP、bound-IP 安全、macOS 分类、VPN 路由），大改风险高；追加方式保持局域网优先且零回归。[工程决策]
 - Android 侧对 `100.64.0.0/10` 目标必须使用默认网络：该地址只能经隧道到达，绑定物理 WiFi 必然失败。[源码 + 联网·confirmed]
+
+## 2026-09-25 结项：Tailscale 场景连接问题已解决
+
+- 用户实机确认：安装 v2.9.13 APK 并重新扫码配对后，在开启 Tailscale 的情况下连接正常。[用户实测·confirmed]
+- 最终生效的机制是「双通道」：局域网地址保持首选（QR 的 `ip` 与 `ips[0]`），Tailscale CGNAT 地址作为兜底候选同时进入 QR 的 `ips` 与 WebSocket 绑定列表；Android 侧按目标地址分路 —— `100.64.0.0/10` 走系统默认网络（隧道），其它目标按分级选 WiFi。[源码 + 本机实测·confirmed]
+- 一条容易踩的操作前提：**改了 QR payload 后，手机必须重新扫码配对**。已保存的 `saved_server` 不会自动获得新候选，仅装新 APK 不足以让新地址进入候选池。后续任何 QR 字段变更都应把「重新配对」写进发布说明。[本任务实测·confirmed]
+- 复发时的排查入口（已固化在代码里）：`adb logcat -s VoicingNativeWs:V`，关键行 `Selected network=... for target=... tailscaleTarget=true/false` 与 `WiFi candidate network=... tier=... transports=... caps=...`。[源码·confirmed]
