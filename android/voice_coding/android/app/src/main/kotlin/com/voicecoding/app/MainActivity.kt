@@ -174,15 +174,27 @@ class MainActivity : FlutterActivity() {
             } catch (_: Exception) {
                 null
             }
-            val network = findCurrentWifiNetwork(connectivityManager, targetHost)
+            // 2026-09-25：先按 WiFi 分级挑网络；实在没有任何 WiFi 候选时，
+            // 退回系统默认网络（activeNetwork）而不是立刻失败。用户开启
+            // Tailscale 等 VPN 后，原来「非物理 WiFi 就直接报错」的行为会让
+            // 连接完全不可用，这里改成尽量连上，并把失败原因留给后续日志。
+            val wifiNetwork = findCurrentWifiNetwork(connectivityManager, targetHost)
+            val network = wifiNetwork ?: connectivityManager.activeNetwork
             if (network == null) {
                 emitEvent(
                     id,
                     "failure",
-                    mapOf("message" to "Physical WiFi network is unavailable")
+                    mapOf("message" to "No usable network (no WiFi candidate and no active network)")
                 )
                 cleanupConnection(id)
                 return id
+            }
+            if (wifiNetwork == null) {
+                Log.w(
+                    logTag,
+                    "No WiFi candidate for target=$targetHost; falling back to activeNetwork=$network " +
+                        describeCapabilities(connectivityManager.getNetworkCapabilities(network))
+                )
             }
             openWifiBoundWebSocket(id, url, timeoutMs, network, connectivityManager)
         } catch (error: Exception) {
@@ -202,48 +214,111 @@ class MainActivity : FlutterActivity() {
     ): Network? {
         val networks = connectivityManager.allNetworks
         val targetAddress = parseIpv4Address(targetHost)
-        var fallbackNetwork: Network? = null
-        var fallbackInterfaceName: String? = null
+
+        // 分级挑选，取代原来的「必须 WiFi 且非 VPN」硬判定。
+        // routed* 记录命中目标网段的网络，best* 记录优先级最高（tier 最小）的网络。
+        var routedNetwork: Network? = null
+        var routedTier = Int.MAX_VALUE
+        var routedInterfaceName: String? = null
+        var bestNetwork: Network? = null
+        var bestTier = Int.MAX_VALUE
+        var bestInterfaceName: String? = null
 
         for (network in networks) {
             val capabilities = connectivityManager.getNetworkCapabilities(network) ?: continue
-            if (
-                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) &&
-                capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-            ) {
-                val linkProperties = connectivityManager.getLinkProperties(network)
-                val interfaceName = linkProperties?.interfaceName
-                val routeMatchesTarget =
-                    targetAddress != null &&
-                        linkProperties?.linkAddresses?.any {
-                            linkAddressContains(it, targetAddress)
-                        } == true
-                Log.i(
-                    logTag,
-                    "Physical WiFi candidate network=$network iface=$interfaceName " +
-                        "target=$targetHost routeMatchesTarget=$routeMatchesTarget"
-                )
-                if (routeMatchesTarget) {
-                    Log.i(logTag, "Selected routed physical WiFi network=$network iface=$interfaceName")
-                    return network
-                }
-                if (fallbackNetwork == null) {
-                    fallbackNetwork = network
-                    fallbackInterfaceName = interfaceName
-                }
+            val tier = wifiCapabilityTier(capabilities) ?: continue
+            val linkProperties = connectivityManager.getLinkProperties(network)
+            val interfaceName = linkProperties?.interfaceName
+            val routeMatchesTarget =
+                targetAddress != null &&
+                    linkProperties?.linkAddresses?.any {
+                        linkAddressContains(it, targetAddress)
+                    } == true
+            Log.i(
+                logTag,
+                "WiFi candidate network=$network tier=$tier iface=$interfaceName " +
+                    "target=$targetHost routeMatchesTarget=$routeMatchesTarget " +
+                    describeCapabilities(capabilities)
+            )
+            if (routeMatchesTarget && tier < routedTier) {
+                routedNetwork = network
+                routedTier = tier
+                routedInterfaceName = interfaceName
+            }
+            if (tier < bestTier) {
+                bestNetwork = network
+                bestTier = tier
+                bestInterfaceName = interfaceName
             }
         }
 
-        if (fallbackNetwork != null) {
-            Log.i(logTag, "Selected fallback physical WiFi network=$fallbackNetwork iface=$fallbackInterfaceName")
-            return fallbackNetwork
+        if (routedNetwork != null) {
+            Log.i(
+                logTag,
+                "Selected routed WiFi network=$routedNetwork tier=$routedTier iface=$routedInterfaceName"
+            )
+            return routedNetwork
+        }
+
+        if (bestNetwork != null) {
+            Log.i(
+                logTag,
+                "Selected best-effort WiFi network=$bestNetwork tier=$bestTier iface=$bestInterfaceName"
+            )
+            return bestNetwork
         }
 
         Log.w(
             logTag,
-            "No physical WiFi network found among ${networks.size} networks for target=$targetHost"
+            "No WiFi-capable network found among ${networks.size} networks for target=$targetHost"
         )
         return null
+    }
+
+    /**
+     * 2026-09-25 新增：给候选网络分级，取代原先「TRANSPORT_WIFI 且 NET_CAPABILITY_NOT_VPN」
+     * 的硬判定。
+     *
+     * 背景：用户手机开启 Tailscale 后完全连不上 PC。原实现把「非 VPN」当成物理 WiFi 的必要
+     * 条件，一旦 capability 组合变化就一个候选都匹配不到，而且调用方会直接报
+     * "Physical WiFi network is unavailable" 且不做任何回退。Android 9 起 VPN 调用
+     * setUnderlyingNetworks() 后，系统会把底层网络的 transport 传播给 VPN 网络，
+     * capability 组合因此不再稳定。
+     *
+     * 现在改为：只要这个网络与 WiFi 有关就当作候选，VPN 状态只影响优先级（tier 越小越优先），
+     * 不影响「能不能用」。返回 null 表示该网络与 WiFi 完全无关（例如纯蜂窝）。
+     */
+    private fun wifiCapabilityTier(capabilities: NetworkCapabilities): Int? {
+        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            return null
+        }
+        val hasVpnTransport = capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+        val notVpn = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+        return when {
+            !hasVpnTransport && notVpn -> 0   // 理想：纯物理 WiFi
+            !hasVpnTransport -> 1             // 有 WiFi transport 但 capability 异常，仍按物理 WiFi 处理
+            else -> 2                         // VPN 网络继承了 WiFi transport，作为最后候选
+        }
+    }
+
+    /**
+     * 2026-09-25 新增：把网络能力展开成可读字符串，用于诊断 VPN / 多网络场景下的选网问题。
+     * 只记录 transport 与 capability 名称，不涉及任何用户内容。
+     */
+    private fun describeCapabilities(capabilities: NetworkCapabilities?): String {
+        if (capabilities == null) {
+            return "caps=null"
+        }
+        val transports = mutableListOf<String>()
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) transports.add("wifi")
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) transports.add("cell")
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) transports.add("vpn")
+        if (capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) transports.add("eth")
+        val caps = mutableListOf<String>()
+        if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)) caps.add("not_vpn")
+        if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) caps.add("internet")
+        if (capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) caps.add("validated")
+        return "transports=${transports.joinToString("|")} caps=${caps.joinToString("|")}"
     }
 
     private fun parseIpv4Address(host: String?): Inet4Address? {

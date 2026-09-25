@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 35（complete）
+阶段 36（in_progress）
 
 ## 各阶段
 
@@ -295,6 +295,20 @@
 - [x] 真实桌面会话验证：本机实际为 X11 会话，进程常驻、9527 监听正常、日志零 AT-SPI 记录
 - **状态：** complete
 
+### 阶段 36：Android 端 VPN 场景 WiFi 连接修复与 v2.9.12 发布
+- [x] 定位根因：`findCurrentWifiNetwork` 硬要求 `TRANSPORT_WIFI && NET_CAPABILITY_NOT_VPN`，不匹配就直接失败且无回退
+- [x] 联网核实 Android 9+ `setUnderlyingNetworks()` 的 transport 传播行为与 Tailscale 侧已知限制
+- [x] `MainActivity.kt` 改为分级选网：物理 WiFi → capability 异常的 WiFi → 继承 WiFi transport 的 VPN 网络
+- [x] 无 WiFi 候选时回退 `activeNetwork`，不再直接失败
+- [x] 新增每个候选网络的 transport/capability 诊断日志
+- [x] 本地构建 debug APK，验证 Kotlin 编译通过
+- [x] 运行 PC 全量单测（86 OK）、flutter analyze（0）、flutter test（24 passed）
+- [x] 同步 CHANGELOG、双语文档与版本号到 2.9.12
+- [ ] 更新 PWF 并提交推送 main
+- [ ] 推送 v2.9.12 tag 并确认 Actions 与 Release 资产
+- [ ] 用户安装新 APK 并在开启 Tailscale 的情况下实测
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -311,6 +325,9 @@
 | 以 v2.9.11 覆盖 v2.9.10 的 AT-SPI 路线，不回退远端提交 | v2.9.10 已公开发布且资产齐全，保留其历史并发布新版本，不移动或删除已公开的 tag |
 | 用 `git revert fa09391` 而不是在 1571 行代码上手工删除 | AT-SPI 强化集中在单一提交里，revert 后代码精确回到 `6fd3902` 基线，删除边界可靠且可复核 |
 | 保留 Wayland 的 PRIMARY selection 写入 | 它属于剪贴板兼容层而不是焦点探测，删除它超出本次范围且有行为回归风险 |
+| Android 选网从「过滤」改为「分级」 | 硬要求「非 VPN」会让任何 VPN 一开就完全不可用；分级能在保持 WiFi 优先的同时不被 VPN 状态阻断 |
+| 找不到 WiFi 候选时回退 `activeNetwork` 而不是立即失败 | 立即失败让问题无法诊断；回退至少能连通，并把真实原因写进日志 |
+| 本次 PC 端不改动，只同步版本号 | 改动 100% 在 Android 原生层；PC 端没有更新提示逻辑，用户无需重装 |
 
 ## 遇到的错误
 | 错误 | 尝试次数 | 解决方案 |

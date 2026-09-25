@@ -15,6 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.12] - 2026-09-25
+
+### Fixed
+
+- Android: Voicing now keeps using the WiFi network to reach the PC regardless of any active VPN. The previous implementation required a network to satisfy both `TRANSPORT_WIFI` and `NET_CAPABILITY_NOT_VPN`, and failed immediately with "Physical WiFi network is unavailable" when nothing matched, so enabling Tailscale (or any other VPN) made the phone unable to connect at all
+- Android: WiFi candidates are now ranked instead of filtered. A plain physical WiFi network is preferred, a WiFi network whose VPN capability is affected is still used, and a VPN network that inherited the WiFi transport (Android 9+ `setUnderlyingNetworks()` behaviour) is the last resort
+- Android: when no WiFi candidate exists at all, the connection falls back to the system default network instead of failing outright
+- Android: network selection now logs each candidate's transports and capabilities, so VPN-related connection problems can be diagnosed from a single logcat
+
+### 修复
+
+- Android: 现在无论手机开启什么 VPN，Voicing 都会继续按 WiFi 网络连接 PC。原实现要求网络同时满足 `TRANSPORT_WIFI` 与 `NET_CAPABILITY_NOT_VPN`，一旦没有网络匹配就立刻报 "Physical WiFi network is unavailable"，导致开启 Tailscale 等 VPN 后完全连不上
+- Android: WiFi 候选改为分级排序而不是过滤。优先纯物理 WiFi，其次 capability 受 VPN 影响的 WiFi 网络，最后才是继承了 WiFi transport 的 VPN 网络（Android 9+ `setUnderlyingNetworks()` 行为）
+- Android: 完全没有任何 WiFi 候选时回退到系统默认网络，而不是直接失败
+- Android: 选网过程会记录每个候选的 transport 与 capability，一次 logcat 即可诊断 VPN 相关的连接问题
+
+### Notes
+
+- The PC side is unchanged in this release; only the Android APK needs updating.
+- If Android's "Block connections without VPN" option is enabled, the system prevents any socket from bypassing the VPN and no application can work around it. Disable that option, enable "Allow LAN access" in Tailscale, or add the PC to the tailnet instead.
+
+### 说明
+
+- 本版本 PC 端没有任何改动，只需要更新 Android APK。
+- 如果开启了 Android 的「阻止不经过 VPN 的连接」，系统会禁止任何绕过 VPN 的 socket，任何应用都无法绕过。请改为关闭该选项、在 Tailscale 中开启 Allow LAN access，或把 PC 加入 tailnet。
+
+---
+
 ## [2.9.11] - 2026-09-25
 
 ### Changed

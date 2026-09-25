@@ -92,7 +92,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.11"
+APP_VERSION = "2.9.12"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.35
 NATIVE_FONT_FAMILY = get_native_font_family()

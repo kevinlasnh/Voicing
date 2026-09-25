@@ -17,7 +17,7 @@ The Android client. Streams text from the phone's voice keyboard to the desktop 
 - Re-scanning the same PC merges new and old candidate IPs, so scanning on a new LAN does not drop the old LAN address
 - The PC refreshes its QR and WebSocket listener at runtime, so the desktop app does not need a restart after a LAN switch
 - After the desktop listener is up, QR payloads prefer the IPs that the PC actually bound successfully
-- Android-native WiFi-bound WebSocket prefers a physical, non-VPN WiFi `Network`, reducing VPN/proxy adapter interference
+- Android-native WiFi-bound WebSocket binds to the WiFi `Network` even while a VPN is active: candidates are ranked rather than filtered, so Tailscale and similar VPNs no longer block the connection
 - Android-native IME-height listener keeps the input field tracking the keyboard as it expands/collapses
 - Fast reconnect after screen-off / screen-on, prefers showing "Connected" while reconnecting
 - Live connection status (Connected / Connecting… / Disconnected)

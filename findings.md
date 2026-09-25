@@ -581,3 +581,11 @@
 - 这个事实让本次改造的动机更清晰：X11 会话下 `_is_linux_wayland()` 为假，`paste_from_clipboard()` 走 `pyautogui.hotkey("ctrl","v")`，`_paste_primary_selection_if_supported()` 直接返回 None，**AT-SPI 检测与 RemoteDesktop portal 根本不会被调用**。历史那些不稳定性都来自 Wayland 分支，而用户日常并不在那个分支上。[源码 + 本地命令输出·confirmed]
 - 同时这也意味着「终端内 Ctrl+V 不会粘贴」在本机同样成立（Ghostty 默认 `ctrl+shift+v` 才是粘贴），与用户的取舍一致。[本地命令输出·confirmed]
 - 本机验证结论：`/opt/voicing/voicing` 2.9.11 在真实 X11 会话下常驻、`192.168.50.113:9527` 正常监听、托盘无报错、日志零 AT-SPI 记录。[本地命令输出·confirmed]
+
+## 2026-09-25 Android 端 VPN 阻断 Voicing 连接的根因
+
+- 用户报告手机开启 Tailscale 后连不上 PC。根因是 `MainActivity.kt` 的 `findCurrentWifiNetwork()` 把「非 VPN」当成物理 WiFi 的**必要条件**：`hasTransport(TRANSPORT_WIFI) && hasCapability(NET_CAPABILITY_NOT_VPN)` 同时成立才算候选，而唯一调用点 `connectWifiWebSocket()` 在拿到 null 时直接 emit "Physical WiFi network is unavailable" 并 `cleanupConnection`，**没有任何回退**。因此只要候选集合因 VPN 变化而落空，连接就完全不可用。[源码·confirmed]
+- 该文件里用 `OkHttpClient.Builder().socketFactory(network.socketFactory)` + `network.getAllByName()` 的绑定方式是正确的，能让 socket 真正绑定到所选 Network 从而绕过 VPN 路由表；问题只在「选哪个网络」这一步。[源码·confirmed]
+- Android 9 起，VPN 应用调用 `setUnderlyingNetworks()` 后系统会把底层网络的 transports/capabilities 传播给 VPN 网络，因此 `TRANSPORT_WIFI` 不再专属于物理网络，`TRANSPORT_WIFI && TRANSPORT_VPN` 可以同时出现在一个网络对象上。[联网·Android 9 行为变更文档·confirmed]
+- Tailscale 侧有三个相关已知限制：Android 的 "Block connections without VPN" 会阻止本地设备访问（tailscale#13407）；exit node 模式下 "Allow LAN access" 开关会消失或失效（tailscale#16187、#17720）；官方另有 "Can't connect to local area network" 故障排查页。也就是说「VPN 开着还能连局域网」在部分配置下本身就是 Tailscale/Android 的限制，不是应用能单方面解决的。[联网·confirmed]
+- 结论：应用侧能做到的是「不再因为 VPN 而拒绝连接」——分级选网 + activeNetwork 回退 + 可诊断日志；做不到的是绕过 Android 的 VPN lockdown，那属于系统安全特性。[源码 + 联网·confirmed]

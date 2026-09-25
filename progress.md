@@ -1309,3 +1309,35 @@
   - 四个 DEB 依赖（`libegl1`、`libdbus-1-3`、`libxkbcommon-x11-0`、`libxcb-cursor0`）本机均已安装。
   - 写入 `~/.config/autostart/voicing.desktop`（`Exec=/opt/voicing/voicing`、`TryExec`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`、`Terminal=false`，权限 0644），`desktop-file-validate` 通过。
 - 真实桌面会话验证：本机当前会话实际为 **X11**（`XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`loginctl Type=x11`），并非此前记录的 GNOME Wayland。用会话环境变量启动 `/opt/voicing/voicing` 后进程常驻、`192.168.50.113:9527` 监听成功、日志无托盘错误、无任何 AT-SPI 记录。
+
+## 会话：2026-09-25 CST — Android 端 VPN 场景 WiFi 连接修复与 v2.9.12 发布
+
+### 问题与根因
+- **状态：** complete
+- 用户报告：手机开启 Tailscale 后连不上电脑端的 Voicing，并希望「不论开什么 VPN 都按 WiFi 判断网络连通性」。
+- 根因定位在 `android/voice_coding/android/app/src/main/kotlin/com/voicecoding/app/MainActivity.kt` 的 `findCurrentWifiNetwork()`：候选网络必须**同时**满足 `hasTransport(TRANSPORT_WIFI)` 与 `hasCapability(NET_CAPABILITY_NOT_VPN)`，且调用方（`connectWifiWebSocket`）在返回 null 时**直接报 "Physical WiFi network is unavailable" 并结束，没有任何回退路径**。
+- 联网核实：Android 9 起 VPN 调用 `setUnderlyingNetworks()` 后，系统会把底层网络的 transport 传播给 VPN 网络，capability 组合因此不再稳定；Tailscale 侧另有「Block connections without VPN 会阻止本地设备访问」（tailscale#13407）、exit node 下 Allow LAN access 失效（tailscale#16187、#17720）等已知限制。
+- 注意：代码用 `network.socketFactory` + `network.getAllByName()` 强制绑定所选网络的写法本身是正确的（可绕过 VPN 路由表），问题纯粹出在「挑网络」这一步过于严格。
+
+### 代码改动
+- **状态：** complete
+- `MainActivity.kt` 新增 `wifiCapabilityTier()`：把候选网络分级而不是过滤 —— tier 0 纯物理 WiFi（`WIFI && !VPN && NOT_VPN`）、tier 1 有 WiFi transport 但 capability 异常、tier 2 VPN 网络继承了 WiFi transport；与 WiFi 无关的网络返回 null 不参与。
+- `findCurrentWifiNetwork()` 改为同时维护「命中目标网段的最佳 tier」与「全局最佳 tier」两个候选，优先返回命中所连网段的那个。
+- `connectWifiWebSocket()` 在没有任何 WiFi 候选时回退 `connectivityManager.activeNetwork`，只有连 activeNetwork 都没有时才失败。
+- 新增 `describeCapabilities()`，把每个候选网络的 transport（wifi/cell/vpn/eth）与 capability（not_vpn/internet/validated）写进日志，便于一次 logcat 定位。
+- 未改动 Dart 侧、PC 端与协议；PC 端本次仅同步版本号字符串。
+
+### 验证结果
+- **状态：** complete
+- 本地 `flutter build apk --debug`：**成功构建** `build/app/outputs/flutter-apk/app-debug.apk`（Kotlin 编译通过，这是本次改动的关键验证）。
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅既有 4 个 `withOpacity` info。
+- `flutter test`：24 tests passed。
+- `.venv/bin/python -m py_compile` + `unittest discover -s pc/tests`：86 tests OK。
+- 构建过程自动给 `android/gradlew` 加了可执行位（mode 100644 → 100755），与本任务无关，已 `chmod 644` 还原以保持 diff 干净。
+
+### 文档与版本
+- **状态：** complete
+- `CHANGELOG.md`：新增双语 `2.9.12` 块（Fixed / 修复 + Notes / 说明），明确写出 PC 端无改动、以及「阻止不经过 VPN 的连接」属系统级限制。
+- `README.md` / `README.zh-CN.md`：特性行「物理网卡优先」与工作原理第 7 条改写为「即使开着 VPN 也按 WiFi 连接，候选分级而非过滤」。
+- `android/README.md` / `android/README.zh-CN.md`：原生 WebSocket 说明同步。
+- 版本号：PC `2.9.12`，Android `2.9.12+13`。

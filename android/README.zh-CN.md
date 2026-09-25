@@ -17,7 +17,7 @@ Android 端应用，通过手机语音输入将文字实时发送到电脑。
 - 同一 PC 重新扫码时会合并新旧候选 IP，不会因为在新局域网扫码而丢掉旧局域网地址
 - PC 端会在运行中刷新 QR 码和 WebSocket 监听地址，切换局域网后无需重启桌面端再扫码
 - PC 端监听启动后，QR payload 会优先使用实际绑定成功的 IP
-- Android 原生 WiFi-bound WebSocket 优先走物理且非 VPN 的 WiFi Network，降低 VPN/代理虚拟网卡影响
+- Android 原生 WiFi-bound WebSocket 即使开着 VPN 也会绑定到 WiFi Network：候选网络按优先级排序而不是过滤，因此 Tailscale 等 VPN 不再阻断连接
 - Android 原生 IME 高度监听让输入框实时跟随键盘展开/收起
 - 息屏/亮屏后快速重连，并优先保持"已连接"状态显示
 - 连接状态实时显示（已连接/连接中.../未连接）

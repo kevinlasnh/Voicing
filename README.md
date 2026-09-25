@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.11-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.12-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -30,7 +30,7 @@ Voicing turns your phone's voice keyboard into your computer's "mouth" — speak
 - **No broadcast required** — after launch, the phone tries the saved IP pool directly; no UDP discovery
 - **PC runtime network refresh** — when the desktop switches to a new LAN, the QR code and WebSocket listener refresh on the fly with no app restart
 - **Bound-IP QR safety** — once the listener is up, QR codes advertise only the IPs the desktop actually bound successfully
-- **Physical NIC priority** — both ends try to bypass VPN/proxy virtual adapters and prefer real WiFi/LAN
+- **Physical NIC priority** — both ends try to bypass VPN/proxy virtual adapters and prefer real WiFi/LAN; on Android the phone keeps using the WiFi network even while a VPN such as Tailscale is active
 - **Auto-send on speech end** — finished sentences are sent automatically; no manual confirm
 - **Auto Enter (optional)** — submit to the agent as soon as you stop speaking
 - **Manual Enter still works** — press Enter to submit, useful when you want to edit first
@@ -114,7 +114,7 @@ Tray icon states:
 4. On later launches or manual refresh, the phone tries the saved IP pool one by one; UDP discovery is no longer used
 5. The PC WebSocket server rebinds to the current LAN IP whenever the address pool changes, so it never lingers on stale addresses
 6. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
-7. The Android WebSocket prefers binding to the physical WiFi `Network`; the PC filters VPN / virtual adapters, and Android explicitly requires a non-VPN WiFi Network
+7. The Android WebSocket binds to the WiFi `Network` even when a VPN is active: WiFi candidates are ranked (plain physical WiFi first, then WiFi whose VPN capability is affected, then a VPN network that inherited the WiFi transport) instead of requiring a non-VPN network, so enabling Tailscale no longer blocks the connection
 8. Phone text (voice or typed) streams to the desktop in real time
 9. The desktop pastes via the clipboard and emits an Enter when needed; Linux X11 uses the normal Ctrl+V path, while GNOME Wayland uses the RemoteDesktop portal keyboard permission
 10. GNOME Wayland always sends a plain Ctrl+V: terminal focus is no longer probed and there is no paste mode switch, so paste behavior is fully deterministic
@@ -176,8 +176,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.11
-git push origin v2.9.11
+git tag v2.9.12
+git push origin v2.9.12
 ```
 
 Local debug builds:
