@@ -304,10 +304,10 @@
 - [x] 本地构建 debug APK，验证 Kotlin 编译通过
 - [x] 运行 PC 全量单测（86 OK）、flutter analyze（0）、flutter test（24 passed）
 - [x] 同步 CHANGELOG、双语文档与版本号到 2.9.12
-- [ ] 更新 PWF 并提交推送 main
-- [ ] 推送 v2.9.12 tag 并确认 Actions 与 Release 资产
+- [x] 更新 PWF 并提交推送 main（`72ef1c5`）
+- [x] 推送 v2.9.12 tag；Actions run `36141549843` 6/6 job 全绿，Release 六项资产齐全
 - [ ] 用户安装新 APK 并在开启 Tailscale 的情况下实测
-- **状态：** in_progress
+- **状态：** in_progress（等待用户实机验证）
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？

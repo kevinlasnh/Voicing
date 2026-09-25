@@ -1341,3 +1341,12 @@
 - `README.md` / `README.zh-CN.md`：特性行「物理网卡优先」与工作原理第 7 条改写为「即使开着 VPN 也按 WiFi 连接，候选分级而非过滤」。
 - `android/README.md` / `android/README.zh-CN.md`：原生 WebSocket 说明同步。
 - 版本号：PC `2.9.12`，Android `2.9.12+13`。
+
+### v2.9.12 发布结果
+- **状态：** complete
+- 提交 `72ef1c5 Release v2.9.12: keep using WiFi when a VPN is active` 已推送 `main`（`db8a61f..72ef1c5`）；tag `v2.9.12` 已推送并触发 Actions run `36141549843`。
+- 推送过程记录：前两次 `git push` 因网络失败（`Failed to connect to github.com port 443`、`Failure when receiving data from the peer`），第三次成功。期间发现并修正了重试脚本的退出码判断 bug —— 原写法 `if git push ... | tail -3` 判断的是 `tail` 的退出码（永远为 0），会误报成功；改为 `if out=$(git push ...)` 后判断正确。
+- Actions 结果：6/6 job 全部 success（Prepare Release Notes、Build macOS App、Build Windows EXE、Build Linux Desktop Binary、Build Android APK、Publish GitHub Release）。
+- Release `v2.9.12`（created 2026-09-25T13:24:35Z）资产齐全：`SHA256SUMS.txt`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`voicing-macos-arm64.dmg`、`voicing-windows-x64.exe`、`voicing.apk`。
+- 本机 PC 端保持 v2.9.11 运行不变（本次 PC 端无功能改动，无需重装）；待办为用户安装新 APK 并在开启 Tailscale 的情况下实测。
+- 实机排查指引：诊断日志 tag 为 `VoicingNativeWs`，关键行包括 `WiFi candidate network=... tier=... iface=... transports=... caps=...`、`Selected routed WiFi network=...`、`Selected best-effort WiFi network=...`、`No WiFi candidate ... falling back to activeNetwork=...`、`No WiFi-capable network found among N networks`。
