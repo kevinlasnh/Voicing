@@ -1389,3 +1389,14 @@
 - `README.md` / `README.zh-CN.md`：特性行改为「物理网卡优先 + Tailscale 兜底」，工作原理第 7 条同步。
 - `android/README.md` / `android/README.zh-CN.md`：原生 WebSocket 说明同步。
 - 版本号：PC `2.9.13`，Android `2.9.13+14`。
+
+### v2.9.13 发布与本机安装
+- **状态：** complete
+- 提交 `eb43ffe Release v2.9.13: reach the desktop over Tailscale when a VPN blocks LAN` 已推送 `main`（`d15d55b..eb43ffe`，第 2 次重试成功，首次为 `gnutls_handshake` 失败）；tag `v2.9.13` 首次即推送成功。
+- Actions run `36146092747`：6/6 job 全部 success，Release `v2.9.13`（created 2026-09-25T14:13:24Z）六项资产齐全。
+- 本机安装：`sha256sum -c` 校验通过；先 `pkill -TERM -x voicing` 停掉旧进程（注意：首次用 `pkill -f "/opt/voicing/voicing"` 误杀了执行命令的 shell 自身，因为该模式也匹配到自己的命令行，已改用 `-x` 精确匹配进程名）；`apt-get install` 从 `2.9.11` 升级到 `2.9.13`，`~/.config/autostart/voicing.desktop` 保持不变。
+- 重启后实测（真实 X11 桌面会话）：
+  - 进程常驻，`ss -ltnp` 显示**两个**监听：`100.102.136.4:9527` 与 `192.168.50.113:9527`。
+  - 日志：`QR/WS 网络接口刷新: none -> 192.168.50.113, 100.102.136.4`、`server listening on 192.168.50.113:9527`、`server listening on 100.102.136.4:9527`。
+  - `ss -tnp` 显示手机 `192.168.50.56` 已建立连接（当前经局域网地址）。
+- 待用户完成：安装 v2.9.13 APK 后**必须重新扫描一次 QR 码** —— 旧配对记录里只保存了 `192.168.50.113`，不重新配对就不会把 Tailscale 地址纳入候选池。

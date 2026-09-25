@@ -318,11 +318,11 @@
 - [x] 新增 6 个 PC 单元测试并跑通全量（92 tests OK）
 - [x] 本地构建 debug APK 验证 Kotlin 编译；flutter analyze 0 / flutter test 24 passed
 - [x] 同步 CHANGELOG、双语文档与版本号到 2.9.13
-- [ ] 更新 PWF 并提交推送 main
-- [ ] 推送 v2.9.13 tag 并确认 Actions 与 Release 资产
-- [ ] 本机安装 v2.9.13 deb 并重启 Voicing
-- [ ] 用户安装新 APK 实测 Tailscale 连接
-- **状态：** in_progress
+- [x] 更新 PWF 并提交推送 main（`eb43ffe`）
+- [x] 推送 v2.9.13 tag；Actions run `36146092747` 6/6 job 全绿，Release 六项资产齐全
+- [x] 本机安装 v2.9.13 deb（从 2.9.11 升级）并重启，实测双地址监听生效
+- [ ] 用户安装新 APK 并**重新扫码配对**，在开启 Tailscale 下实测
+- **状态：** in_progress（等待用户实机验证）
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
