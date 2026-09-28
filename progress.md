@@ -1401,6 +1401,19 @@
   - `ss -tnp` 显示手机 `192.168.50.56` 已建立连接（当前经局域网地址）。
 - 待用户完成：安装 v2.9.13 APK 后**必须重新扫描一次 QR 码** —— 旧配对记录里只保存了 `192.168.50.113`，不重新配对就不会把 Tailscale 地址纳入候选池。
 
+## 会话：2026-09-28 CST — 同步云端最新内容 + 本机安装 v2.9.13 + 开机自启
+
+### 阶段 38：云端同步与本机落地
+- **状态：** complete
+- 起始状态：工作区干净、无未跟踪文件、无本地未推送提交；本地 `main` 为 `c741469`（v2.9.10 时代的最终 checkpoint），`origin/main` 为 `3f8341b`，落后 7 个提交（含 `v2.9.11`、`v2.9.12`、`v2.9.13` 三个 release 提交及其记录提交）。
+- 执行 `git pull --ff-only origin main`，快进 `c741469..3f8341b`（17 个文件变更，+778/−1948）；`git fetch` 同时拉入 tag `v2.9.11`、`v2.9.12`、`v2.9.13`。同步后版本号自检：PC `APP_VERSION = "2.9.13"`、Android `2.9.13+14`。
+- 从 GitHub Release `v2.9.13` 下载 `voicing-linux-amd64.deb`（75,726,794 字节）与 `SHA256SUMS.txt` 到 `/tmp/voicing-v2913/`：`sha256sum -c SHA256SUMS.txt` 对 deb 报 `OK`，且与 Release API digest `sha256:0135b75223f9e5ece7cc7d2e1c2596a6fec6ee65991df3feacf7203a605abbb5` 完全一致（其余四项未下载而 skip，属预期）。
+- 安装：`sudo -n dpkg -r voicing`（卸载 2.9.10）→ `sudo -n dpkg -i` 安装 2.9.13。`dpkg -l` 显示 `voicing 2.9.13`；`/usr/bin/voicing -> /opt/voicing/voicing`，包内 owner 全为 `root/root`、二进制 0755；已安装二进制 SHA-256 为 `b958f4c8a1f13adc918c5638d5f5b0e0c8e35aa73f1acd1b15d48988c19b6d0d`，与 Release 的 `voicing-linux-x86_64` 资产完全一致。
+- 开机自启：本机此前**没有** `~/.config/autostart/voicing.desktop`。第一次直接用仓库 `.venv` 调用 `set_startup_enabled(True)`，写出的是源码开发命令（`Exec=.../.venv/bin/python .../pc/voice_coding.py`），这不是已安装应用该有的自启项；改为模拟 PyInstaller frozen 运行态（`sys.frozen=True`、`sys.executable="/opt/voicing/voicing"`）重新写入，使条目与托盘「开机自启」在同一条命令下生成的完全一致：`Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`、`Terminal=false`。`desktop-file-validate` 通过，`is_startup_enabled()` 返回 `True`。
+- 启动验证：本机当前为 **X11** 会话（`XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`XDG_CURRENT_DESKTOP=ubuntu:GNOME`），`setsid nohup /opt/voicing/voicing` 启动后进程常驻（主进程及其 PyInstaller onefile 子进程）。
+- 监听与日志：`ss -ltnp` 显示三个地址监听 9527 —— `10.10.0.225`（wifi `wlp0s20f3`）、`172.17.0.1`（docker0）、`100.104.201.81`（Tailscale CGNAT）。日志 `/home/kevinlasnh/.local/share/Voicing/logs/voice_coding_20260928.log` 无任何 ERROR/WARNING，QR 候选接口刷新与三处 `server listening` 均正常。
+- 本次未改动任何业务代码与版本号，也未触发 Release；动作范围是同步仓库、替换安装包、修正自启项并启动运行。
+
 ### 用户实机验证通过 —— 任务闭环
 - **状态：** complete
 - 用户反馈：安装 v2.9.13 APK 并重新扫码配对后，**在开启 Tailscale 的情况下连接正常**，问题解决。

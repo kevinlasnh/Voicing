@@ -605,3 +605,12 @@
 - 最终生效的机制是「双通道」：局域网地址保持首选（QR 的 `ip` 与 `ips[0]`），Tailscale CGNAT 地址作为兜底候选同时进入 QR 的 `ips` 与 WebSocket 绑定列表；Android 侧按目标地址分路 —— `100.64.0.0/10` 走系统默认网络（隧道），其它目标按分级选 WiFi。[源码 + 本机实测·confirmed]
 - 一条容易踩的操作前提：**改了 QR payload 后，手机必须重新扫码配对**。已保存的 `saved_server` 不会自动获得新候选，仅装新 APK 不足以让新地址进入候选池。后续任何 QR 字段变更都应把「重新配对」写进发布说明。[本任务实测·confirmed]
 - 复发时的排查入口（已固化在代码里）：`adb logcat -s VoicingNativeWs:V`，关键行 `Selected network=... for target=... tailscaleTarget=true/false` 与 `WiFi candidate network=... tier=... transports=... caps=...`。[源码·confirmed]
+
+## 2026-09-28 同步 v2.9.13、本机安装与自启项的真实来源
+
+- 本次同步前本地 `main` 为 `c741469`、`origin/main` 为 `3f8341b`，落后 7 个提交；`git pull --ff-only` 快进后版本号自检为 PC `2.9.13` / Android `2.9.13+14`，与 tag `v2.9.13` 一致。[git·confirmed]
+- 发布资产自校验形成闭环：`SHA256SUMS.txt` 中 `voicing-linux-amd64.deb` 为 `0135b752…abbb5`，既与本机下载文件的 `sha256sum -c` 结果一致，也与 Release API 的 `digest` 字段一致；安装后 `/opt/voicing/voicing` 的 SHA-256 `b958f4c8…b6d0d` 与 Release 中 `voicing-linux-x86_64` 资产逐一相同。说明「下载的包」「Release 声明的包」「真正装到机器上的二进制」三者是同一份产物。[本地命令输出·confirmed]
+- `~/.config/autostart/voicing.desktop` 由 `platform_autostart.set_startup_enabled(True)` 生成，命令来源是 `get_launch_command()`；而该函数在非 frozen 时返回 `[sys.executable, .../voice_coding.py]`。因此**从源码运行、在托盘点「开机自启」会写入 `.venv/bin/python pc/voice_coding.py`**，而不是已安装的 `/opt/voicing/voicing`。[源码·confirmed]
+- 这解释了一个容易复现的偏差：本次先用 `.venv` 调用该 API 得到的是开发命令条目，改为模拟 frozen 运行态（`sys.frozen=True`、`sys.executable="/opt/voicing/voicing"`）后写入的才是与用户托盘操作一致的条目。当前条目已确认为 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`，`desktop-file-validate` 通过且 `is_startup_enabled()` 为 `True`。[本地命令输出·confirmed]
+- 本机当前是 X11（`XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`XDG_CURRENT_DESKTOP=ubuntu:GNOME`），因此自启条目的 `OnlyShowIn=GNOME;` 会命中，登录后由 GNOME 会话拉起；这也是历史记录中「本机其实是 X11 而非 Wayland」结论的再次确认。[本地命令输出·confirmed]
+- 本次启动后监听地址与 2026-09-25 的记录不同：当次是 `192.168.50.113` + `100.102.136.4`，本次是 `10.10.0.225`（wifi `wlp0s20f3`）、`172.17.0.1`（docker0）、`100.104.201.81`（Tailscale）。说明地址集合随所在网络与 Tailscale 会话变化，属于预期行为。注意 `172.17.0.1`（docker0）会进入 QR 的 `ips` 候选池 —— 它是合法的私有 IPv4，但对手机来说不可达，Android 的候选轮询需要能跳过它；日志中「检测到 2 个 QR 连接候选网络接口」即 wifi + docker0。[本地命令输出·confirmed]

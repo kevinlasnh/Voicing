@@ -324,6 +324,15 @@
 - [x] 用户安装新 APK 并重新扫码配对，在开启 Tailscale 下实测通过，确认连接正常
 - **状态：** complete
 
+### 阶段 38：云端最新内容同步 + 本机 v2.9.13 安装 + 开机自启（2026-09-28）
+- [x] 确认工作区干净、`main` 落后 `origin/main` 7 个提交（`c741469` → `3f8341b`），并 `--ff-only` 拉到最新
+- [x] 确认最新发布为 `v2.9.13`（PC `2.9.13`、Android `2.9.13+14`），核验 GitHub Release 六项资产
+- [x] 下载 `voicing-linux-amd64.deb` 并做 `sha256sum -c` 与 Release API digest 双向校验
+- [x] 卸载本机 `voicing 2.9.10`，安装 `2.9.13`，确认二进制 SHA-256 与 Release standalone 资产一致
+- [x] 重建本机 `~/.config/autostart/voicing.desktop`：改为指向 `/opt/voicing/voicing` 并校验为启用状态
+- [x] 启动已安装的 Voicing，确认进程常驻、多地址监听 9527 且运行日志无 ERROR/WARNING
+- **状态：** complete
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
