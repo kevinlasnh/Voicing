@@ -178,5 +178,48 @@ class SyncStateBroadcastTests(unittest.TestCase):
             voice_coding.state.server_loop = old_loop
 
 
+class NativeMenuLazyCreationTests(unittest.TestCase):
+    """2026-11-20：Linux 原生菜单改为惰性创建自定义菜单控件，回调前必须同步真实状态。"""
+
+    @classmethod
+    def setUpClass(cls):
+        from PyQt5.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def _make_tray_icon(self):
+        from voice_coding import ModernTrayIcon
+        return ModernTrayIcon()
+
+    def test_lazy_menu_syncs_state_before_toggle(self):
+        import voice_coding
+        old_sync_enabled = voice_coding.state.sync_enabled
+        tray_icon = self._make_tray_icon()
+        try:
+            if voice_coding.get_platform() == "linux":
+                self.assertIsNone(tray_icon.menu_widget, "Linux 启动时不创建自定义菜单控件")
+            voice_coding.state.sync_enabled = False
+            tray_icon._menu_toggle_sync()
+            self.assertTrue(voice_coding.state.sync_enabled, "暂停状态下点击应恢复同步，而不是再次暂停")
+            self.assertIsNotNone(tray_icon.menu_widget)
+        finally:
+            voice_coding.state.sync_enabled = old_sync_enabled
+            tray_icon.hide()
+            tray_icon.deleteLater()
+
+    def test_lazy_menu_startup_toggle_uses_current_state(self):
+        import voice_coding
+        tray_icon = self._make_tray_icon()
+        try:
+            with (
+                patch("tray_ui.is_startup_enabled", return_value=True),
+                patch("tray_ui.set_startup_enabled") as set_startup,
+            ):
+                tray_icon._menu_toggle_startup()
+            set_startup.assert_called_once_with(False)
+        finally:
+            tray_icon.hide()
+            tray_icon.deleteLater()
+
+
 if __name__ == "__main__":
     unittest.main()

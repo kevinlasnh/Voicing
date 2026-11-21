@@ -12,9 +12,9 @@ The Android client. Streams text from the phone's voice keyboard to the desktop 
 - "Undo last input" restores the previously sent text
 - "Refresh connection" forces a manual reconnect
 - "Scan to connect" under the More menu — pairs with the PC by scanning its QR code
-- `saved_server` remembers each paired PC's `device_id`, the most recent successful IP, and the full candidate-IP pool
-- On launch, foreground resume, and manual refresh, reconnects directly via the saved IP candidates — handles hotspot ↔ office/school LAN switching
-- Re-scanning the same PC merges new and old candidate IPs, so scanning on a new LAN does not drop the old LAN address
+- `saved_server` remembers each paired PC's `device_id`, the most recent successful IP, the full candidate-IP pool, and which phone network every address succeeded on (schema v2 address book)
+- On launch, foreground resume, and manual refresh, the saved addresses are ranked for the current network and the best candidates are raced in parallel — returning to a previously paired network reconnects in about 1–2 s without re-scanning
+- Re-scanning the same PC merges both the candidate IPs and the per-network history, so scanning on a new LAN does not drop the old LAN address
 - The PC refreshes its QR and WebSocket listener at runtime, so the desktop app does not need a restart after a LAN switch
 - After the desktop listener is up, QR payloads prefer the IPs that the PC actually bound successfully
 - Android-native WebSocket ranks WiFi candidates for LAN targets and uses the system default network (VPN tunnel) for Tailscale CGNAT targets, so a VPN no longer blocks the connection
@@ -43,7 +43,7 @@ flutter build apk --release
 2. From the desktop tray menu, click "Show QR code"
 3. Connect the phone to the same network and open Voicing
 4. First use or new PC: tap "More → Scan to connect" on the phone and scan the desktop's QR
-5. Once the status bar reads "Connected" you're set; later launches will try the saved IP candidates directly. After both ends switch to a new LAN, wait for the desktop to refresh its QR, then re-scan to merge the new IP into the candidate pool — no desktop restart needed. Switching back to the old LAN keeps trying the older candidate IPs. On v2.9.4+, QR payloads avoid preferring desktop addresses that failed to bind
+5. Once the status bar reads "Connected" you're set; later launches will rank the saved addresses for the current network and try the best candidates in parallel. If both ends move to a new LAN, wait for the desktop to refresh its QR, then scan once to merge the new network into the address book — after that no re-scan is needed on that network. Switching back to the old LAN keeps using its saved successful addresses. On v2.9.4+, QR payloads avoid preferring desktop addresses that failed to bind
 6. Switch to a voice keyboard, talk, and the text shows up at the cursor on the computer
 7. On Linux/GNOME Wayland desktops the PC app always sends a plain Ctrl+V and no longer distinguishes terminals from normal windows; since terminal emulators do not treat Ctrl+V as paste, use it with regular input surfaces. If GNOME asks for RemoteDesktop keyboard permission after login or app start, approve it before sending text
 8. Open "More" to enable "Auto Enter" (good for chat scenarios — only one Enter is fired per chunked voice utterance)

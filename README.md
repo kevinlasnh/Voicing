@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.13-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.14-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -26,7 +26,7 @@ Tired of typing while talking to AI? Voicing lets your mouth replace your hands.
 Voicing turns your phone's voice keyboard into your computer's "mouth" — speak on your phone, and the text lands directly at the cursor on your computer.
 
 - **QR pairing** — scan the desktop's QR code once and the device is remembered
-- **Cross-subnet auto-recovery** — multiple candidate IPs are saved per PC, so switching between hotspot, office, and school LANs reconnects automatically
+- **Cross-network instant re-pairing** — the phone remembers which network each saved address worked on (schema v2 address book), ranks the best match for the current network, and races the top candidates in parallel (Happy Eyeballs). Once a PC has been paired once in each of several networks, coming back to any of them reconnects in about 1–2 s without re-scanning
 - **No broadcast required** — after launch, the phone tries the saved IP pool directly; no UDP discovery
 - **PC runtime network refresh** — when the desktop switches to a new LAN, the QR code and WebSocket listener refresh on the fly with no app restart
 - **Bound-IP QR safety** — once the listener is up, QR codes advertise only the IPs the desktop actually bound successfully
@@ -67,7 +67,7 @@ Run the desktop app → start a hotspot / Internet sharing / join the same LAN �
 
 When the status bar shows "Connected" you're good to go.
 
-After a successful scan the phone remembers this PC and its candidate IP pool. On the next launch it tries those saved addresses directly — even if the corporate / school / dorm network blocks broadcast, as long as device-to-device unicast works the connection comes back automatically. When the desktop switches to a new LAN, the QR code and WebSocket listener refresh in place; no need to restart the desktop app. Re-scanning the same PC on a new LAN merges the new IP into the candidate pool without dropping the old LAN address.
+After a successful scan the phone remembers this PC and its candidate IP pool, including which network each address worked on. If you pair the same PC once on two different networks (home Wi-Fi and office Wi-Fi, or a phone hotspot), returning to either network reconnects automatically in about 1–2 s — no re-scan. Saved candidates are raced in parallel instead of tried one by one, and the ranking adapts to the current network (same network first, then the same local subnet, then the Tailscale fallback). When the desktop switches to a new LAN, the QR code and WebSocket listener refresh in place; re-scanning merges the new IP into the pool without dropping old networks. Upgrading from 2.9.13 keeps the existing candidate pool, and the per-network history is filled in automatically the first time each network connects.
 
 ### 3. Use it
 
@@ -110,8 +110,8 @@ Tray icon states:
 
 1. The desktop displays a pairing QR with `device_id/ip/ips/port/name/os`, refreshing the physical IPv4 address pool at runtime and preferring the WebSocket listener's actually bound IPs
 2. The phone scans the QR and runs a WebSocket (port 9527) connectivity probe; on success it saves this PC
-3. The phone persists multiple candidate IPs for the same PC — hotspot and various LAN addresses are all kept; re-scanning the same `device_id` merges the candidate pool rather than overwriting it
-4. On later launches or manual refresh, the phone tries the saved IP pool one by one; UDP discovery is no longer used
+3. The phone persists multiple candidate IPs for the same PC — hotspot and various LAN addresses are all kept — and records the phone network each address succeeded on. Re-scanning the same `device_id` merges both the candidate pool and the per-network history rather than overwriting it
+4. On later launches or manual refresh, the phone ranks the saved addresses for the current network and races the best candidates in parallel (120 ms stagger, first handshake wins); UDP discovery is no longer used
 5. The PC WebSocket server rebinds to the current LAN IP whenever the address pool changes, so it never lingers on stale addresses
 6. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
 7. The desktop lists LAN addresses first and appends its Tailscale address (read from the `tailscale` CLI) as a fallback candidate, binding and advertising both. The Android WebSocket ranks WiFi candidates for LAN targets (plain physical WiFi, then WiFi whose VPN capability is affected, then a VPN network that inherited the WiFi transport), while a target inside the Tailscale CGNAT range is reached through the system default network, i.e. the VPN tunnel
@@ -143,7 +143,13 @@ flutter run
 ```
 Voicing/
 ├── pc/                          # Desktop (Python + PyQt5)
-│   ├── voice_coding.py          # Main program
+│   ├── voice_coding.py          # Entry, tuning and compatibility façade
+│   ├── network_interfaces.py    # NIC discovery/filtering, address snapshot cache
+│   ├── voicing_server.py        # WebSocket server, client registry, sync broadcast
+│   ├── tray_ui.py               # Tray icon and menus (native QMenu on Linux)
+│   ├── qr_dialog.py             # QR dialog and scan-success overlay
+│   ├── voicing_tuning.py        # All tunables, VOICING_* env overrides
+│   ├── voicing_state.py         # Shared runtime state and Qt signal bridge
 │   ├── device_identity.py       # PC device_id / name / os persistence
 │   ├── platform_utils.py        # Platform detection and shared utilities
 │   ├── platform_keyboard.py     # Keyboard simulation abstraction
@@ -157,7 +163,11 @@ Voicing/
 │   │   ├── main.dart            # UI layer
 │   │   ├── voicing_connection_controller.dart  # Connection state machine
 │   │   ├── voicing_protocol.dart               # Protocol constants
-│   │   ├── saved_server.dart    # Paired-PC persistence
+│   │   ├── saved_server.dart    # Paired-PC persistence (schema v2 address book)
+│   │   ├── server_address_book.dart # Per-network address history and ranking
+│   │   ├── network_profile.dart # Phone network fingerprint (interfaces/subnets)
+│   │   ├── connection_race.dart # Happy Eyeballs parallel dialing
+│   │   ├── connection_tuning.dart # Connection tuning constants
 │   │   ├── voicing_websocket.dart # Android WiFi-bound WebSocket / Dart fallback
 │   │   ├── app_theme.dart       # Theme and design tokens
 │   │   └── app_logger.dart      # Logging wrapper
@@ -176,8 +186,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.13
-git push origin v2.9.13
+git tag v2.9.14
+git push origin v2.9.14
 ```
 
 Local debug builds:

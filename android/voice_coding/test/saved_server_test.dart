@@ -11,7 +11,7 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('saved server serializes expected json shape', () {
+  test('saved server serializes expected v2 json shape', () {
     const server = SavedServer(
       deviceId: 'abc123',
       ip: '192.168.1.23',
@@ -22,7 +22,7 @@ void main() {
     );
 
     expect(server.toJson(), {
-      'schema_version': 1,
+      'schema_version': 2,
       'device_id': 'abc123',
       'ip': '192.168.1.23',
       'ips': ['192.168.1.23'],
@@ -30,6 +30,17 @@ void main() {
       'name': 'Kevin-Desktop',
       'os': 'windows',
       'last_connected_ts': 1713883200000,
+      'addresses': [
+        {
+          'ip': '192.168.1.23',
+          'network_key': '',
+          'network_kind': 'unknown',
+          'last_success_ts': 1713883200000,
+          'last_seen_ts': 1713883200000,
+          'success_count': 1,
+          'failure_count': 0,
+        },
+      ],
     });
     expect(SavedServer.fromJson(server.toJson()), server);
   });
@@ -157,8 +168,11 @@ void main() {
       'last_connected_ts': 1713883200000,
     });
 
+    expect(server.schemaVersion, 2);
     expect(server.ip, '192.168.137.1');
     expect(server.candidateIps, ['192.168.137.1']);
+    expect(server.addressBook.addressFor('192.168.137.1'), isNotNull);
+    expect(server.toJson()['schema_version'], 2);
   });
 
   test('store saves and loads saved_server blob', () async {
@@ -203,8 +217,10 @@ void main() {
     final rawSavedServer = prefs.getString(SavedServerStore.savedServerKey);
     expect(rawSavedServer, isNotNull);
     final savedJson = json.decode(rawSavedServer!) as Map<String, dynamic>;
+    expect(savedJson['schema_version'], 2);
     expect(savedJson['ip'], '10.0.0.8');
     expect(savedJson['ips'], ['10.0.0.8']);
     expect(savedJson['port'], 9527);
+    expect(savedJson['addresses'], isA<List<dynamic>>());
   });
 }

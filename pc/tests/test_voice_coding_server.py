@@ -127,5 +127,73 @@ class HandleClientTests(unittest.TestCase):
         self.assertFalse(websocket.sent[-1]["clear_input"])
 
 
+class TextInputLoggingTests(unittest.TestCase):
+    """2026-11-20：文本注入路径补充耗时/失败日志，且仍保留 asyncio.to_thread 调用。"""
+
+    def setUp(self):
+        self.old_sync_enabled = voice_coding.state.sync_enabled
+        voice_coding.state.sync_enabled = True
+
+    def tearDown(self):
+        voice_coding.state.sync_enabled = self.old_sync_enabled
+
+    def test_type_text_success_logs_duration_and_keeps_delays(self):
+        with (
+            patch("voice_coding.type_text_at_cursor") as inject,
+            self.assertLogs(level="INFO") as logs,
+        ):
+            self.assertTrue(voice_coding.type_text("你好", auto_enter=True))
+
+        inject.assert_called_once()
+        kwargs = inject.call_args.kwargs
+        self.assertIs(kwargs["auto_enter"], True)
+        self.assertIn("enter_delay_sec", kwargs)
+        self.assertIn("restore_delay_sec", kwargs)
+        self.assertIn("文本注入成功", "\n".join(logs.output))
+
+    def test_type_text_failure_logs_error_and_returns_false(self):
+        with (
+            patch("voice_coding.type_text_at_cursor", side_effect=RuntimeError("boom")),
+            self.assertLogs(level="ERROR") as logs,
+        ):
+            self.assertFalse(voice_coding.type_text("你好"))
+
+        joined = "\n".join(logs.output)
+        self.assertIn("文本注入失败", joined)
+        self.assertIn("boom", joined)
+
+    def test_type_text_disabled_sync_skips_injection(self):
+        voice_coding.state.sync_enabled = False
+        with patch("voice_coding.type_text_at_cursor") as inject:
+            self.assertFalse(voice_coding.type_text("你好"))
+        inject.assert_not_called()
+
+
+class HandlerRegistryCompatTests(unittest.TestCase):
+    """兼容层 handle_client 必须把连接登记进共享注册表并在断开时清理。"""
+
+    def test_handle_client_uses_shared_registry_and_logs(self):
+        websocket = FakeWebSocket([])
+        old_clients = set(voice_coding.state.connected_clients)
+        voice_coding.state.connected_clients.clear()
+        try:
+            with (
+                patch("voice_coding.get_or_create_device_identity") as identity,
+                self.assertLogs("voicing_server", level="INFO") as logs,
+            ):
+                identity.return_value.name = "PC"
+                identity.return_value.device_id = "device"
+                identity.return_value.os = "linux"
+                asyncio.run(voice_coding.handle_client(websocket))
+        finally:
+            voice_coding.state.connected_clients.clear()
+            voice_coding.state.connected_clients.update(old_clients)
+
+        joined = "\n".join(logs.output)
+        self.assertIn("WebSocket 客户端已连接", joined)
+        self.assertIn("WebSocket 客户端断开", joined)
+        self.assertEqual(len(voice_coding.server_registry), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.13-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.14-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -26,7 +26,7 @@
 Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说话，文字直接出现在电脑光标处
 
 - **扫码配对连接** — 首次扫描 PC 端二维码即可保存设备
-- **跨子网自动恢复** — 扫码保存同一台 PC 的多个候选 IP，热点和公司/学校局域网来回切换后自动重连
+- **跨网络秒级重连** — 每个保存的地址都会记录它在哪个手机网络成功过（schema v2 地址簿），按当前网络自适应排序并**并行竞速**拨号；同一台电脑在家/公司等多个网络各扫码一次后，回到任一网络约 1~2 秒自动连回，无需重扫
 - **无广播依赖** — 手机端启动后直接尝试已保存设备的 IP 池，不再依赖 UDP 广播发现
 - **PC 端运行时刷新网络地址** — 电脑切换到新局域网后，QR 码和 WebSocket 监听会自动刷新，无需重启桌面端
 - **QR 只发布实际监听 IP** — WebSocket 监听启动后，二维码只优先展示桌面端实际绑定成功的地址
@@ -67,7 +67,7 @@ Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要�
 
 状态栏显示"已连接"就说明连上了
 
-扫码成功后手机会记住这台电脑及其候选 IP 池。下次启动时，手机会直接尝试保存过的地址候选；即使公司、学校或宿舍网络隔离广播，只要设备间单播可达，也能自动连回。电脑端切换到新局域网后会自动刷新 QR 码和 WebSocket 监听地址，不需要重启桌面端软件。手机在新局域网重新扫码同一台 PC 时，会把新 IP 合并进已有候选池，不会丢掉旧局域网地址。
+扫码成功后手机会记住这台电脑及其候选 IP 池，并记录每个地址在哪个网络成功过。同一台电脑在两个不同网络（例如家里 WiFi 和公司 WiFi、或手机热点）各扫码配对一次后，回到其中任一网络都会在约 1~2 秒内自动连回，不需要重新扫码：候选地址按当前网络自适应排序（本网络成功过 > 同网段 > Tailscale 兜底），并以并行竞速方式同时尝试，而不是串行等待。电脑端切换到新局域网后会自动刷新 QR 码和 WebSocket 监听地址；手机在新局域网重新扫码同一台 PC 时，会把新 IP 合并进候选池，不丢旧网络地址。从 2.9.13 升级会保留原有候选池，第一次在某个网络连上时会自动补全该网络的地址历史。
 
 ### 3. 使用
 
@@ -110,8 +110,8 @@ Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端�
 
 1. 桌面端展示包含 `device_id/ip/ips/port/name/os` 的配对二维码，运行中会刷新当前物理 IPv4 地址池，并优先使用 WebSocket 实际绑定成功的 IP
 2. 手机扫描二维码后做 WebSocket（端口 9527）连通性 probe，成功后保存这台 PC
-3. 手机端持久化同一台 PC 的多个候选 IP，热点和不同局域网地址都会保留；同一 `device_id` 重新扫码只合并候选池，不覆盖旧地址
-4. 后续启动或手动刷新时，手机直接按保存的 IP 池逐个尝试连接，不再依赖 UDP 广播发现
+3. 手机端持久化同一台 PC 的多个候选 IP，热点和不同局域网地址都会保留，并记录每个地址在哪个网络成功过；同一 `device_id` 重新扫码会同时合并候选池与网络历史，不覆盖旧地址
+4. 后续启动或手动刷新时，手机按当前网络给候选地址打分排序，并对最优的几个候选并行竞速（120ms 错峰、首个握手成功即胜出），不再依赖 UDP 广播发现
 5. PC 端 WebSocket server 会在地址池变化后重新绑定当前局域网 IP，避免继续监听旧网络地址
 6. QR payload 避免发布绑定失败的地址；macOS 网卡命名按保守策略处理，不再假设 `en0` 一定是 WiFi
 7. PC 端把局域网地址排在首位，并把 Tailscale 地址（经 `tailscale` CLI 读取）作为兜底候选一起写入 QR 且一并监听；Android 端对局域网目标按优先级绑定 WiFi Network（物理 WiFi → capability 受 VPN 影响的 WiFi → 继承 WiFi transport 的 VPN 网络），对 Tailscale CGNAT 段目标则走系统默认网络即 VPN 隧道
@@ -143,7 +143,13 @@ flutter run
 ```
 Voicing/
 ├── pc/                          # 桌面端 (Python + PyQt5)
-│   ├── voice_coding.py          # 主程序
+│   ├── voice_coding.py          # 入口、装配与兼容导出层
+│   ├── network_interfaces.py    # 网卡发现/过滤、地址快照缓存
+│   ├── voicing_server.py        # WebSocket server、连接注册表、同步广播
+│   ├── tray_ui.py               # 托盘图标与菜单（Linux 原生 QMenu）
+│   ├── qr_dialog.py             # QR 弹窗与扫码成功遮罩
+│   ├── voicing_tuning.py        # 全部可调参数与 VOICING_* 覆盖
+│   ├── voicing_state.py         # 跨线程共享状态与 Qt 信号桥
 │   ├── device_identity.py       # PC device_id / name / os 持久化
 │   ├── platform_utils.py        # 平台检测与通用工具
 │   ├── platform_keyboard.py     # 键盘模拟抽象
@@ -157,7 +163,11 @@ Voicing/
 │   │   ├── main.dart            # UI 层
 │   │   ├── voicing_connection_controller.dart  # 连接状态机
 │   │   ├── voicing_protocol.dart               # 协议常量
-│   │   ├── saved_server.dart    # 已配对 PC 持久化
+│   │   ├── saved_server.dart    # 已配对 PC 持久化（schema v2 地址簿）
+│   │   ├── server_address_book.dart # 跨网络地址历史与评分排序
+│   │   ├── network_profile.dart # 手机网络画像（接口/子网）
+│   │   ├── connection_race.dart # Happy Eyeballs 并行竞速拨号
+│   │   ├── connection_tuning.dart # 连接层可调参数
 │   │   ├── voicing_websocket.dart # Android WiFi-bound WebSocket / Dart fallback
 │   │   ├── app_theme.dart       # 主题与设计 token
 │   │   └── app_logger.dart      # 日志封装
@@ -176,8 +186,8 @@ Voicing/
 正式发布通过 GitHub Actions 自动构建（四平台：Android / Windows / macOS / Linux）：
 
 ```bash
-git tag v2.9.13
-git push origin v2.9.13
+git tag v2.9.14
+git push origin v2.9.14
 ```
 
 本地调试用：

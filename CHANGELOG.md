@@ -15,6 +15,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.14] - 2026-11-20
+
+### Added
+
+- Android: a per-address network history (saved-server schema v2). Every candidate IP now records the phone network it last succeeded on, success/failure counts and the last-success time; v1 `ip`/`ips` data is migrated in place, so upgrading does not require a re-scan and the existing candidate pool is preserved
+- Android: network-aware candidate ranking — an address that previously worked on the current network ranks first, then addresses inside the current local subnet, then dual-side Tailscale addresses; unreachable foreign LAN ranges (for example a PC's docker bridge) are pushed to the end
+- Android: Happy Eyeballs style parallel probing for both QR pairing and saved-device reconnects. Candidates are dialled with a 120 ms stagger (at most 3 in flight), the first successful handshake wins and the others are cancelled, so coming back to a previously paired network reconnects in about 1–2 s instead of the old serial worst case of N×2–3 s
+- Android: native network snapshot bridge (`getNetworkSnapshot` plus the `voicing/network_state_events` stream) reporting IPv4 interfaces, prefix lengths and transports without new permissions; while disconnected or connecting, a network change immediately re-ranks and reconnects, and a live connection is left untouched
+- PC: `voicing_tuning` module centralising all tunables (timeouts, cache TTLs, rebind hysteresis, WebSocket keepalive) with `VOICING_*` environment overrides and effective-value logging at startup
+
+### Changed
+
+- PC: `voice_coding.py` (2,185 lines) split into focused modules — `network_interfaces`, `voicing_server`, `tray_ui`, `qr_dialog`, `voicing_tuning`, `voicing_state` — while the entry point stays a compatibility façade
+- PC: interface discovery is cached and shared between the tray, QR dialog and WebSocket listener (median `refresh_server_interfaces` 7.77 ms → 0.24 ms, QR payload build 9.59 ms → 0.26 ms, startup to tray-ready 406 ms → ~196 ms)
+- PC: container and bridge interfaces (`docker0`, `veth*`, `br-*`, `virbr*`, `lxc*`, `podman*`, CNI/Calico/Kube bridges) are excluded from QR and listener candidates
+- PC: the WebSocket server tunes keepalive/close timeouts, keeps a diagnostic client registry and writes connect / disconnect / injection results (remote address, duration, message counts) to the daily log file instead of console-only output
+- PC: listener rebinding now requires two consecutive fresh snapshots of a changed address set, so a flapping interface no longer tears the listener down repeatedly
+
+### Fixed
+
+- Android: the parallel connection race could hang forever when its result was awaited, because the handle completed a private completer that nobody consumed
+
+### Notes
+
+- The wire protocol and the QR payload schema are unchanged; the desktop build and the APK remain interchangeable with 2.9.13.
+
+### 新增
+
+- 手机端：地址簿按网络维度记录历史（saved_server schema v2）。每个候选 IP 记录「在哪个手机网络成功过、成功/失败次数、最近成功时间」；v1 的 `ip`/`ips` 数据原地迁移，升级无需重新扫码，已有候选池完整保留
+- 手机端：网络画像感知的候选排序 —— 本网络成功过的地址优先，其次是当前本地子网内地址，再次是双端 Tailscale 地址；不可达的其它网络 LAN 段（例如 PC 的 docker 网桥）被压到末尾
+- 手机端：扫码配对与已保存重连都改为 Happy Eyeballs 并行探测。候选按 120ms 间隔错峰启动（最多 3 路），首个握手成功的候选胜出并取消其余；回到曾配对过的网络约 1~2 秒自动连回，取代旧版串行最坏 N×2~3 秒
+- 手机端：原生网络快照桥（`getNetworkSnapshot` 与 `voicing/network_state_events` 事件流），上报 IPv4 接口、前缀长度与接口类型，不新增任何权限；断线/连接中遇到网络变化会立即重排并重连，已连接则不受打扰
+- PC 端：新增 `voicing_tuning` 模块集中全部可调参数（超时、缓存 TTL、重绑防抖、WebSocket keepalive），支持 `VOICING_*` 环境变量覆盖，启动时打印生效值
+
+### 变更
+
+- PC 端：`voice_coding.py`（2185 行）按职责拆分为 `network_interfaces` / `voicing_server` / `tray_ui` / `qr_dialog` / `voicing_tuning` / `voicing_state`，入口文件保留兼容导出与装配职责
+- PC 端：网卡枚举改为带 TTL 的共享快照（托盘、QR、WebSocket 监听复用）：`refresh_server_interfaces` 中位 7.77ms → 0.24ms，QR payload 构建 9.59ms → 0.26ms，启动到托盘就绪 406ms → 约 196ms
+- PC 端：容器/虚拟网桥接口（`docker0`、`veth*`、`br-*`、`virbr*`、`lxc*`、`podman*`、CNI/Calico/Kube 等）不再进入 QR 与监听候选
+- PC 端：WebSocket server 调整 keepalive/close 超时，新增诊断用连接注册表，并把连接/断开/注入结果（对端地址、时长、消息数）写入每日文件日志，而不是只 print 到控制台
+- PC 端：监听重绑需要连续两次「新枚举」确认同一新地址集合，接口抖动不再反复断开重建监听
+
+### 修复
+
+- Android：并行竞速在等待结果时可能永久挂起（句柄完成的是私有 Completer，调用方永远等不到）
+
+### 说明
+
+- 通信协议与 QR payload 结构未变，桌面端与 APK 仍与 2.9.13 互通。
+
+---
+
 ## [2.9.13] - 2026-09-25
 
 ### Fixed

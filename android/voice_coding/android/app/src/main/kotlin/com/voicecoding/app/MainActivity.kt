@@ -3,8 +3,10 @@ package com.voicecoding.app
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.LinkAddress
+import android.net.LinkProperties
 import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -24,6 +26,7 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import java.net.Inet4Address
 import java.net.InetAddress
+import java.net.NetworkInterface
 import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -41,9 +44,19 @@ class MainActivity : FlutterActivity() {
     private var lastKeyboardInsetDp = 0.0
     private var hasKeyboardInset = false
 
+    // 2026-11-20 新增：网络画像变化事件（Dart 侧做 400ms 防抖后再触发重连）。
+    private var networkStateSink: EventChannel.EventSink? = null
+    private var networkStateCallback: ConnectivityManager.NetworkCallback? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         installKeyboardInsetListener()
+    }
+
+    override fun onDestroy() {
+        // 必须成对注销 NetworkCallback，避免 Activity 销毁后继续回调已释放的 sink。
+        stopNetworkStateMonitoring()
+        super.onDestroy()
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -90,6 +103,19 @@ class MainActivity : FlutterActivity() {
                     }
                     result.success(null)
                 }
+                "getNetworkSnapshot" -> {
+                    // 2026-11-20 新增：Dart 侧网络画像（跨网络候选排序/自适应重连）的
+                    // 一次性快照入口。复用现有 voicing/network channel，不新增权限。
+                    try {
+                        result.success(buildNetworkSnapshot())
+                    } catch (error: Exception) {
+                        result.error(
+                            "snapshot_failed",
+                            error.message ?: "network snapshot failed",
+                            null
+                        )
+                    }
+                }
                 else -> result.notImplemented()
             }
         }
@@ -119,6 +145,25 @@ class MainActivity : FlutterActivity() {
 
             override fun onCancel(arguments: Any?) {
                 keyboardInsetSink = null
+            }
+        })
+
+        // 2026-11-20 新增：网络画像变化事件通道。WiFi/蜂窝/VPN/以太网接口
+        // 或前缀长度变化时推送整份快照；Dart 侧 NetworkSnapshotProvider 负责
+        // 400ms 防抖与静默降级，这里只做原生采集与主线程投递。
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "voicing/network_state_events"
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                networkStateSink = events
+                startNetworkStateMonitoring()
+                emitNetworkSnapshot()
+            }
+
+            override fun onCancel(arguments: Any?) {
+                networkStateSink = null
+                stopNetworkStateMonitoring()
             }
         })
     }
@@ -491,6 +536,226 @@ class MainActivity : FlutterActivity() {
         connection.webSocket?.cancel()
         connection.client?.dispatcher?.executorService?.shutdown()
         connection.client?.connectionPool?.evictAll()
+    }
+
+    /**
+     * 2026-11-20 新增：构建网络画像快照，供 Dart 侧做跨网络候选排序与自适应重连。
+     *
+     * 只读取 IPv4 地址 + 前缀长度 + 接口类型，不读 SSID、不申请定位权限，也不
+     * 触碰 WebSocket WiFi 绑定/connection id 逻辑。数据来源两层：
+     * 1) ConnectivityManager.allNetworks + LinkProperties：带 transport 类型与
+     *    真实前缀长度；
+     * 2) NetworkInterface.getNetworkInterfaces()：兜底覆盖未注册成 Network 的
+     *    接口（部分 VPN / tethering），按 name+ip 去重。
+     *
+     * 返回结构与 Dart 侧 NetworkSnapshot.fromNativeMap 严格对应：
+     * {approximate: false, interfaces: [{name, ip, prefixLength, kind}]}
+     */
+    private fun buildNetworkSnapshot(): Map<String, Any?> {
+        val connectivityManager =
+            getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val interfaces = mutableListOf<Map<String, Any?>>()
+        val seen = HashSet<String>()
+        val kindByInterface = HashMap<String, String>()
+
+        try {
+            for (network in connectivityManager.allNetworks) {
+                val capabilities = connectivityManager.getNetworkCapabilities(network)
+                    ?: continue
+                val linkProperties = connectivityManager.getLinkProperties(network)
+                    ?: continue
+                val interfaceName = linkProperties.interfaceName ?: continue
+                val kind = classifyNetworkKind(capabilities)
+                kindByInterface[interfaceName] = kind
+                for (linkAddress in linkProperties.linkAddresses) {
+                    val address = linkAddress.address
+                    if (address !is Inet4Address ||
+                        address.isLoopbackAddress ||
+                        address.isLinkLocalAddress
+                    ) {
+                        continue
+                    }
+                    val ip = address.hostAddress ?: continue
+                    if (!seen.add("$interfaceName/$ip")) {
+                        continue
+                    }
+                    interfaces.add(
+                        mapOf<String, Any?>(
+                            "name" to interfaceName,
+                            "ip" to ip,
+                            "prefixLength" to linkAddress.prefixLength,
+                            "kind" to kind
+                        )
+                    )
+                }
+            }
+        } catch (error: Exception) {
+            Log.w(
+                logTag,
+                "buildNetworkSnapshot: allNetworks enumeration failed: ${error.message}"
+            )
+        }
+
+        try {
+            val networkInterfaces = NetworkInterface.getNetworkInterfaces()
+            if (networkInterfaces != null) {
+                while (networkInterfaces.hasMoreElements()) {
+                    val networkInterface = networkInterfaces.nextElement()
+                    val interfaceName = networkInterface.name
+                    val kind = kindByInterface[interfaceName]
+                        ?: classifyInterfaceName(interfaceName)
+                    for (interfaceAddress in networkInterface.interfaceAddresses) {
+                        val address = interfaceAddress.address
+                        if (address !is Inet4Address ||
+                            address.isLoopbackAddress ||
+                            address.isLinkLocalAddress
+                        ) {
+                            continue
+                        }
+                        val ip = address.hostAddress ?: continue
+                        if (!seen.add("$interfaceName/$ip")) {
+                            continue
+                        }
+                        interfaces.add(
+                            mapOf<String, Any?>(
+                                "name" to interfaceName,
+                                "ip" to ip,
+                                "prefixLength" to interfaceAddress.networkPrefixLength.toInt(),
+                                "kind" to kind
+                            )
+                        )
+                    }
+                }
+            }
+        } catch (error: Exception) {
+            Log.w(
+                logTag,
+                "buildNetworkSnapshot: NetworkInterface enumeration failed: ${error.message}"
+            )
+        }
+
+        Log.i(logTag, "network snapshot: ifaces=$interfaces")
+        return mapOf("approximate" to false, "interfaces" to interfaces)
+    }
+
+    /** 依据 NetworkCapabilities 给出接口类型；VPN 优先，避免被底层 WiFi transport 混淆。 */
+    private fun classifyNetworkKind(capabilities: NetworkCapabilities?): String {
+        if (capabilities == null) {
+            return "unknown"
+        }
+        return when {
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN) -> "vpn"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "wifi"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "mobile"
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) -> "ethernet"
+            else -> "unknown"
+        }
+    }
+
+    /** NetworkInterface 兜底枚举没有 transport 信息时，按接口命名约定近似类型。 */
+    private fun classifyInterfaceName(interfaceName: String): String {
+        val name = interfaceName.lowercase()
+        return when {
+            name.startsWith("wlan") ||
+                name.startsWith("wifi") ||
+                name.startsWith("ap") -> "wifi"
+            name.startsWith("tun") ||
+                name.startsWith("ppp") ||
+                name.startsWith("wg") ||
+                name.contains("tailscale") -> "vpn"
+            name.startsWith("rmnet") ||
+                name.startsWith("ccmni") ||
+                name.startsWith("wwan") ||
+                name.startsWith("radio") -> "mobile"
+            name.startsWith("eth") -> "ethernet"
+            else -> "unknown"
+        }
+    }
+
+    /**
+     * 2026-11-20 新增：注册全局网络回调，网络可用/丢失/链路属性/能力变化时
+     * 重新采集快照并通过 EventChannel 推送。优先注册「所有网络」的回调；若
+     * 系统限制空 request，则回退到默认网络回调。任何异常都只降级不崩溃。
+     */
+    private fun startNetworkStateMonitoring() {
+        if (networkStateCallback != null) {
+            return
+        }
+        val connectivityManager =
+            getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                scheduleNetworkSnapshotEmit()
+            }
+
+            override fun onLost(network: Network) {
+                scheduleNetworkSnapshotEmit()
+            }
+
+            override fun onLinkPropertiesChanged(
+                network: Network,
+                linkProperties: LinkProperties
+            ) {
+                scheduleNetworkSnapshotEmit()
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities
+            ) {
+                scheduleNetworkSnapshotEmit()
+            }
+        }
+        try {
+            connectivityManager.registerNetworkCallback(
+                NetworkRequest.Builder().build(),
+                callback
+            )
+            networkStateCallback = callback
+            Log.i(logTag, "network state monitoring started (all networks)")
+        } catch (error: Exception) {
+            Log.w(
+                logTag,
+                "registerNetworkCallback failed, fallback to default: ${error.message}"
+            )
+            try {
+                connectivityManager.registerDefaultNetworkCallback(callback)
+                networkStateCallback = callback
+                Log.i(logTag, "network state monitoring started (default network)")
+            } catch (fallbackError: Exception) {
+                Log.w(
+                    logTag,
+                    "network state monitoring unavailable: ${fallbackError.message}"
+                )
+            }
+        }
+    }
+
+    private fun stopNetworkStateMonitoring() {
+        val callback = networkStateCallback ?: return
+        networkStateCallback = null
+        val connectivityManager =
+            getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        try {
+            connectivityManager.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
+    }
+
+    /** NetworkCallback 在系统线程回调，必须切回主线程再调用 EventSink。 */
+    private fun scheduleNetworkSnapshotEmit() {
+        mainHandler.post {
+            emitNetworkSnapshot()
+        }
+    }
+
+    private fun emitNetworkSnapshot() {
+        val sink = networkStateSink ?: return
+        try {
+            sink.success(buildNetworkSnapshot())
+        } catch (error: Exception) {
+            Log.w(logTag, "emit network snapshot failed: ${error.message}")
+        }
     }
 
     private data class NativeWebSocketConnection(

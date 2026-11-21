@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -6,6 +7,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import socket
+import network_interfaces as ni
 import voice_coding
 from voice_coding import (
     NetworkInterfaceCandidate,
@@ -360,3 +362,97 @@ class TailscaleInterfaceTests(unittest.TestCase):
             voice_coding.get_all_network_candidates = original_get_all_network_candidates
             voice_coding.SERVER_INTERFACES = original_server_interfaces
             voice_coding.SERVER_INTERFACES_INITIALIZED = original_initialized
+
+
+class _FakeAddress:
+    def __init__(self, family, address, netmask):
+        self.family = family
+        self.address = address
+        self.netmask = netmask
+
+
+class _FakePsutil:
+    def __init__(self, adapters):
+        self._adapters = adapters
+
+    def net_if_addrs(self):
+        return self._adapters
+
+
+class ContainerBridgeFilterTests(unittest.TestCase):
+    """2026-11-20：docker0 / veth / br- / virbr / lxcbr / podman / cni 不进入候选。"""
+
+    _CONTAINER_ADAPTERS = {
+        "docker0": ["172.17.0.1", "255.255.0.0"],
+        "veth1a2b3c": ["172.18.0.2", "255.255.0.0"],
+        "br-9f8e7d6c5b4a": ["172.19.0.1", "255.255.0.0"],
+        "virbr0": ["192.168.122.1", "255.255.255.0"],
+        "lxcbr0": ["10.0.3.1", "255.255.255.0"],
+        "podman0": ["10.88.0.1", "255.255.0.0"],
+        "cni0": ["10.244.0.1", "255.255.255.0"],
+        "flannel.1": ["10.244.1.0", "255.255.255.0"],
+        "cali1234567890a": ["10.244.2.5", "255.255.255.0"],
+    }
+
+    def _fake_psutil(self):
+        adapters = {}
+        for name, (ip, netmask) in self._CONTAINER_ADAPTERS.items():
+            adapters[name] = [_FakeAddress(socket.AF_INET, ip, netmask)]
+        adapters["wlan0"] = [_FakeAddress(socket.AF_INET, "192.168.50.113", "255.255.255.0")]
+        adapters["eth0"] = [_FakeAddress(socket.AF_INET, "10.16.177.83", "255.255.192.0")]
+        adapters["wlp0s20f3"] = [_FakeAddress(socket.AF_INET, "192.168.51.23", "255.255.255.0")]
+        return _FakePsutil(adapters)
+
+    def test_psutil_candidates_skip_container_and_bridge_interfaces(self):
+        with patch.object(voice_coding, "psutil", self._fake_psutil()):
+            candidates = get_psutil_network_candidates("linux")
+
+        names = [candidate.name for candidate in candidates]
+        self.assertIn("wlan0", names)
+        self.assertIn("eth0", names)
+        self.assertIn("wlp0s20f3", names)
+        for container_name in self._CONTAINER_ADAPTERS:
+            self.assertNotIn(container_name, names, f"容器/虚拟网桥 {container_name} 不应进入候选")
+
+    def test_linux_command_candidates_skip_container_and_bridge_interfaces(self):
+        records = [
+            {
+                "ifname": name,
+                "addr_info": [
+                    {
+                        "family": "inet",
+                        "local": ip,
+                        "prefixlen": 24,
+                        "broadcast": "172.17.0.255",
+                        "scope": "global",
+                    }
+                ],
+            }
+            for name, (ip, _mask) in self._CONTAINER_ADAPTERS.items()
+        ]
+        records.append(
+            {
+                "ifname": "wlan0",
+                "addr_info": [
+                    {
+                        "family": "inet",
+                        "local": "192.168.50.113",
+                        "prefixlen": 24,
+                        "broadcast": "192.168.50.255",
+                        "scope": "global",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(
+            ni.extract_command_interfaces("linux", json.dumps(records)),
+            [("192.168.50.113", 24)],
+        )
+
+    def test_physical_named_interfaces_are_not_filtered(self):
+        for interface_name in ("eth0", "enp3s0", "enx00e04c680118", "wlan0", "wlp2s0", "wlx00c0ca123456"):
+            self.assertFalse(
+                ni._is_vpn_or_virtual_interface("linux", interface_name),
+                f"物理网卡 {interface_name} 不应被虚拟接口过滤误伤",
+            )

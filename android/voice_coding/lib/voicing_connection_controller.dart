@@ -6,8 +6,12 @@ import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app_logger.dart';
+import 'connection_race.dart';
 import 'connection_recovery_policy.dart';
+import 'connection_tuning.dart';
+import 'network_profile.dart';
 import 'saved_server.dart';
+import 'server_address_book.dart';
 import 'voicing_protocol.dart';
 import 'voicing_websocket.dart';
 
@@ -16,13 +20,19 @@ typedef DeviceReplacementPrompt = Future<bool> Function(
   SavedServer incoming,
 );
 
+/// 建链工厂（可注入接缝）。
+///
+/// 默认使用生产实现 [VoicingWebSocketConnector.connect]；单元测试注入 fake
+/// channel 即可完全脱离真实 socket。探测与正式连接都走同一条工厂，因此测试
+/// 可以用「同一 IP 第 N 次连接返回什么」来驱动完整流程。
+typedef VoicingChannelFactory = VoicingWebSocketChannel Function(
+  Uri uri, {
+  Duration? connectTimeout,
+  bool preferNativeWifi,
+});
+
 class VoicingConnectionController extends ChangeNotifier {
   static const Duration _shadowFinalizeDelay = Duration(milliseconds: 700);
-  static const Duration _qrResultRevealDelay = Duration(milliseconds: 760);
-  static const Duration _qrSuccessHoldDelay = Duration(milliseconds: 1100);
-  static const Duration _qrFailureHoldDelay = Duration(milliseconds: 1700);
-  static const Duration _qrProbeTimeout = Duration(seconds: 3);
-  static const Duration _savedCandidateConnectTimeout = Duration(seconds: 2);
   static const int _maxSentTextHistory = 20;
 
   VoicingConnectionController({
@@ -42,9 +52,20 @@ class VoicingConnectionController extends ChangeNotifier {
     ),
     SavedServerStore savedServerStore = const SavedServerStore(),
     DeviceReplacementPrompt? confirmDeviceReplacement,
+    ConnectionTuning tuning = const ConnectionTuning(),
+    NetworkSnapshotProvider? networkSnapshotProvider,
+    VoicingChannelFactory channelFactory = VoicingWebSocketConnector.connect,
   })  : _recoveryPolicy = recoveryPolicy,
         _savedServerStore = savedServerStore,
-        _confirmDeviceReplacement = confirmDeviceReplacement {
+        _confirmDeviceReplacement = confirmDeviceReplacement,
+        _tuning = tuning,
+        _networkProvider = networkSnapshotProvider ??
+            NetworkSnapshotProvider.platform(
+              debounce: tuning.networkChangeDebounce,
+              snapshotTimeout: tuning.nativeSnapshotTimeout,
+            ),
+        _channelFactory = channelFactory,
+        _connectionRace = ConnectionRace(tuning: tuning) {
     textController.addListener(_onTextControllerChanged);
   }
 
@@ -52,6 +73,10 @@ class VoicingConnectionController extends ChangeNotifier {
   final ConnectionRecoveryPolicy _recoveryPolicy;
   final SavedServerStore _savedServerStore;
   final DeviceReplacementPrompt? _confirmDeviceReplacement;
+  final ConnectionTuning _tuning;
+  final NetworkSnapshotProvider _networkProvider;
+  final VoicingChannelFactory _channelFactory;
+  final ConnectionRace _connectionRace;
 
   VoicingWebSocketChannel? _channel;
   ConnectionStatus _status = ConnectionStatus.disconnected;
@@ -76,9 +101,17 @@ class VoicingConnectionController extends ChangeNotifier {
   bool _displayConnectedDuringForegroundRecovery = false;
   SavedServer? _savedServer;
   bool _manualMode = false;
-  List<String> _savedCandidateAttempts = const [];
-  int _savedCandidateAttemptIndex = 0;
-  int? _savedCandidateConnectionId;
+  DateTime? _connectStartedAt;
+  DateTime? _connectedSince;
+
+  // 网络画像（2026-11-20 新增）：初始化时拉取一次，之后订阅原生变化。
+  NetworkSnapshot _networkSnapshot = NetworkSnapshot.empty;
+  StreamSubscription<NetworkSnapshot>? _networkSubscription;
+
+  // 并行竞速句柄：同一时刻最多一个 saved race + 一个 QR race，
+  // generation 变化 / dispose 时必须成对 cancel，避免旧回调污染新连接。
+  RaceHandle? _savedRace;
+  RaceHandle? _qrRace;
 
   ConnectionStatus get status => _status;
   ConnectionStatus get displayStatus =>
@@ -90,6 +123,12 @@ class VoicingConnectionController extends ChangeNotifier {
   String get serverIp => _serverIp;
   int get serverPort => _serverPort;
   String get lastSentText => _lastSentText;
+
+  /// 当前网络画像 Key（空字符串表示未知）；供 UI/日志/测试读取。
+  String get currentNetworkKey => _networkSnapshot.networkKey;
+
+  /// 当前网络快照（测试与调试用；生产逻辑内部使用）。
+  NetworkSnapshot get networkSnapshot => _networkSnapshot;
 
   bool _qrScanMode = false;
   List<Offset>? _lastQrCorners;
@@ -106,6 +145,8 @@ class VoicingConnectionController extends ChangeNotifier {
 
   void enterQrScanMode() {
     _qrPairingGeneration++;
+    _qrRace?.cancel();
+    _qrRace = null;
     _qrScanMode = true;
     _qrPairingSucceeded = false;
     _qrPairingFailed = false;
@@ -114,6 +155,8 @@ class VoicingConnectionController extends ChangeNotifier {
 
   void exitQrScanMode() {
     _qrPairingGeneration++;
+    _qrRace?.cancel();
+    _qrRace = null;
     _qrScanMode = false;
     _lastQrCorners = null;
     _qrPairingSucceeded = false;
@@ -139,6 +182,12 @@ class VoicingConnectionController extends ChangeNotifier {
     }
   }
 
+  /// QR 配对：对全部候选并行竞速（Happy Eyeballs）。
+  ///
+  /// 2026-11-20 重构：原实现按候选串行 probe（每个 3s），跨网络时最坏 N*3s；
+  /// 现在全部候选按 stagger 并行探测，首个完成「connected + ping(source=qr_scan)
+  /// + pong」的候选即 winner，整体预算 [_tuning.raceBudget]。760ms reveal、
+  /// 成功/失败 hold、设备替换确认、generation 隔离语义保持不变。
   Future<void> _completeQrPairing(
     Map<String, dynamic> map,
     int generation,
@@ -159,122 +208,452 @@ class VoicingConnectionController extends ChangeNotifier {
     }
 
     final qrCandidateIps = _readQrCandidateIps(map, scannedServer.ip);
-    SavedServer? connectedServer;
-    for (final candidateIp in qrCandidateIps) {
-      if (generation != _qrPairingGeneration || !_qrScanMode) {
-        return;
-      }
-      final candidateServer = scannedServer.copyWith(
-        ip: candidateIp,
-        ips: qrCandidateIps,
+    // 扫描当下就能判断「哪些候选属于当前网络」，先给地址簿打网络上下文；
+    // 其它候选（docker 网段、别的 WiFi 的 IP、Tailscale）保持未知，避免污染排序。
+    final scannedBook = ServerAddressBook.initialBookForCandidates(
+      candidateIps: qrCandidateIps,
+      snapshot: _networkSnapshot,
+      nowMs: startedAt.millisecondsSinceEpoch,
+    );
+    final serverWithBook = scannedServer.copyWith(addresses: scannedBook);
+    final timeout = _attemptTimeout();
+
+    AppLogger.info(
+      'QR 并行探测开始: candidates=${qrCandidateIps.join(", ")} '
+      'networkKey=${_networkKeyForLog()} '
+      'attemptTimeout=${timeout.inMilliseconds}ms '
+      'budget=${_tuning.raceBudget.inMilliseconds}ms',
+    );
+    _qrRace?.cancel();
+    final handle = _connectionRace.start(
+      candidates: qrCandidateIps,
+      attempt: (candidate, cancellation) => _probeQrCandidate(
+        ip: candidate.ip,
+        port: serverWithBook.port,
+        timeout: timeout,
+        cancellation: cancellation,
+      ),
+      isCancelled: () => generation != _qrPairingGeneration || !_qrScanMode,
+      attemptTimeout: timeout,
+      budget: _tuning.raceBudget,
+      onAttemptStarted: (candidate, launchDelay) => AppLogger.info(
+        'QR 候选探测启动: ip=${candidate.ip} '
+        'stagger=${launchDelay.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+      onAttemptFailed: (failure) => AppLogger.warning(
+        'QR 候选探测失败: ip=${failure.candidate.ip} '
+        'reason=${failure.reason.name} '
+        'elapsed=${failure.elapsed.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+      onWinner: (outcome) => AppLogger.info(
+        'QR 候选探测 winner: ip=${outcome.candidate.ip} '
+        'elapsed=${outcome.elapsed.inMilliseconds}ms '
+        'attempt=${outcome.attemptElapsed.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+    );
+    _qrRace = handle;
+    final result = await handle.done;
+    if (identical(_qrRace, handle)) {
+      _qrRace = null;
+    }
+    if (generation != _qrPairingGeneration || !_qrScanMode || result.cancelled) {
+      return;
+    }
+
+    final winner = result.winner;
+    final winnerServer = winner == null
+        ? null
+        : serverWithBook.copyWith(
+            ip: winner.candidate.ip,
+            ips: qrCandidateIps,
+          );
+    if (winner == null) {
+      AppLogger.warning(
+        'QR 并行探测全部失败: failures=${_describeRaceFailures(result.failures)} '
+        'budgetExhausted=${result.budgetExhausted} '
+        'networkKey=${_networkKeyForLog()}',
       );
-      final success = await _probeQrConnection(
-        candidateServer.ip,
-        candidateServer.port,
-      );
-      if (success) {
-        connectedServer = candidateServer;
-        break;
-      }
     }
     await _finishQrPairing(
       startedAt: startedAt,
-      success: connectedServer != null,
+      success: winnerServer != null,
       generation: generation,
-      scannedServer: connectedServer,
+      scannedServer: winnerServer,
     );
   }
 
-  Future<bool> _probeQrConnection(String ip, int port) async {
-    if (Platform.isAndroid) {
-      return _probeQrConnectionOnce(
-        ip,
-        port,
-        preferNativeWifi: true,
-      );
+  /// 已保存设备重连：地址簿评分排序 → 前 N 个候选并行竞速 → 正式建链。
+  ///
+  /// 2026-11-20 重构：替换旧的串行 `_savedCandidateAttempts` 机制。旧实现
+  /// 每个候选 2s 串行尝试，N 个候选最坏 N*2s；现在 winner 通常是评分最高的
+  /// 同 networkKey / 同子网地址，首包 RTT 内就能确定，1~2 秒目标可达。
+  void _beginSavedServerRace(SavedServer saved, {required String reason}) {
+    _reconnectTimer?.cancel();
+    _cancelSavedRace();
+    final generation = ++_connectionGeneration;
+    _stopHeartbeat();
+    _channel?.sink.close();
+    _channel = null;
+    _lastPong = null;
+    _connectStartedAt = null;
+    _setStatus(ConnectionStatus.connecting);
+
+    final ranked = _rankedSavedCandidateIps(saved);
+    if (ranked.isEmpty) {
+      AppLogger.warning('已保存设备没有可用候选地址，保持断开');
+      _setStatus(ConnectionStatus.disconnected);
+      return;
+    }
+    _logCandidateRanking(saved, ranked, reason: reason);
+    final candidates = ranked
+        .take(_tuning.savedRaceCandidateCount)
+        .toList(growable: false);
+    final timeout = _attemptTimeout();
+    AppLogger.info(
+      '已保存设备并行竞速开始: candidates=${candidates.join(", ")} '
+      'networkKey=${_networkKeyForLog()} '
+      'attemptTimeout=${timeout.inMilliseconds}ms '
+      'budget=${_tuning.raceBudget.inMilliseconds}ms reason=$reason',
+    );
+
+    final handle = _connectionRace.start(
+      candidates: candidates,
+      attempt: (candidate, cancellation) => _probeSavedCandidate(
+        ip: candidate.ip,
+        port: saved.port,
+        timeout: timeout,
+        cancellation: cancellation,
+      ),
+      isCancelled: () => generation != _connectionGeneration,
+      attemptTimeout: timeout,
+      budget: _tuning.raceBudget,
+      onAttemptStarted: (candidate, launchDelay) => AppLogger.info(
+        '已保存候选探测启动: ip=${candidate.ip} '
+        'stagger=${launchDelay.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+      onAttemptFailed: (failure) => AppLogger.warning(
+        '已保存候选探测失败: ip=${failure.candidate.ip} '
+        'reason=${failure.reason.name} '
+        'elapsed=${failure.elapsed.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+      onWinner: (outcome) => AppLogger.info(
+        '已保存候选探测 winner: ip=${outcome.candidate.ip} '
+        'elapsed=${outcome.elapsed.inMilliseconds}ms '
+        'attempt=${outcome.attemptElapsed.inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+      ),
+    );
+    _savedRace = handle;
+    unawaited(
+      handle.done.then(
+        (result) => _handleSavedRaceCompleted(
+          saved: saved,
+          generation: generation,
+          result: result,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleSavedRaceCompleted({
+    required SavedServer saved,
+    required int generation,
+    required ConnectionRaceResult result,
+  }) async {
+    if (generation != _connectionGeneration) {
+      return;
+    }
+    // 本轮竞速已结束；generation 校验保证不会误清新一轮竞速的句柄。
+    _savedRace = null;
+    if (result.cancelled) {
+      AppLogger.info('已保存设备竞速被取消（generation 变化/网络切换）');
+      return;
     }
 
-    return _probeQrConnectionOnce(
-      ip,
-      port,
-      preferNativeWifi: false,
+    final winner = result.winner;
+    if (winner == null) {
+      AppLogger.warning(
+        '已保存设备竞速全部失败: failures=${_describeRaceFailures(result.failures)} '
+        'budgetExhausted=${result.budgetExhausted} '
+        'networkKey=${_networkKeyForLog()}',
+      );
+      await _recordRaceFailures(result.failures);
+      if (generation != _connectionGeneration) {
+        return;
+      }
+      _enterReconnectBackoff(reason: 'saved race failed');
+      return;
+    }
+
+    // 失败候选只累加失败计数，绝不写入成功历史；成功历史等正式 connected 后再写。
+    await _recordRaceFailures(result.failures);
+    if (generation != _connectionGeneration) {
+      return;
+    }
+    final latest = _savedServer ?? saved;
+    _serverIp = winner.candidate.ip;
+    _serverPort = latest.port;
+    AppLogger.info(
+      '已保存设备竞速胜出，开始正式建链: ip=$_serverIp:$_serverPort '
+      'raceElapsed=${result.elapsed.inMilliseconds}ms '
+      'networkKey=${_networkKeyForLog()}',
+    );
+    _connect(
+      connectTimeout: _attemptTimeout(),
+      reason: 'saved race winner',
     );
   }
 
-  Future<bool> _probeQrConnectionOnce(
-    String ip,
-    int port, {
-    required bool preferNativeWifi,
+  /// 并行探测一个已保存候选：只要求收到 `connected`（保持旧串行实现语义）。
+  Future<bool> _probeSavedCandidate({
+    required String ip,
+    required int port,
+    required Duration timeout,
+    required RaceCancellation cancellation,
   }) async {
+    return _probeChannel(
+      ip: ip,
+      port: port,
+      timeout: timeout,
+      cancellation: cancellation,
+      requireQrScanPong: false,
+      logLabel: '已保存候选',
+    );
+  }
+
+  /// 并行探测一个 QR 候选：必须完成 connected + ping(source=qr_scan) + pong。
+  Future<bool> _probeQrCandidate({
+    required String ip,
+    required int port,
+    required Duration timeout,
+    required RaceCancellation cancellation,
+  }) async {
+    return _probeChannel(
+      ip: ip,
+      port: port,
+      timeout: timeout,
+      cancellation: cancellation,
+      requireQrScanPong: true,
+      logLabel: 'QR 候选',
+    );
+  }
+
+  /// 统一的手握探测实现：建链 → （QR 场景）ping(qr_scan) → pong。
+  ///
+  /// 该 Future 一定会在成功/失败/超时/竞速取消时完成；finally 成对取消
+  /// subscription 并关闭 sink，避免并行竞速产生连接泄漏。
+  Future<bool> _probeChannel({
+    required String ip,
+    required int port,
+    required Duration timeout,
+    required RaceCancellation cancellation,
+    required bool requireQrScanPong,
+    required String logLabel,
+  }) async {
+    if (cancellation.isCancelled) {
+      return false;
+    }
     VoicingWebSocketChannel? probeChannel;
     StreamSubscription<dynamic>? subscription;
-    Timer? timeoutTimer;
     final completer = Completer<bool>();
+    var finished = false;
+    final startedAt = DateTime.now();
 
     void finish(bool success) {
+      if (finished) {
+        return;
+      }
+      finished = true;
       if (!completer.isCompleted) {
         completer.complete(success);
       }
     }
 
+    cancellation.whenCancelled(() {
+      if (!finished) {
+        AppLogger.info(
+          '$logLabel探测取消: ip=$ip elapsed=${DateTime.now().difference(startedAt).inMilliseconds}ms '
+          'networkKey=${_networkKeyForLog()}',
+        );
+      }
+      finish(false);
+    });
+
     try {
-      probeChannel = VoicingWebSocketConnector.connect(
+      probeChannel = _channelFactory(
         Uri.parse('ws://$ip:$port'),
-        connectTimeout: _qrProbeTimeout,
-        preferNativeWifi: preferNativeWifi,
+        connectTimeout: timeout,
+        preferNativeWifi: Platform.isAndroid,
       );
-      timeoutTimer = Timer(_qrProbeTimeout, () => finish(false));
       subscription = probeChannel.stream.listen(
         (message) {
           try {
             final data = VoicingProtocol.decodeMessage(message);
             final type = data?['type'];
             if (type == VoicingProtocol.typeConnected) {
-              final sendFuture = probeChannel?.sink.add(
-                json.encode(VoicingProtocol.buildQrScanProbeMessage()),
-              );
-              if (sendFuture != null) {
-                unawaited(
-                  sendFuture.catchError((Object error, StackTrace stackTrace) {
-                    AppLogger.warning(
-                      'QR 连通性测试探测消息发送失败',
-                      error: error,
-                      stackTrace: stackTrace,
-                    );
-                    finish(false);
-                  }),
+              if (requireQrScanPong) {
+                final sendFuture = probeChannel?.sink.add(
+                  json.encode(VoicingProtocol.buildQrScanProbeMessage()),
                 );
+                if (sendFuture != null) {
+                  unawaited(
+                    sendFuture.catchError((Object error, StackTrace stackTrace) {
+                      AppLogger.warning(
+                        '$logLabel探测消息发送失败: ip=$ip',
+                        error: error,
+                        stackTrace: stackTrace,
+                      );
+                      finish(false);
+                    }),
+                  );
+                }
+              } else {
+                finish(true);
               }
             } else if (type == VoicingProtocol.typePong) {
               finish(true);
             }
           } catch (error, stackTrace) {
-            AppLogger.warning('QR 连通性测试消息解析失败',
-                error: error, stackTrace: stackTrace);
+            AppLogger.warning(
+              '$logLabel消息解析失败: ip=$ip',
+              error: error,
+              stackTrace: stackTrace,
+            );
             finish(false);
           }
         },
-        onError: (error, stackTrace) {
-          AppLogger.warning('QR 连通性测试失败', error: error, stackTrace: stackTrace);
+        onError: (Object error, StackTrace stackTrace) {
+          AppLogger.warning(
+            '$logLabel探测失败: ip=$ip '
+            'elapsed=${DateTime.now().difference(startedAt).inMilliseconds}ms '
+            'networkKey=${_networkKeyForLog()}',
+            error: error,
+            stackTrace: stackTrace,
+          );
           finish(false);
         },
         onDone: () => finish(false),
       );
-
-      final success = await completer.future;
-      return success;
+      return await completer.future;
     } catch (error, stackTrace) {
-      AppLogger.warning('QR 连通性测试连接失败', error: error, stackTrace: stackTrace);
+      AppLogger.warning(
+        '$logLabel建链失败: ip=$ip '
+        'elapsed=${DateTime.now().difference(startedAt).inMilliseconds}ms '
+        'networkKey=${_networkKeyForLog()}',
+        error: error,
+        stackTrace: stackTrace,
+      );
       return false;
     } finally {
-      timeoutTimer?.cancel();
       if (subscription != null) {
         unawaited(subscription.cancel());
       }
-      if (probeChannel != null) {
-        unawaited(probeChannel.sink.close());
+      final currentChannel = probeChannel;
+      if (currentChannel != null) {
+        unawaited(currentChannel.sink.close());
       }
     }
+  }
+
+  /// 已保存设备的候选评分排序（networkKey 命中 > 同子网 > Tailscale > ...）。
+  List<String> _rankedSavedCandidateIps(SavedServer saved) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final book = saved.addressBook;
+    final ranked = <String>[];
+    final seen = <String>{};
+    for (final ip in book.rankedIpsFor(
+      _networkSnapshot,
+      nowMs: nowMs,
+      weights: _tuning.addressWeights,
+    )) {
+      if (ip.isNotEmpty && seen.add(ip)) {
+        ranked.add(ip);
+      }
+    }
+    // 防御：地址簿万一缺失候选（旧数据被裁剪/手工改坏），仍把 ip/ips 补到末尾。
+    for (final ip in saved.candidateIps) {
+      if (seen.add(ip)) {
+        ranked.add(ip);
+      }
+    }
+    return ranked;
+  }
+
+  void _logCandidateRanking(
+    SavedServer saved,
+    List<String> ranked, {
+    required String reason,
+  }) {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final book = saved.addressBook;
+    final parts = <String>[];
+    for (final ip in ranked) {
+      final entry = book.addressFor(ip);
+      final score = entry == null
+          ? 0
+          : book.scoreOf(
+              entry,
+              _networkSnapshot,
+              nowMs: nowMs,
+              weights: _tuning.addressWeights,
+            );
+      parts.add(
+        '$ip(score=$score, key=${entry?.networkKey ?? ""}, '
+        'ok=${entry?.successCount ?? 0}, fail=${entry?.failureCount ?? 0})',
+      );
+    }
+    AppLogger.info(
+      '候选评分排序 networkKey=${_networkKeyForLog()}: '
+      '${parts.join(" > ")}; reason=$reason',
+    );
+  }
+
+  /// 把竞速中真实探测失败的候选计入地址簿失败计数（不写成功历史）。
+  Future<void> _recordRaceFailures(Iterable<RaceFailure> failures) async {
+    final attempted = failures
+        .where(
+          (failure) =>
+              failure.reason == RaceFailureReason.failed ||
+              failure.reason == RaceFailureReason.timeout,
+        )
+        .toList(growable: false);
+    if (attempted.isEmpty) {
+      return;
+    }
+    final current = _savedServer;
+    if (current == null) {
+      return;
+    }
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    var book = current.addressBook;
+    for (final failure in attempted) {
+      book = book.recordFailure(ip: failure.candidate.ip, nowMs: nowMs);
+    }
+    book = book.trimmed(
+      nowMs: nowMs,
+      maxAddresses: _tuning.addressBookMaxAddresses,
+    );
+    final updated = current.copyWith(
+      ips: SavedServer.normalizeIpCandidates(
+        current.ip,
+        <dynamic>[...current.candidateIps, ...book.ips],
+      ),
+      addresses: book,
+    );
+    if (updated == current) {
+      return;
+    }
+    _savedServer = updated;
+    AppLogger.info(
+      '记录候选失败计数: ${attempted.map((failure) => failure.candidate.ip).join(", ")} '
+      'networkKey=${_networkKeyForLog()}',
+    );
+    await _persistSavedServer(updated);
   }
 
   Future<void> _finishQrPairing({
@@ -288,9 +667,9 @@ class VoicingConnectionController extends ChangeNotifier {
     }
 
     final revealRemaining =
-        _qrResultRevealDelay - DateTime.now().difference(startedAt);
+        _tuning.qrResultRevealDelay - DateTime.now().difference(startedAt);
     if (!revealRemaining.isNegative) {
-      await Future.delayed(revealRemaining);
+      await Future<void>.delayed(revealRemaining);
     }
 
     if (generation != _qrPairingGeneration || !_qrScanMode) {
@@ -315,7 +694,7 @@ class VoicingConnectionController extends ChangeNotifier {
       _qrPairingSucceeded = true;
       _qrPairingFailed = false;
       notifyListeners();
-      await Future.delayed(_qrSuccessHoldDelay);
+      await Future<void>.delayed(_tuning.qrSuccessHoldDelay);
 
       if (generation != _qrPairingGeneration || !_qrScanMode) {
         return;
@@ -325,25 +704,56 @@ class VoicingConnectionController extends ChangeNotifier {
       _lastQrCorners = null;
       _qrPairingSucceeded = false;
       _qrPairingFailed = false;
-      final serverToSave = _savedServer == null
-          ? scannedServer
-          : scannedServer.mergeCandidateIpsFrom(_savedServer!);
-      await _saveManualServer(
-        serverToSave.copyWith(
-          lastConnectedTs: DateTime.now().millisecondsSinceEpoch,
-        ),
-        notify: false,
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      // 探针完成 connected + ping(qr_scan) + pong 才算真正连上，此时才写成功历史。
+      final networkContext = _currentNetworkContext();
+      var book = scannedServer.addressBook.recordSuccess(
+        ip: scannedServer.ip,
+        networkKey: networkContext.networkKey,
+        networkKind: networkContext.networkKind,
+        nowMs: nowMs,
       );
+      var serverToSave = scannedServer.copyWith(
+        ip: scannedServer.ip,
+        ips: scannedServer.candidateIps,
+        addresses: book,
+      );
+      final previous = _savedServer;
+      if (previous != null) {
+        // 同一台 PC 的历史地址簿整体合并：不同网络的地址都保留（核心不变量）。
+        serverToSave = serverToSave.mergeAddressHistoryFrom(previous);
+      }
+      book = serverToSave.addressBook.trimmed(
+        nowMs: nowMs,
+        maxAddresses: _tuning.addressBookMaxAddresses,
+      );
+      serverToSave = serverToSave.copyWith(
+        addresses: book,
+        ips: SavedServer.normalizeIpCandidates(
+          serverToSave.ip,
+          <dynamic>[...serverToSave.candidateIps, ...book.ips],
+        ),
+        lastConnectedTs: nowMs,
+      );
+      AppLogger.info(
+        'QR 配对成功保存: ip=${serverToSave.ip} '
+        'networkKey=${_networkKeyForLog()} '
+        'addresses=${book.ips.join(", ")} '
+        'networkKeys=${book.successfulNetworkKeys.join("|")}',
+      );
+      await _saveManualServer(serverToSave, notify: false);
       notifyListeners();
       _forceReconnect(resetBackoff: true, reason: 'qr scan success');
       return;
     }
 
-    AppLogger.warning('QR 连通性测试未通过');
+    AppLogger.warning(
+      'QR 连通性测试未通过: networkKey=${_networkKeyForLog()}',
+    );
     _qrPairingSucceeded = false;
     _qrPairingFailed = true;
     notifyListeners();
-    await Future.delayed(_qrFailureHoldDelay);
+    await Future<void>.delayed(_tuning.qrFailureHoldDelay);
     if (generation != _qrPairingGeneration || !_qrScanMode) {
       return;
     }
@@ -379,7 +789,10 @@ class VoicingConnectionController extends ChangeNotifier {
 
     void addCandidate(dynamic value) {
       final ip = SavedServer.readString(value);
-      if (ip.isNotEmpty && !candidates.contains(ip)) {
+      if (ip.isEmpty || !Ipv4.isValid(ip)) {
+        return;
+      }
+      if (!candidates.contains(ip)) {
         candidates.add(ip);
       }
     }
@@ -416,6 +829,78 @@ class VoicingConnectionController extends ChangeNotifier {
     }
   }
 
+  Future<NetworkSnapshot> _loadInitialNetworkSnapshot() async {
+    try {
+      final snapshot = await _networkProvider.snapshot();
+      AppLogger.info(
+        '初始化网络画像: networkKey=${snapshot.networkKey.isEmpty ? "unknown" : snapshot.networkKey} '
+        'interfaces=${snapshot.interfaces.join(", ")} '
+        'approximate=${snapshot.approximate} '
+        'tailscale=${snapshot.hasTailscale}',
+      );
+      return snapshot;
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        '初始化网络画像失败，按未知网络处理',
+        error: error,
+        stackTrace: stackTrace,
+      );
+      return NetworkSnapshot.empty;
+    }
+  }
+
+  void _subscribeToNetworkChanges() {
+    try {
+      _networkSubscription = _networkProvider.changes.listen(
+        _onNetworkSnapshotChanged,
+        onError: (Object error, StackTrace stackTrace) {
+          AppLogger.warning(
+            '网络状态订阅失败，网络自适应降级（连接不受影响）',
+            error: error,
+            stackTrace: stackTrace,
+          );
+        },
+      );
+    } catch (error, stackTrace) {
+      AppLogger.warning(
+        '网络状态订阅异常，网络自适应降级',
+        error: error,
+        stackTrace: stackTrace,
+      );
+    }
+  }
+
+  /// 网络快照变化（已由 provider 做 400ms 防抖）。
+  ///
+  /// 规则：已连接时不打断当前连接（只更新快照供以后排序）；连接中/断开时
+  /// 立即用新快照重排候选并重新竞速，不等 backoff。
+  void _onNetworkSnapshotChanged(NetworkSnapshot snapshot) {
+    final previous = _networkSnapshot;
+    _networkSnapshot = snapshot;
+    if (snapshot.signature == previous.signature) {
+      return;
+    }
+    AppLogger.info(
+      '网络快照变化: networkKey=${previous.networkKey.isEmpty ? "unknown" : previous.networkKey} '
+      '-> ${snapshot.networkKey.isEmpty ? "unknown" : snapshot.networkKey} '
+      'interfaces=${snapshot.interfaces.join(", ")}',
+    );
+    if (_status == ConnectionStatus.connected) {
+      AppLogger.info('当前已连接，忽略网络变化，不打断现有连接');
+      return;
+    }
+    if (_qrScanMode) {
+      AppLogger.info('正在扫码配对，暂不触发自适应重连');
+      return;
+    }
+    final saved = _savedServer;
+    if (!_manualMode || saved == null) {
+      return;
+    }
+    AppLogger.info('网络变化触发立即重排候选并重连（跳过 backoff）');
+    _beginSavedServerRace(saved, reason: 'network changed');
+  }
+
   Future<void> _loadSavedServerPreference() async {
     try {
       final server = await _savedServerStore.load();
@@ -427,7 +912,10 @@ class VoicingConnectionController extends ChangeNotifier {
       _serverIp = server.ip;
       _serverPort = server.port;
       AppLogger.info(
-        '加载保存服务器: ${server.ip}:${server.port}; candidates=${server.candidateIps.join(', ')}',
+        '加载保存服务器: ${server.ip}:${server.port}; '
+        'candidates=${server.candidateIps.join(', ')}; '
+        'addresses=${server.addressBook.ips.join(', ')}; '
+        'networkKeys=${server.addressBook.successfulNetworkKeys.join("|")}',
       );
     } catch (error, stackTrace) {
       AppLogger.warning('加载保存服务器失败', error: error, stackTrace: stackTrace);
@@ -451,12 +939,16 @@ class VoicingConnectionController extends ChangeNotifier {
   Future<void> _persistSavedServer(SavedServer server) async {
     try {
       await _savedServerStore.save(server);
-      AppLogger.info('保存服务器: ${server.ip}:${server.port}');
+      AppLogger.info(
+        '保存服务器: ${server.ip}:${server.port} '
+        'schema=${server.schemaVersion} addresses=${server.addressBook.ips.length}',
+      );
     } catch (error, stackTrace) {
       AppLogger.warning('保存服务器失败', error: error, stackTrace: stackTrace);
     }
   }
 
+  /// 正式 connected 后才调用：写成功历史（网络 Key + 计数）并提升 primary。
   void _maybeUpdateSavedServerFromConnectedMessage(
     Map<String, dynamic> data,
   ) {
@@ -478,16 +970,32 @@ class VoicingConnectionController extends ChangeNotifier {
     final connectedName = SavedServer.readString(data['name']).isNotEmpty
         ? SavedServer.readString(data['name'])
         : SavedServer.readString(data['computer_name']);
+    final connectedOs = SavedServer.readString(data['os']);
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final networkContext = _currentNetworkContext();
+    final book = current.addressBook
+        .recordSuccess(
+          ip: _serverIp,
+          networkKey: networkContext.networkKey,
+          networkKind: networkContext.networkKind,
+          nowMs: nowMs,
+        )
+        .trimmed(
+          nowMs: nowMs,
+          maxAddresses: _tuning.addressBookMaxAddresses,
+        );
     final updated = current.copyWith(
       deviceId: current.hasDeviceId ? current.deviceId : connectedDeviceId,
       ip: _serverIp,
-      ips: current.candidateIps,
+      ips: SavedServer.normalizeIpCandidates(
+        _serverIp,
+        <dynamic>[...current.candidateIps, ...book.ips],
+      ),
       port: _serverPort,
       name: connectedName.isNotEmpty ? connectedName : current.name,
-      os: SavedServer.readString(data['os']).isNotEmpty
-          ? SavedServer.readString(data['os'])
-          : current.os,
-      lastConnectedTs: DateTime.now().millisecondsSinceEpoch,
+      os: connectedOs.isNotEmpty ? connectedOs : current.os,
+      lastConnectedTs: nowMs,
+      addresses: book,
     );
 
     if (updated == current) {
@@ -495,11 +1003,49 @@ class VoicingConnectionController extends ChangeNotifier {
     }
 
     _savedServer = updated;
+    AppLogger.info(
+      '记录连接成功历史: ip=$_serverIp networkKey=${_networkKeyForLog()} '
+      'ok=${updated.addressBook.addressFor(_serverIp)?.successCount ?? 0} '
+      'networkKeys=${book.successfulNetworkKeys.join("|")}',
+    );
     unawaited(_persistSavedServer(updated));
+  }
+
+  /// 当前网络环境上下文（记录成功历史用）：networkKey 描述手机所在网络。
+  SavedAddressNetworkContext _currentNetworkContext() {
+    return SavedAddressNetworkContext(
+      networkKey: _networkSnapshot.networkKey,
+      networkKind: _networkSnapshot.networkKey.isEmpty
+          ? 'unknown'
+          : _networkSnapshot.primaryKind,
+    );
+  }
+
+  String _networkKeyForLog() {
+    final key = _networkSnapshot.networkKey;
+    return key.isEmpty ? 'unknown' : key;
+  }
+
+  Duration _attemptTimeout() {
+    return _tuning.attemptTimeoutFor(networkKnown: _networkSnapshot.isKnown);
+  }
+
+  String _describeRaceFailures(Iterable<RaceFailure> failures) {
+    return failures
+        .map(
+          (failure) =>
+              '${failure.candidate.ip}:${failure.reason.name}'
+              '/${failure.elapsed.inMilliseconds}ms',
+        )
+        .join(', ');
   }
 
   void resetStubForDemo() {
     _qrPairingGeneration++;
+    _qrRace?.cancel();
+    _qrRace = null;
+    _savedRace?.cancel();
+    _savedRace = null;
     _savedServer = null;
     _manualMode = false;
     _qrScanMode = false;
@@ -511,6 +1057,8 @@ class VoicingConnectionController extends ChangeNotifier {
 
   Future<void> initialize() async {
     await _loadAutoEnterPreference();
+    _networkSnapshot = await _loadInitialNetworkSnapshot();
+    _subscribeToNetworkChanges();
     await _loadSavedServerPreference();
     _connectToSavedServerOrStayDisconnected(reason: 'init');
   }
@@ -546,6 +1094,7 @@ class VoicingConnectionController extends ChangeNotifier {
       return;
     }
 
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     final server = SavedServer(
       deviceId: deviceId.trim(),
       ip: normalizedIp,
@@ -553,7 +1102,12 @@ class VoicingConnectionController extends ChangeNotifier {
       port: port,
       name: name.trim(),
       os: os.trim(),
-      lastConnectedTs: DateTime.now().millisecondsSinceEpoch,
+      lastConnectedTs: nowMs,
+      addresses: ServerAddressBook.initialBookForCandidates(
+        candidateIps: [normalizedIp],
+        snapshot: _networkSnapshot,
+        nowMs: nowMs,
+      ),
     );
     await _saveManualServer(server);
     if (reconnect) {
@@ -564,7 +1118,6 @@ class VoicingConnectionController extends ChangeNotifier {
   Future<void> clearManualServer() async {
     _savedServer = null;
     _manualMode = false;
-    _clearSavedCandidateAttempts();
     await _savedServerStore.clear();
     _disconnectAndStayDisconnected();
     notifyListeners();
@@ -628,6 +1181,18 @@ class VoicingConnectionController extends ChangeNotifier {
     _heartbeatTimer?.cancel();
     _foregroundRecoveryTimer?.cancel();
     _shadowFinalizeTimer?.cancel();
+    final savedRace = _savedRace;
+    _savedRace = null;
+    savedRace?.cancel();
+    final qrRace = _qrRace;
+    _qrRace = null;
+    qrRace?.cancel();
+    final subscription = _networkSubscription;
+    _networkSubscription = null;
+    if (subscription != null) {
+      unawaited(subscription.cancel());
+    }
+    unawaited(_networkProvider.dispose());
     textController.removeListener(_onTextControllerChanged);
     _connectionGeneration++;
     _channel?.sink.close();
@@ -648,46 +1213,52 @@ class VoicingConnectionController extends ChangeNotifier {
       AppLogger.info('开始重连: $reason');
     }
 
-    _connect(connectTimeout: connectTimeout);
+    _connect(connectTimeout: connectTimeout, reason: reason);
   }
 
   void _connectToSavedServerOrStayDisconnected({required String reason}) {
-    _clearSavedCandidateAttempts();
     _reconnectTimer?.cancel();
-    _connectionGeneration++;
     _stopHeartbeat();
-    _channel?.sink.close();
-    _lastPong = null;
-
     final saved = _savedServer;
     if (_manualMode && saved != null) {
-      _setStatus(ConnectionStatus.connecting);
-      _startSavedCandidateAttempts(
-        saved,
-        saved.candidateIps,
-        reason: 'saved QR device reconnect: $reason',
-      );
+      _beginSavedServerRace(saved, reason: reason);
       return;
     }
 
+    _cancelSavedRace();
+    _connectionGeneration++;
+    _channel?.sink.close();
+    _channel = null;
+    _lastPong = null;
+    _connectStartedAt = null;
     AppLogger.info('未保存二维码设备，不进行 UDP 自动发现: $reason');
     _setStatus(ConnectionStatus.disconnected);
   }
 
   void _disconnectAndStayDisconnected() {
-    _clearSavedCandidateAttempts();
     _reconnectTimer?.cancel();
+    _cancelSavedRace();
     _connectionGeneration++;
     _stopHeartbeat();
     _channel?.sink.close();
+    _channel = null;
     _lastPong = null;
+    _connectStartedAt = null;
+    _connectedSince = null;
     _syncEnabled = true;
     _setStatus(ConnectionStatus.disconnected);
+  }
+
+  void _cancelSavedRace() {
+    final handle = _savedRace;
+    _savedRace = null;
+    handle?.cancel();
   }
 
   int _connect({
     bool preferNativeWifi = true,
     Duration? connectTimeout,
+    String reason = '',
   }) {
     final int connectionId = ++_connectionGeneration;
     final bool foregroundRecoveryActive = _isForegroundRecoveryActive();
@@ -696,15 +1267,23 @@ class VoicingConnectionController extends ChangeNotifier {
     _reconnectTimer?.cancel();
     _stopHeartbeat();
     _channel?.sink.close();
+    _channel = null;
     _lastPong = null;
+    _connectStartedAt = DateTime.now();
+    final timeout = connectTimeout ??
+        _recoveryPolicy.resolveConnectTimeout(
+          foregroundRecoveryActive: foregroundRecoveryActive,
+        );
+    AppLogger.info(
+      '建立正式连接: id=$connectionId ip=$_serverIp:$_serverPort '
+      'timeout=${timeout.inMilliseconds}ms '
+      'networkKey=${_networkKeyForLog()} reason=${reason.isEmpty ? "connect" : reason}',
+    );
 
     try {
-      _channel = VoicingWebSocketConnector.connect(
+      _channel = _channelFactory(
         Uri.parse('ws://$_serverIp:$_serverPort'),
-        connectTimeout: connectTimeout ??
-            _recoveryPolicy.resolveConnectTimeout(
-              foregroundRecoveryActive: foregroundRecoveryActive,
-            ),
+        connectTimeout: timeout,
         preferNativeWifi: preferNativeWifi,
       );
 
@@ -714,17 +1293,14 @@ class VoicingConnectionController extends ChangeNotifier {
           if (connectionId != _connectionGeneration) {
             return;
           }
-          AppLogger.warning(
-            'WebSocket error',
-            error: error,
-            stackTrace: stackTrace,
-          );
+          _logConnectFailure('WebSocket error', error: error, stackTrace: stackTrace);
           _handleDisconnect(connectionId: connectionId);
         },
         onDone: () {
           if (connectionId != _connectionGeneration) {
             return;
           }
+          _logConnectFailure('WebSocket closed');
           _handleDisconnect(connectionId: connectionId);
         },
       );
@@ -732,10 +1308,27 @@ class VoicingConnectionController extends ChangeNotifier {
       if (connectionId != _connectionGeneration) {
         return connectionId;
       }
-      AppLogger.error('Connection error', error: error, stackTrace: stackTrace);
+      _logConnectFailure('Connection error', error: error, stackTrace: stackTrace);
       _handleDisconnect(connectionId: connectionId);
     }
     return connectionId;
+  }
+
+  void _logConnectFailure(
+    String reason, {
+    Object? error,
+    StackTrace? stackTrace,
+  }) {
+    final elapsed = _connectStartedAt == null
+        ? null
+        : DateTime.now().difference(_connectStartedAt!);
+    AppLogger.warning(
+      '连接失败: ip=$_serverIp:$_serverPort reason=$reason '
+      'elapsed=${elapsed?.inMilliseconds ?? 0}ms '
+      'networkKey=${_networkKeyForLog()}',
+      error: error,
+      stackTrace: stackTrace,
+    );
   }
 
   void _handleMessage(dynamic message, int connectionId) {
@@ -751,12 +1344,21 @@ class VoicingConnectionController extends ChangeNotifier {
 
       final type = data['type'];
       if (type == VoicingProtocol.typeConnected) {
-        _clearSavedCandidateAttempts();
         _endForegroundRecovery();
         _status = ConnectionStatus.connected;
         _syncEnabled = data['sync_enabled'] ?? true;
         _reconnectAttempt = 0;
         _lastPong = DateTime.now();
+        _connectedSince = DateTime.now();
+        final connectElapsed = _connectStartedAt == null
+            ? null
+            : DateTime.now().difference(_connectStartedAt!);
+        AppLogger.info(
+          '连接成功: ip=$_serverIp:$_serverPort '
+          'elapsed=${connectElapsed?.inMilliseconds ?? 0}ms '
+          'networkKey=${_networkKeyForLog()}',
+        );
+        // 只有真正收到 connected 才写成功历史 + 提升 primary。
         _maybeUpdateSavedServerFromConnectedMessage(data);
         _startHeartbeat();
         notifyListeners();
@@ -792,18 +1394,48 @@ class VoicingConnectionController extends ChangeNotifier {
     final now = DateTime.now();
     final bool foregroundRecoveryActive = _isForegroundRecoveryActive(now: now);
     _stopHeartbeat();
-    if (_tryNextSavedCandidateAfterDisconnect(connectionId)) {
-      return;
+    _cancelSavedRace();
+    if (_status == ConnectionStatus.connected) {
+      final connectedFor =
+          _connectedSince == null ? null : now.difference(_connectedSince!);
+      AppLogger.warning(
+        '连接断开: ip=$_serverIp:$_serverPort '
+        'connectedFor=${connectedFor?.inMilliseconds ?? 0}ms '
+        'networkKey=${_networkKeyForLog()}',
+      );
     }
     _status = foregroundRecoveryActive
         ? ConnectionStatus.connecting
         : ConnectionStatus.disconnected;
     _syncEnabled = true;
+    _connectedSince = null;
     notifyListeners();
+    _scheduleBackoffReconnect(
+      foregroundRecoveryActive: foregroundRecoveryActive,
+      reason: 'connection lost',
+    );
+  }
 
+  void _enterReconnectBackoff({required String reason}) {
+    final now = DateTime.now();
+    final bool foregroundRecoveryActive = _isForegroundRecoveryActive(now: now);
+    _status = foregroundRecoveryActive
+        ? ConnectionStatus.connecting
+        : ConnectionStatus.disconnected;
+    _syncEnabled = true;
+    notifyListeners();
+    _scheduleBackoffReconnect(
+      foregroundRecoveryActive: foregroundRecoveryActive,
+      reason: reason,
+    );
+  }
+
+  void _scheduleBackoffReconnect({
+    required bool foregroundRecoveryActive,
+    required String reason,
+  }) {
     final saved = _savedServer;
     if (!_manualMode || saved == null) {
-      _clearSavedCandidateAttempts();
       _reconnectTimer?.cancel();
       AppLogger.info('无已保存二维码设备，断开后不自动重连');
       return;
@@ -815,122 +1447,27 @@ class VoicingConnectionController extends ChangeNotifier {
     );
     _reconnectAttempt = foregroundRecoveryActive ? 0 : _reconnectAttempt + 1;
 
+    AppLogger.info(
+      '计划重连: delay=${reconnectDelay.inMilliseconds}ms '
+      'attempt=$_reconnectAttempt reason=$reason '
+      'networkKey=${_networkKeyForLog()}',
+    );
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(
       reconnectDelay,
       () {
-        if (_status == ConnectionStatus.disconnected ||
-            _status == ConnectionStatus.connecting) {
-          final latestSaved = _savedServer;
-          if (_manualMode && latestSaved != null) {
-            _startSavedCandidateAttempts(
-              latestSaved,
-              latestSaved.candidateIps,
-              reason: 'saved QR device reconnect after disconnect',
-            );
-          } else {
-            _setStatus(ConnectionStatus.disconnected);
-          }
+        if (_status != ConnectionStatus.disconnected &&
+            _status != ConnectionStatus.connecting) {
+          return;
+        }
+        final latestSaved = _savedServer;
+        if (_manualMode && latestSaved != null) {
+          _beginSavedServerRace(latestSaved, reason: reason);
+        } else {
+          _setStatus(ConnectionStatus.disconnected);
         }
       },
     );
-  }
-
-  void _startSavedCandidateAttempts(
-    SavedServer saved,
-    List<String> candidates, {
-    required String reason,
-  }) {
-    final attempts = SavedServer.normalizeIpCandidates(saved.ip, candidates);
-    if (attempts.isEmpty) {
-      return;
-    }
-
-    _savedCandidateAttempts = attempts;
-    _savedCandidateAttemptIndex = 0;
-    AppLogger.info('开始保存地址候选连接: ${attempts.join(', ')} ($reason)');
-    _connectCurrentSavedCandidateAttempt(reason: reason);
-  }
-
-  void _connectCurrentSavedCandidateAttempt({required String reason}) {
-    final saved = _savedServer;
-    if (saved == null ||
-        _savedCandidateAttemptIndex < 0 ||
-        _savedCandidateAttemptIndex >= _savedCandidateAttempts.length) {
-      _clearSavedCandidateAttempts();
-      return;
-    }
-
-    final candidateIp = _savedCandidateAttempts[_savedCandidateAttemptIndex];
-    _serverIp = candidateIp;
-    _serverPort = saved.port;
-    final attemptNumber = _savedCandidateAttemptIndex + 1;
-    final totalAttempts = _savedCandidateAttempts.length;
-    AppLogger.info(
-      '尝试保存地址候选 $attemptNumber/$totalAttempts: $candidateIp:${saved.port} ($reason)',
-    );
-    _savedCandidateConnectionId = _connect(
-      connectTimeout: _savedCandidateConnectTimeout,
-    );
-  }
-
-  bool _tryNextSavedCandidateAfterDisconnect(int? connectionId) {
-    final saved = _savedServer;
-    if (!_manualMode || saved == null) {
-      _clearSavedCandidateAttempts();
-      return false;
-    }
-
-    if (_savedCandidateConnectionId == connectionId &&
-        _savedCandidateAttempts.isNotEmpty) {
-      final nextIndex = _savedCandidateAttemptIndex + 1;
-      if (nextIndex >= _savedCandidateAttempts.length) {
-        AppLogger.warning('保存地址候选全部失败: ${_savedCandidateAttempts.join(', ')}');
-        _clearSavedCandidateAttempts();
-        return false;
-      }
-      _savedCandidateAttemptIndex = nextIndex;
-      _connectCurrentSavedCandidateAttempt(reason: 'previous candidate failed');
-      return true;
-    }
-
-    final remaining = _remainingSavedCandidatesAfter(_serverIp, saved);
-    if (remaining.isEmpty) {
-      _clearSavedCandidateAttempts();
-      return false;
-    }
-
-    _startSavedCandidateAttempts(
-      saved,
-      remaining,
-      reason: 'current saved address failed',
-    );
-    return true;
-  }
-
-  List<String> _remainingSavedCandidatesAfter(
-      String failedIp, SavedServer saved) {
-    final candidates = saved.candidateIps;
-    if (candidates.length <= 1) {
-      return const [];
-    }
-
-    final failedIndex = candidates.indexOf(failedIp);
-    if (failedIndex < 0) {
-      return candidates;
-    }
-
-    final reordered = <String>[
-      ...candidates.skip(failedIndex + 1),
-      ...candidates.take(failedIndex),
-    ];
-    return reordered.where((ip) => ip != failedIp).toList();
-  }
-
-  void _clearSavedCandidateAttempts() {
-    _savedCandidateAttempts = const [];
-    _savedCandidateAttemptIndex = 0;
-    _savedCandidateConnectionId = null;
   }
 
   void _startHeartbeat() {
