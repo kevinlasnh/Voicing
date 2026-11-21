@@ -1452,3 +1452,12 @@
   - DEB：`Version: 2.9.14`、依赖与 workflow 一致，全部 `root/root`，二进制 0755、desktop/icon 0644、`/usr/bin/voicing -> /opt/voicing/voicing`；deb SHA256 `10f33acf…2c5bda`、二进制 SHA256 `50311d2f…441a17`。
 - 本机安装（2026-11-21 10:54）：`pkill -TERM -x voicing` → `sudo -n dpkg -i pc/dist/voicing-linux-amd64.deb`，由 2.9.13 升级到 **2.9.14**；`dpkg -l`、`/opt/voicing/voicing` SHA256 与产物一致（root:root 0755）。用 `systemctl --user start app-voicing@autostart.service`（与登录自启同一路径）启动：主进程 17409 + 子进程，监听 `10.10.0.225:9527` + `100.104.201.81:9527`（不含 docker0），日志出现「托盘就绪」，当日日志 0 ERROR/WARNING；用户级自启 `.desktop` 与生成单元均 active。
 - 收尾：PWF 三件套更新后提交并 push `origin/main`；本轮不创建 tag（用户未要求发布 Release）。
+
+### 阶段 40：v2.9.14 GitHub Release 发布与官方产物安装（2026-11-21 11:00–11:15）
+- 用户要求触发新的 GitHub Actions 发布，于是推送 annotated tag `v2.9.14`（首轮指向 `948b91d`），触发 run `44858906939`：Android / Windows / Linux / Prepare Release Notes 均成功，但 `Build macOS App` 在排队 1 秒后被取消并报 `The configuration 'macos-14-arm64-us-default' is not supported`；因依赖未满足，`Publish GitHub Release` 被跳过，未产生 Release。
+- 根因（联网确认）：GitHub 已于 **2026-11-02 正式下线 macOS 14 runner 镜像**，官方 changelog 建议改用 `macos-latest`（macos-26）/ `macos-15` 等 arm64 标签。CI 修复提交 `1eebfa6` 把 `.github/workflows/release.yml` 的 `runs-on: macos-14` 改为 `macos-15` 并加注释说明原因；push main 后删除并重建 `v2.9.14` tag 指向修复提交（此前确认无 Release，移动 tag 安全）。
+- 重新触发 run `44859445886`：**6/6 job 全部 success**（约 6 分钟），GitHub Release `v2.9.14` 创建：6 项资产齐全（APK / Windows EXE / macOS DMG / Linux DEB / Linux standalone / SHA256SUMS.txt），release notes 正确提取 CHANGELOG 2.9.14 双语内容。
+- 资产校验：下载 `voicing.apk` 与 `voicing-linux-amd64.deb` 到 `~/Downloads/Voicing-2.9.14/`，`sha256sum -c` OK；`SHA256SUMS.txt` 5 行扁平校验和与 Release API 各资产 digest 逐一相同；DEB 内二进制 SHA256 `75c2de42…b6239` 与 `voicing-linux-x86_64` standalone 资产 digest 完全一致。
+- 本机改用官方产物：停止运行中的本地构建（PID 17409/17412）→ `sudo -n dpkg -i` 官方 DEB（2.9.14，75,794,776 B）→ `/opt/voicing/voicing` SHA256 `75c2de42…b6239`、root:root 0755；`systemctl --user start app-voicing@autostart.service` 启动后主进程 29815 常驻，监听 `10.10.0.225:9527` + `100.104.201.81:9527`（无 docker0），日志含「托盘就绪」、该次启动 0 ERROR/WARNING，自启单元 active。
+- 用户侧：官方 APK 已下载到 `~/Downloads/Voicing-2.9.14/voicing.apk`（SHA256 `9b7634c6…23a4f`），可直接安装手机；安装后旧配对数据自动迁移，无需重扫。
+- 备注：CI 用 Python 3.12 构建的二进制 76.8MB，本机 venv Python 3.10 本地构建为 61.2MB，同源码但产物不同；本机现已运行官方 Release 资产。

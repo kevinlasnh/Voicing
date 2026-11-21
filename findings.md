@@ -641,3 +641,11 @@
 - 2026-11-21 早上登录后旧版 2.9.13 被 `app-voicing@autostart.service` 自动拉起，证明 xdg-autostart 生成单元有效；`dpkg -i` 升级不会修改用户目录下的自启文件。[实测·confirmed]
 - QA 子代理上下文耗尽退出但 `.tmp/*.log` 中的证据完整，lead 复跑关键项后闭环：说明把验证证据落盘比只留在对话里可靠。[流程经验]
 - 已知限制：本轮无 adb 真机，跨网络免重扫的端到端行为由单测（地址簿合并/裁剪不变量、并行竞速、generation 隔离）与协议 E2E 覆盖，手机两网络切换需用户安装新 APK 后实测；PC `WS ping_timeout` 由 20s 收紧到 10s，弱网休眠时可能比旧版更早触发一次自动重连。[限制]
+
+## 2026-11-21 v2.9.14 发布发现
+
+- GitHub 已于 **2026-11-02** 正式下线 macOS 14 runner 镜像；任何 `runs-on: macos-14` 的 job 会在排队约 1 秒内被取消并报 `The configuration 'macos-14-arm64-us-default' is not supported`。官方 changelog 给出的替代 arm64 标签有 `macos-latest`（macos-26）、`macos-15`、`macos-latest-xlarge`、`macos-15-xlarge`；本次改用 `macos-15` 后 macOS DMG 构建恢复。[联网 + Actions·confirmed]
+- 发布补救安全顺序：先确认 Release 不存在（`release not found`）再删除/重建 tag，可避免改写已公开的发布；tag 指向新提交后 Actions 按新 tag commit 正常触发，6/6 job 全绿。[本地 + Actions·confirmed]
+- Release 校验闭环：`SHA256SUMS.txt` 扁平 5 行 == Release API assets digest（5 项逐一相同），deb 内二进制 digest == standalone 资产 digest == 本机安装后 `/opt/voicing/voicing` digest，说明「校验文件 / 发布资产 / 安装包 / 运行二进制」四者一致。[本地命令输出·confirmed]
+- CI 与本地构建差异：CI Python 3.12 打包二进制 76.8MB，本机 venv Python 3.10 为 61.2MB，同源码但产物不同；正式安装应以官方 Release 资产为准（本机已切换）。[构建·confirmed]
+- 失败 run 的 watch 命令经 `| tail` 会掩盖 `--exit-status` 的非零退出码（tail 退出码为 0），判断 CI 结果必须直接查 `gh run view --json conclusion`，不能只看管道退出码。[工具经验]

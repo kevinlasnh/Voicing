@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 39（complete）
+阶段 40（complete）
 
 ## 各阶段
 
@@ -420,5 +420,30 @@
 - 产物：`pc/dist/voicing-linux-amd64.deb`（2.9.14，60,435,006 B，SHA256 `10f33acf6f01…9442c5bda`）；独立二进制 SHA256 `50311d2f407b…5a441a17`。
 - 本机：已安装 `voicing 2.9.14`，`/opt/voicing/voicing` SHA256 与本次构建一致；GNOME 自启单元 `app-voicing@autostart.service` active（生成自 `~/.config/autostart/voicing.desktop`）；监听 `10.10.0.225:9527` + `100.104.201.81:9527`，不含 docker0；启动日志 0 ERROR/WARNING。
 - 兼容性：协议/QR schema 未变，v1 saved_server 自动迁移且无需重扫；本轮无 adb 真机，Android 新 APK 未安装到手机（debug 包在 `android/voice_coding/build/app/outputs/flutter-apk/app-debug.apk`，供用户自装或后续 CI 发布）。
+
+- **状态：** complete
+
+## 阶段 40：v2.9.14 GitHub Release 发布与官方产物安装（2026-11-21）
+
+### 目标
+1. 推送 v2.9.14 tag 触发 `.github/workflows/release.yml`，完成四平台构建与 GitHub Release。
+2. 核验 Release 六项资产与 SHA256SUMS，下载官方 Linux DEB 覆盖安装到本机并保持自启。
+3. 记录发布/安装结果并 push。
+
+### 计划
+- [x] 推送 v2.9.14 tag 触发 release workflow（首轮 run 44858906939）
+- [x] 定位 macOS job 失败根因：GitHub 2026-11-02 下线 macOS 14 runner 镜像，`macos-14` 秒取消
+- [x] CI 修复：`runs-on: macos-14` → `macos-15`（官方推荐 arm64 标签），提交并 push main
+- [x] 删除并重建 v2.9.14 tag 指向 CI 修复后的提交，重新触发 run 44859445886
+- [x] 核验 6/6 job success、Release 六项资产、SHA256SUMS 与 API digest 全部一致
+- [x] 下载官方 DEB 与 APK 到 `~/Downloads/Voicing-2.9.14/`，`sha256sum -c` 通过
+- [x] 官方 DEB 覆盖安装（inner binary SHA256 = standalone 资产 digest），autostart 单元启动并验证监听/日志
+- [x] 更新 PWF 三件套并 push
+
+### 结果
+- Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.14（tag → `1eebfa6`），6/6 job 全绿。
+- 资产：`voicing.apk`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`SHA256SUMS.txt`（扁平 basename，5 行校验和）。
+- 本机：官方 `voicing-linux-amd64.deb`（SHA256 `69b5bd7d…31789`）安装为 2.9.14；`/opt/voicing/voicing` SHA256 `75c2de42…b6239` = Release standalone 资产；监听 `10.10.0.225:9527` + `100.104.201.81:9527`（无 docker0），日志 0 ERROR/WARNING。
+- 用户侧：官方 APK 已下载到 `~/Downloads/Voicing-2.9.14/voicing.apk`，可直接安装到手机。
 
 - **状态：** complete
