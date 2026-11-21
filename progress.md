@@ -1424,3 +1424,31 @@
   - 提交：`72ef1c5`（v2.9.12 代码）、`d15d55b`（v2.9.12 记录）、`eb43ffe`（v2.9.13 代码）、`26a7b77`（v2.9.13 记录）。
   - Release：`v2.9.12` 与 `v2.9.13`，Actions run `36141549843`、`36146092747` 均 6/6 全绿。
   - 本机：已安装 v2.9.13，双地址监听（`192.168.50.113:9527` + `100.102.136.4:9527`），GNOME 开机自启保留。
+
+## 会话：2026-11-20 CST — 阶段 39：全面重构优化与跨网络快速配对
+
+### 起始基线与侦察（2026-11-20 14:29–14:40）
+- 起始状态：`main` = `origin/main` = `f7c00b2`（v2.9.13 收口提交），工作区仅有本次 PWF 计划改动；本机已安装 `voicing 2.9.13` 且 `/opt/voicing/voicing` 正在运行，日志目录 `~/.local/share/Voicing/logs/`，GNOME 自启 `~/.config/autostart/voicing.desktop` 指向 `/opt/voicing/voicing`；会话为 X11。
+- 基线验证：PC 全套单测通过（0.65s）；Flutter `analyze` 仅 4 条既有 `withOpacity` info；`flutter test` 24 项通过（含 `pub get` 共 24.9s）；Flutter 3.27.0 在 `~/development/flutter-3.27.0`，JDK 17、Android SDK 34/35 可用，无 adb 真机连接。
+- 现状缺口：`SavedServer` v1 只存 `ip`+`ips` 候选、无网络画像；扫码 probe 串行 3s/候选、已保存重连串行 2s/候选 + backoff，候选顺序不随当前网络自适应，这是跨网络重连慢的直接原因。
+- 实时日志证据（2026-11-20 12:07–14:31）：接口快照存在抖动（wifi `10.157.198.41` 出现/消失导致监听反复 rebind），手机 WebSocket 连接在 `open`/`closed` 之间频繁抖动（14:25–14:31 多次秒级断开重连），而 server 的 connected/disconnected 只有 `print` 到控制台、没有进日志文件。
+- 团队任务：task-1（Android 跨网络配对与重构）、task-2（PC 模块化与性能优化）并行开发，task-3（QA 全量验证）依赖两者；PWF 阶段 39 计划已写入 `task_plan.md`。
+
+### 实现与第一轮验证（2026-11-20 15:00–15:25）
+- Android（task-1，android-dev 中途失败后由 lead 接手收尾）：新增 `network_profile.dart`、`server_address_book.dart`、`connection_race.dart`、`connection_tuning.dart`；`saved_server` 升级 schema v2（v1 原地迁移，每个候选记录 networkKey/成功失败计数/最近成功时间）；控制器扫码与已保存重连改为 Happy Eyeballs 并行竞速（120ms stagger、最多 3 路、单候选 1.2s/2s、整体 2.8s）、网络快照变化时断线/连接中立即重排重连；原生新增 `getNetworkSnapshot` 与 `voicing/network_state_events` 桥（`MainActivity.kt` +264 行），无新增权限。
+- 修复的问题：① 竞速句柄完成私有 Completer 导致 `await handle.done` 永久挂起（14 个新用例超时）；② 同子网 LAN 候选被 Tailscale 兜底地址反超的评分 bug；③ v2 地址簿 fromJson 合并刷新 success 时间导致 round-trip 不等；④ controller 用例缺少 SharedPreferences 隔离导致跨用例污染；⑤ Kotlin 缺 `LinkProperties` import 导致 APK 编译失败。
+- Android 验证：`flutter analyze` 仅 4 条既有 `withOpacity` info；`flutter test --no-pub` **51 项全绿 2.9s**；`flutter build apk --debug` 成功（`app-debug.apk` 101,982,803 字节）。
+- PC（task-2，pc-dev）：2185 行入口拆为 7 个模块（`network_interfaces` 991 / `voicing_server` 564 / `tray_ui` 771 / `qr_dialog` 481 / `voicing_tuning` 190 / `voicing_state` 46，入口 425 行），保留兼容导出与旧测试 patch 语义；PC 单测 **138 项 0.539s 全绿**；性能实测：接口刷新中位 7.77→0.24ms、QR payload 9.59→0.26ms、启动到托盘就绪 406→约 196ms；新增容器网桥过滤、连接注册表文件日志、监听重绑连续 2 次新枚举确认防抖。
+- 版本/文档：PC 与 Android 版本升到 `2.9.14`（Android `2.9.14+15`），CHANGELOG 2.9.14 双语条目，README 中英、Android 中英文档同步跨网络机制、项目结构与升级说明。
+- QA 已启动（qa-verify，task-3）：PC 测试、Flutter 测试、协议契约零变更、APK/DEB 构建、协议 E2E 冒烟、冻结二进制验证。
+
+### QA 独立验证与本机 v2.9.14 安装（2026-11-21 10:53–11:00）
+- QA 子代理（qa-verify）完成大部分验证后因上下文耗尽退出、未留下收尾报告；从 `.tmp/qa-*.log` 回收证据并由 lead 复跑关键项闭环：
+  - PC：`py_compile` OK；`Ran 138 tests in 0.820s` → `OK`（lead 复跑）；`git diff --check` OK；`protocol/`、`pc/voicing_protocol.py`、`android/.../voicing_protocol.dart` 零变更。
+  - Android：`flutter analyze` 仅 4 条既有 withOpacity info（2.4s）；`flutter test --no-pub` **51 项全绿 3.3s**；`flutter build apk --debug` 成功（8.95s，`app-debug.apk` 101,982,803 B）。
+  - 协议 E2E（`.tmp/qa-e2e.log`）：connected 字段、qr_scan ping→pong、notify 回调、submit/commit ACK 的 clear_input 语义、裸文本注入、commit auto_enter 共 11 项断言全部通过（0.12s）。
+  - QR payload（`.tmp/qa-qr.log`）：13 项断言通过，字段集合与 schema 不变，候选 IP 为 `10.157.198.41` + `100.104.201.81`，不含 docker0/loopback；qrcode pixmap 230x230 生成成功。
+  - 冻结二进制启动（`.tmp/qa-frozen-startup-slice.log`）：参数生效表、接口枚举 9.77ms、仅 wifi+Tailscale、server 参数与 listening 正常；offscreen 无系统托盘报 ERROR 属预期。
+  - DEB：`Version: 2.9.14`、依赖与 workflow 一致，全部 `root/root`，二进制 0755、desktop/icon 0644、`/usr/bin/voicing -> /opt/voicing/voicing`；deb SHA256 `10f33acf…2c5bda`、二进制 SHA256 `50311d2f…441a17`。
+- 本机安装（2026-11-21 10:54）：`pkill -TERM -x voicing` → `sudo -n dpkg -i pc/dist/voicing-linux-amd64.deb`，由 2.9.13 升级到 **2.9.14**；`dpkg -l`、`/opt/voicing/voicing` SHA256 与产物一致（root:root 0755）。用 `systemctl --user start app-voicing@autostart.service`（与登录自启同一路径）启动：主进程 17409 + 子进程，监听 `10.10.0.225:9527` + `100.104.201.81:9527`（不含 docker0），日志出现「托盘就绪」，当日日志 0 ERROR/WARNING；用户级自启 `.desktop` 与生成单元均 active。
+- 收尾：PWF 三件套更新后提交并 push `origin/main`；本轮不创建 tag（用户未要求发布 Release）。

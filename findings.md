@@ -614,3 +614,30 @@
 - 这解释了一个容易复现的偏差：本次先用 `.venv` 调用该 API 得到的是开发命令条目，改为模拟 frozen 运行态（`sys.frozen=True`、`sys.executable="/opt/voicing/voicing"`）后写入的才是与用户托盘操作一致的条目。当前条目已确认为 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`，`desktop-file-validate` 通过且 `is_startup_enabled()` 为 `True`。[本地命令输出·confirmed]
 - 本机当前是 X11（`XDG_SESSION_TYPE=x11`、`DISPLAY=:1`、`XDG_CURRENT_DESKTOP=ubuntu:GNOME`），因此自启条目的 `OnlyShowIn=GNOME;` 会命中，登录后由 GNOME 会话拉起；这也是历史记录中「本机其实是 X11 而非 Wayland」结论的再次确认。[本地命令输出·confirmed]
 - 本次启动后监听地址与 2026-09-25 的记录不同：当次是 `192.168.50.113` + `100.102.136.4`，本次是 `10.10.0.225`（wifi `wlp0s20f3`）、`172.17.0.1`（docker0）、`100.104.201.81`（Tailscale）。说明地址集合随所在网络与 Tailscale 会话变化，属于预期行为。注意 `172.17.0.1`（docker0）会进入 QR 的 `ips` 候选池 —— 它是合法的私有 IPv4，但对手机来说不可达，Android 的候选轮询需要能跳过它；日志中「检测到 2 个 QR 连接候选网络接口」即 wifi + docker0。[本地命令输出·confirmed]
+
+## 2026-11-20 阶段 39 设计发现
+
+- 跨网络配对并不缺「地址合并」：`SavedServer.mergeCandidateIpsFrom` 已能在同 `device_id` 重扫时把新候选并入 `ips`。真正缺口是**没有网络上下文 + 串行拨号**：候选顺序固定（上次成功 IP 在前），失败后要等满 2~3 秒才试下一个，且网络切换不会触发立即重算。因此方案定为「地址簿 schema v2（每地址记录 networkKey/成功失败统计）+ 网络画像评分排序 + Happy Eyeballs 并行竞速」，而不是改协议。[源码·confirmed]
+- 不用 SSID 做网络标识：Android 10+ 需要定位权限且涉及隐私；用「接口类型 + 本地子网 CIDR」即可判断候选地址是否同网段可达，Tailscale `100.64.0.0/10` 可显式识别，纯网络层信息零新增权限。[工程决策]
+- 协议契约与 QR schema 保持不变的收益：新 APK 可连已发布 PC 2.9.13，新 PC 可连旧 APK，避免双端必须同步升级。[工程决策]
+- PC 端 2185 行单文件是结构优化主目标，但 `pc/tests` 大量 `from voice_coding import ...`，拆分必须保留兼容导出与实际 patch 目标，否则 88 项测试回归风险高；PyInstaller 入口仍走 `voice_coding.py`。[源码 + 测试·confirmed]
+- 本机日志暴露两个可观测性/稳定性问题：① `handle_client` 的 connected/disconnected 只有 `print`，冻结的 `--windowed` 应用看不到，手机反复断连时无法从文件日志定位来源 IP；② 接口快照抖动会让 WebSocket 监听反复 close/rebind（12:07 两次）。PC 重构应把客户端连接元数据写进文件日志，并给监听重绑加稳定性防抖。[日志·confirmed]
+- 本机发布/安装基线：DEB 构建步骤固定在 `.github/workflows/release.yml` 的 `build-linux` job（`chmod 0644`、`dpkg-deb --root-owner-group`），本地可照做；安装前需 `pkill -TERM -x voicing`，自启文件在用户目录、不随包管理。[工作流·confirmed]
+
+## 2026-11-20 阶段 39 实现要点
+
+- 竞速句柄 bug：`RaceHandle` 自己 new 了一个 `Completer`，而 `_RaceRun` 完成的是另一个，导致 `await handle.done` 永久挂起、14 个新用例 30s 超时。修复为句柄复用 run 的 completer。教训：并发原语必须单点拥有完成权。[源码·confirmed]
+- 评分权重必须严格分层且互斥：同 networkKey +1000、同子网 +800、双端 Tailscale +700；只有「当前网络已知、既不同子网也无本网络成功历史」的私网 LAN 地址才叠加 -300（有 Tailscale 时再 -100）。否则同子网 LAN 会被 Tailscale 兜底反超（单测抓到）。[单测·confirmed]
+- v2 地址簿 `fromJson` 不能把 v1 迁移结果与已解析地址簿 `merge`：merge 取 max 时间会把最近成功时间刷新成当前连接时间，破坏 `fromJson(toJson(x)) == x` 与「最近成功」语义；正确做法是只补缺失候选。[单测·confirmed]
+- 跨网络不变量落地：`trimmed()` 保护每个不同 networkKey 的最近成功地址，即使超过 12 条上限也不裁剪；QR 重扫 `mergeAddressHistoryFrom` 同时保留候选 IP 与网络历史。[单测·confirmed]
+- Android native 网络快照用 `ConnectivityManager.allNetworks + LinkProperties`（带 transport/真实前缀）再叠加 `NetworkInterface.getNetworkInterfaces()` 兜底，不读 SSID/位置；`LinkProperties` 忘记 import 只有在真正编 APK 时才暴露，说明改 Kotlin 必须构建。[构建·confirmed]
+- PC 端接口枚举抖动与 docker0 污染是真实问题（旧日志 12:07 两次 rebind、`172.17.0.1:9527` 进入监听与 QR）；新实现用 TTL 共享快照 + 连续 2 次「新枚举」确认防抖 + 容器网桥前缀过滤。[源码 + 日志·confirmed]
+- PyInstaller 入口兼容策略：新模块全部静态 import，CI 的 `pyinstaller ... voice_coding.py` 能自动收集，无需改 spec；旧测试的 `patch("voice_coding.X")` 通过装配层「调用时解析本模块命名空间」的转发函数保持有效。[构建 + 测试·confirmed]
+
+## 2026-11-21 阶段 39 验证与安装观察
+
+- 本机 X11/GNOME 会话下，从没有 `DISPLAY` 的 shell 直接 `setsid nohup /opt/voicing/voicing` 会因 Qt 连不上 display 而静默退出（日志来不及写）；正确验证路径是 `systemctl --user start app-voicing@autostart.service`，它继承图形会话环境，也正是登录自启走的同一路径。[实测·confirmed]
+- 新版本监听自动收敛为 LAN + Tailscale 两个地址，docker0 已不再进入 QR/监听；启动日志含参数生效表、接口枚举耗时、server keepalive 参数与「托盘就绪」。[实测·confirmed]
+- 2026-11-21 早上登录后旧版 2.9.13 被 `app-voicing@autostart.service` 自动拉起，证明 xdg-autostart 生成单元有效；`dpkg -i` 升级不会修改用户目录下的自启文件。[实测·confirmed]
+- QA 子代理上下文耗尽退出但 `.tmp/*.log` 中的证据完整，lead 复跑关键项后闭环：说明把验证证据落盘比只留在对话里可靠。[流程经验]
+- 已知限制：本轮无 adb 真机，跨网络免重扫的端到端行为由单测（地址簿合并/裁剪不变量、并行竞速、generation 隔离）与协议 E2E 覆盖，手机两网络切换需用户安装新 APK 后实测；PC `WS ping_timeout` 由 20s 收紧到 10s，弱网休眠时可能比旧版更早触发一次自动重连。[限制]

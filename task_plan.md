@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 37（complete）
+阶段 39（complete）
 
 ## 各阶段
 
@@ -384,3 +384,41 @@
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。
+
+## 阶段 39：全面重构优化 + 跨网络快速配对 + 本机 v2.9.14 安装（2026-11-20）
+
+### 目标
+1. 同一手机同一 PC 在多个网络环境各扫码一次后，回到任一网络无需重扫、1~2 秒内自动配对；地址历史与网络画像持久化、自适应排序与并行探测。
+2. PC 端（Python/PyQt5）与 Android 端（Flutter/Kotlin）全面重构：结构分层、算法与性能优化、自适应网络/超时策略。
+3. 本机重新构建并安装最新 PC 端，保持开机自启；全部改动记录并 push。
+
+### 计划
+- [x] 复盘双端现状与性能热点，确定跨网络配对缺口与设计方案
+- [x] Android：地址簿 schema v2（含网络画像）、候选评分排序、Happy Eyeballs 并行探测、原生网络快照桥
+- [x] Android：控制器扫码/重连重构、自适应网络切换重连与单测
+- [x] PC：模块化拆分（网络发现 / WebSocket server / Qt UI / 入口兼容层）
+- [x] PC：接口枚举缓存、QR 缓存、server 调优、自适应监听与单测
+- [x] 双端契约与兼容性检查（QR schema 不变、旧 PC 2.9.13 与旧 saved_server 数据互通）
+- [x] 全量验证：PC suite、flutter analyze/test、APK debug 构建、协议 E2E 冒烟、DEB 构建
+- [x] 版本（PC 2.9.14 / Android 2.9.14+15）、CHANGELOG、README、PWF 同步
+- [x] 提交并 push 到 origin/main
+- [x] 本机构建 DEB、安装、开机自启与运行监听验证
+
+### 关键决策
+| 决策 | 理由 |
+|------|------|
+| 不改协议契约与 QR schema，跨网络能力全部由 Android 地址簿承载 | 保持与已发布 PC 2.9.13 双向兼容，零协议迁移风险 |
+| 用网络画像（接口类型 + 本地子网 CIDR）而不是 SSID 做设备网络标识 | 不新增定位/权限，纯网络层信息即可判断目标地址可达性 |
+| 已保存重连从串行尝试改为 Happy Eyeballs 并行竞速 | 串行 N×2s 是跨网络重连慢的根因；并行后总耗时约等于单次 RTT |
+| 同网络 Key 优先 + 同子网 + Tailscale 分层评分 | 让最可能可达的地址先竞速，未知网络也不阻塞 |
+| 地址簿裁剪永不丢弃不同网络的最近成功地址 | 这是「两次扫码后两个网络都不再重扫」的核心不变量 |
+| PC 重构保留 voice_coding.py 兼容导出 | 既有 88 项测试与 PyInstaller 入口零破坏 |
+
+### 交付结果（2026-11-21）
+- 代码：Android 新增 `network_profile` / `server_address_book` / `connection_race` / `connection_tuning` 四个模块，`saved_server` 升级 schema v2，原生新增网络快照桥；PC 入口从 2185 行拆为 7 模块（入口 425 行），新增 `voicing_tuning` 参数集中层。
+- 验证：PC 单测 138 项 0.82s 全绿；Flutter 单测 51 项 3.3s 全绿；`flutter analyze` 仅 4 条既有 info；APK debug 构建成功；协议 E2E 11/11；QR payload 13/13；协议契约与 QR schema 零变更；`git diff --check` 通过。
+- 产物：`pc/dist/voicing-linux-amd64.deb`（2.9.14，60,435,006 B，SHA256 `10f33acf6f01…9442c5bda`）；独立二进制 SHA256 `50311d2f407b…5a441a17`。
+- 本机：已安装 `voicing 2.9.14`，`/opt/voicing/voicing` SHA256 与本次构建一致；GNOME 自启单元 `app-voicing@autostart.service` active（生成自 `~/.config/autostart/voicing.desktop`）；监听 `10.10.0.225:9527` + `100.104.201.81:9527`，不含 docker0；启动日志 0 ERROR/WARNING。
+- 兼容性：协议/QR schema 未变，v1 saved_server 自动迁移且无需重扫；本轮无 adb 真机，Android 新 APK 未安装到手机（debug 包在 `android/voice_coding/build/app/outputs/flutter-apk/app-debug.apk`，供用户自装或后续 CI 发布）。
+
+- **状态：** complete
