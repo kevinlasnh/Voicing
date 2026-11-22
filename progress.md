@@ -1544,3 +1544,39 @@
 - 资产核对：APK 32,389,748B（sha256 72633867…b8d8）、DEB 75,795,356B（8d385048…eb48）、standalone 76,806,040B（89da4949…b86d6）；`gh api releases/latest` = v2.10.1。
 - Linux 重装：Release DEB 用 12 路 Range 并行下载 (~3 分钟)，`dpkg -i` 由 2.10.0 → **2.10.1**；DEB 内与安装后二进制哈希均 `89da4949…b86d6`（= standalone 资产 digest）；服务 active、双地址 9527 监听、启动 0 ERROR/WARNING；手机旧版 APK 自动重连成功。
 - AGENTS/CLAUDE 已更新「每轮任务完成必须自动发新 Release」六步红线（37 行/2656 字符/552 汉字，逐字节一致）。PWF 收尾后提交 push。
+
+
+## 会话：2026-11-22 CST — 阶段 44：设备选择 UI 收敛（v2.10.2）
+
+### 需求（16:34）
+- header「已连接」不显示设备名；更多功能菜单「设备选择」只保留统一图标+四字文本（无名字/箭头，高度与其他行一致）。
+- 左侧设备子菜单与顶部「已连接」格同宽，与右侧更多功能菜单同款样式、同间距、同单元格高度；只保留状态灯+设备名，去掉绿色对勾和删除按钮；当前目标用与右侧菜单点击相同的高亮常驻表示；长按单元格弹确认框删除；设备名过长时音乐播放器式缓慢来回滚动。
+
+### 实现（16:35–16:40）
+- `main.dart`：header 删除设备名拼接；`_buildDeviceSelectorMenuItem` 改为直接复用 `_buildMenuItem`（统一图标+文本+bottom 圆角），彻底移除当前设备名与 chevron；子菜单左边距从 `sm` 改为 `componentGap`（与主界面两按钮间距一致），宽度继续取 `size.width`（= 顶部状态格宽度），容器样式不变。
+- 设备单元格：删除 check 与行尾删除 IconButton；Material 常驻底色 `0x0DFFFFFF`（与右侧菜单 InkWell highlightColor 相同）并按首/尾行圆角裁剪；`onLongPress` 打开「删除已配对设备？」确认框（取消/删除），删除时按当前列表重新解析 deviceKey。
+- 新增私有 `_AutoScrollText`：LayoutBuilder 测量文本宽度，只有溢出才启动 AnimationController；TweenSequence 实现「停 1.8s→滚 4.2s→停 1.8s→滚回 4.2s」共 12s/循环；ClipRect + Transform.translate + OverflowBox，不改变行高；短名字保持静止；post-frame 才 setState/启停动画避免 build 中重建。
+- 版本 2.10.2（`2.10.2+18`）+ CHANGELOG [2.10.2] 双语块 + README/README.zh/android README 中英更新（header 纯状态、无勾选/删除按钮、常驻高亮、长按删除、名称滚动）；AGENTS/CLAUDE 版本更新为 2.10.2。
+- 本地验证：flutter analyze 仅 4 条既有 withOpacity info；flutter test 65 项全绿；debug APK 构建成功；PC 138 测试 0.68s OK。待 qa-ui 独立复核后提交发版。
+
+
+### QA 发现 High 级布局缺陷并修复（16:48–17:00）
+- qa-ui 首轮报告 FAIL：`_AutoScrollText` 的 `OverflowBox` 默认 fit=max 在设备子菜单真实无界高度约束链下必现 "RenderBox was given an infinite size during layout"（16 个异常链），debug 断言、release 下尺寸传播导致子菜单不可用；静态分析和现有测试无法发现。
+- 修复：`fit: OverflowBoxFit.deferToChild`；把组件抽到 `lib/auto_scroll_text.dart` 公开为 `AutoScrollText`；补正式 widget 回归测试 `test/auto_scroll_text_test.dart`（真实约束链无异常、设备行/菜单行等高、短名静止、长名滚动）。
+- 同步处理 QA Low/Nit：设备行加 `minHeight 18` 实现像素级等高；复刻顶部状态格 +2px 光学位移；滚动文本包 `RepaintBoundary` 并加 `ValueKey(deviceKey)`；子菜单面板加 `clipBehavior: Clip.antiAlias`；空态行改用 label 字号/行高；确认框按钮文案「取消/删除」。
+- 验证：flutter analyze 4 条既有 info；`flutter test --no-pub` 67 项全绿（新 widget 测试单跑 3.96s，全套约 7.9s 受多 suite 启动开销影响）；debug APK 构建成功；PC 138 测试 OK；`git diff --check` 干净。
+- 待：qa-ui 最终复验 PASS 后 commit/push，触发 Action 自动发布 v2.10.2 Release。
+
+
+### v2.10.2 QA 最终 PASS 与收尾修复（17:00–17:10）
+- qa-ui 最终结论 PASS（基于冻结快照）：需求 1–6、8 全 PASS；需求 7 High 已修复并复验通过；残留 1 Low（长名端点测量少 merge DefaultTextStyle，尾部裁 14px）。
+- 已修 Low：`AutoScrollText` 测量改用 `DefaultTextStyle.of(context).style.merge(widget.style)` + `locale`；widget 测试新增端点尾部不越界断言；选中行按压取消双层高亮；CHANGELOG EN 改 cancel/delete；`dart format` 格式化；minHeight 注释修正。
+- 最终本地验证：`flutter test --no-pub` 67 项全绿（全套约 8.0s，新 widget 测试单跑 3.9s）；`flutter analyze` 4 条既有 info；debug APK 构建成功；PC 138 测试 0.68s OK；`git diff --check` 干净；gradlew 644。
+- 提交 push：`e510088`（含新增 `lib/auto_scroll_text.dart` 与 `test/auto_scroll_text_test.dart`）；触发 Action run `45005709784`，等待自动发布 v2.10.2 Release。
+
+
+### v2.10.2 自动 Release 收尾（17:08–17:10）
+- Action run `45005709784` success：Prepare（v2.10.2, is_release=false）→ Android/Linux 构建成功，Windows skipped → Publish GitHub Release 成功；workflow 自动创建 tag `v2.10.2`（`e510088`）并发布 Voicing v2.10.2（latest）。
+- Release 资产：APK 32,397,149B（f8bf7d82…f7e9）、Linux DEB 75,795,354B（d1ee9b41…275f）、Linux standalone 76,806,640B（0477ece2…2ea8）、SHA256SUMS.txt；手动发布无 Windows，符合设计。
+- 按用户要求：APK 不由 agent 下载；Linux DEB 本轮未重装（PC 运行时代码未变，仅版本号，无需重装）。本机继续运行 2.10.1，行为与 2.10.2 完全一致。
+- PWF 收尾后提交并 push。

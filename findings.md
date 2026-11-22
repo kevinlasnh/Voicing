@@ -697,3 +697,26 @@
 - 手动发布资产为 3 项 + SHA256SUMS（3 行），tag 发布为 4 项 + SHA256SUMS（4 行）；发布后可用 `gh release view --json assets` 与 `releases/latest` 双重复核 latest 标记。[本地命令输出·confirmed]
 - Release DEB 下载仍可能受 CDN 单连接限速；12 路 Range 并行约 500KB/s，3 分钟拿到 75.8MB；校验链=DEB 文件 SHA256→SHA256SUMS→DEB 资产 digest→安装后二进制 SHA256=standalone 资产 digest，四点一致即可确信安装的是官方产物。[实测·confirmed]
 - 自动发布后 main 分支会因 PWF/记录提交领先 tag 一个提交，这是正常现象；下一轮任务按规则升 2.10.2 再发新 Release，不需要移动已发布的 tag。[流程·confirmed]
+
+
+## 2026-11-22 v2.10.2 设备选择 UI 发现
+
+- `_AutoScrollText` 里 `OverflowBox` 默认 `fit: max` 在设备子菜单的真实约束链（`Positioned(width, 无 height)` → `ConstrainedBox(maxHeight)` → `SingleChildScrollView` → `Column` → `Row` → `Expanded`）里，高度约束是无界的，`RenderConstrainedOverflowBox` 会拿到 `Size(width, Infinity)` 并触发 `RenderBox was given an infinite size during layout`。analyze/纯 Dart 测试/build 全绿也发现不了；必须用 widget test 在真实祖先约束下复现。修复：`fit: OverflowBoxFit.deferToChild`（高度跟随文本自然高度），并补 `test/auto_scroll_text_test.dart` 回归。[QA 实测·confirmed]
+- 设备行与右侧菜单行等高不能只靠文字行高：`AppTextStyles.label` 在 Roboto 下 15sp 行高约 17.58px < 菜单图标 18px，设备行会比菜单行矮约 0.42px。给设备行内容加 `ConstrainedBox(minHeight: 18)` 后两行都=46px；textScaler 放大时 minHeight 不裁剪、行高继续随字体增长（QA R7 验证 1.5x 两者均 60px）。[代码·QA]
+- 顶部状态格文字有 `_statusTextHorizontalOffset=2` 的光学位移，设备行复刻同偏移后「灯→文字」视觉间距才与顶部格一致；子菜单面板需 `clipBehavior: Clip.antiAlias`，否则设备多到滚动后非首行高亮方角会盖住面板圆角。[代码·confirmed]
+- 新增 widget 回归测试单独放 `test/auto_scroll_text_test.dart`：material-free harness 复刻真实约束链，短名静止/长名 4s 后左移/行高相等；单独跑 3.96s。全套 `flutter test` 67 项约 7.9s，主要成本是每个 suite 的 Flutter 启动（纯 Dart 65 项此前 4.49s）。[实测]
+
+
+## 2026-11-22 v2.10.2 UI 最终 QA 与低风险修复
+
+- qa-ui 两轮 QA：首轮 FAIL（High: OverflowBox infinite size，真实菜单无界高度约束），修复后最终 PASS（1 Low 残留）。最终复验用独立脚本 import 生产 `AutoScrollText`，REV1 真实链无异常且设备行/菜单行 49==49，REV3 textScaler 1.5 无异常 60==60，REV4 无界高度不崩，短名静止/长名滚动均通过。[QA·confirmed]
+- 残留 Low：`TextPainter` 测量未 merge 继承的 `DefaultTextStyle`（Material3 height=1.43/letterSpacing=0.25），实际 Text 自然宽 854 vs 测量 840，长名滚到端点尾部被裁 14px。已修复为 `DefaultTextStyle.of(context).style.merge(widget.style)` 再测量，并给 widget 测试增加「端点尾部不超出可视区」断言；同时补 `locale`。[代码·QA·confirmed]
+- 其他收尾：选中行按压不再叠加第二层 highlight；CHANGELOG 英文按钮措辞统一 cancel/delete；`dart format` 格式化 main/AutoScrollText/测试；minHeight 注释修正为兼容性兜底；两个新增文件 commit 前 `git add`（否则 Release 构建会缺 lib 文件直接失败）。[代码·confirmed]
+- 测试成本：`flutter test --no-pub` 67 项约 8.0s（多 suite 启动；单跑新 widget 测试 3.9s，满足单测 ≤5s）；`flutter analyze` 仅 4 条既有 withOpacity info；debug APK 构建 10.7s；PC 138 项 0.68s。widget 测试不再挤在一个文件里，独立文件结构更清晰。[实测]
+
+
+## 2026-11-22 v2.10.2 自动 Release 结果
+
+- run `45005709784`（workflow_dispatch）自动创建 tag `v2.10.2` 并发布 GitHub Release（latest），资产 APK/Linux DEB/standalone/SHA256SUMS 齐全；手动发布仍不含 Windows，与 release.yml 门控一致。[CI·实测]
+- 本次仅 Android UI/文档变更，桌面端只改版本号；按 AGENTS「需要才装 DEB」规则未在本机重装 Linux 包（本机 2.10.1 行为与 2.10.2 相同）。Release 页面同时提供 APK，用户手机直接下载安装即可。[流程·confirmed]
+- widget 回归测试 `test/auto_scroll_text_test.dart` 单跑约 3.9s（≤5s）；整套 `flutter test` 67 项约 8.0s，时间成本主要是多 suite 的 Flutter 启动，而非测试逻辑本身。[实测]

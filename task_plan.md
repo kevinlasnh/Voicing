@@ -545,3 +545,36 @@
 - Linux 安装：Release DEB SHA256 `8d385048…eb48`（= 资产 digest = SHA256SUMS 行）；`dpkg -i` 由 2.10.0 升级 **2.10.1**；DEB 内二进制与安装后 `/opt/voicing/voicing` SHA256 均为 `89da4949…b86d6`（= Release standalone 资产 digest），76,806,040B root:root 0755。
 - 运行：`app-voicing@autostart.service` active，进程 95419/95421，监听 `192.168.50.113:9527` + `100.102.136.4:9527`；启动日志 0 ERROR/WARNING；旧手机 APK 15:44:45 自动重连成功（okhttp/4.12.0，在线 1）。
 - 交付：本机 `~/Downloads/Voicing-2.10.1/voicing-linux-amd64.deb`；手机 APK 从 Release 页面直接下载安装（无需解压 artifact）。
+
+
+## 阶段 44：设备选择 UI 收敛（对称布局/常驻高亮/长按删除/名称滚动，v2.10.2，2026-11-22 16:40）
+
+### 目标
+1. 顶部「已连接」恢复纯状态，不显示设备名。
+2. 更多功能菜单「设备选择」与其他行完全同款：统一小图标+四字文本，无名字/无箭头。
+3. 左侧设备子菜单与顶部状态格对称：同宽、同间距、同容器/单元格样式与高度。
+4. 每格只保留状态灯+设备名（删对勾/删除按钮）；当前目标用与右侧菜单点击相同的常驻高亮；长按弹确认框删除。
+5. 设备名过长时像音乐播放器歌名一样缓慢来回滚动。
+6. 版本 2.10.2 + CHANGELOG/README/Android README 中英同步；push 并自动发布新 Release。
+
+### 计划
+- [x] main.dart：移除 header 设备名；设备选择行复用 `_buildMenuItem`
+- [x] 子菜单间距改为 `AppSpacing.componentGap`，宽度/圆角/高亮与面板对称一致
+- [x] 单元格去掉对勾/删除按钮；长按 → 删除确认框；常驻高亮 0x0DFFFFFF
+- [x] 新增 `_AutoScrollText`：溢出才滚动、两端停顿、12s 往返、ClipRect/Transform 不改行高
+- [x] 版本 2.10.2（2.10.2+18）+ CHANGELOG 双语块 + README/Android README/AGENTS 更新
+- [x] 本地验证：flutter analyze 仅 4 条既有 info；flutter test 65 项全绿；debug APK 构建成功；PC 138 测试 OK
+- [x] 独立 QA 复核 UI 需求与代码（首轮 High 修复后 PASS）
+- [x] commit/push、触发 Action 自动发布 v2.10.2 Release 并核验
+- [x] PWF 收尾、commit/push
+
+- **状态：** complete
+
+
+### 收尾结果（2026-11-22 17:09）
+- 提交 push：`e510088`（main.dart UI 收敛 + 新增 auto_scroll_text.dart + widget 测试 + 版本 2.10.2 + 双语文档）。
+- qa-ui 最终 PASS：需求 1–6、8 全 PASS；需求 7 High（OverflowBox infinite size）修复后复验 PASS，残留 Low（测量未 merge DefaultTextStyle 导致端点裁 14px）已修复并加端点断言。
+- Action run `45005709784` success：自动创建 tag `v2.10.2`（指向 `e510088`）并发布 **Voicing v2.10.2**（latest）。资产：`voicing.apk` 32,397,149B（sha256 f8bf7d82…f7e9）、`voicing-linux-amd64.deb` 75,795,354B（d1ee9b41…275f）、`voicing-linux-x86_64` 76,806,640B（0477ece2…2ea8）、`SHA256SUMS.txt`。手动发布按设计不含 Windows。
+- 本地验证（最终快照）：`flutter analyze` 4 条既有 info；`flutter test --no-pub` **67 项全绿**（全套约 8.0s；新 widget 测试单跑 3.96s）；debug APK 构建成功；PC 138 测试 0.68s OK；`git diff --check` 干净。
+- Linux DEB 本轮**未重装**：PC 运行时代码零改动（仅版本号），按用户「需要就安装，不用就不用」跳过；当前本机仍运行 2.10.1（行为与 2.10.2 相同）。APK 由用户从 Release 页面自行下载安装。
+- Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.2
