@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.10.4] - 2026-11-22
+
+### Added
+
+- Android: the selected row in the Device selection submenu now also shows a green check mark at the trailing position used by the "Auto Enter" toggle, with the same icon size/colour and padding. Every device row permanently reserves that trailing slot, so the text area is equally narrow on all rows and nothing shifts when the target changes; unselected rows leave the slot empty
+
+### Notes
+
+- No protocol, QR payload or desktop behaviour change
+
+### 新增
+
+- 手机端：「设备选择」子菜单中被选中的设备行，现在会在行尾显示一个绿色对勾，位置、尺寸、颜色与「自动 Enter」开关右侧的对勾一致。所有设备行都会永久预留这个行尾位置，因此每行文本可用宽度一致，切换选中目标时不会发生文字横向抖动；未选中的行该位置留空
+
+### 说明
+
+- 协议、QR payload 与桌面端行为均未变化
+
+---
+
 ## [2.10.3] - 2026-11-22
 
 ### Changed

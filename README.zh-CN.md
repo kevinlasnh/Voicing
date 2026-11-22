@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.10.3-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.4-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -27,7 +27,7 @@ Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说�
 
 - **扫码配对连接** — 首次扫描 PC 端二维码即可保存设备；之后每扫一台新 PC 都会追加到已配对列表，不会覆盖之前的设备
 - **多台 PC 同时在线** — 同一 WiFi 下可以配对多台电脑并同时保持连接：每台设备都有独立的 WebSocket、心跳、重连退避与候选竞速
-- **设备选择** — 在「更多功能操作 → 设备选择」切换发送目标；向左弹出的二级菜单与顶部状态格同宽、同间距、同风格，列出全部已配对设备与状态灯，当前目标保持与点击菜单行相同的常驻高亮（点选后菜单不收起，只有点击菜单外区域才关闭），名称过长时像音乐播放器歌名一样缓慢滚动；长按设备行并确认即可解绑
+- **设备选择** — 在「更多功能操作 → 设备选择」切换发送目标；向左弹出的二级菜单与顶部状态格同宽、同间距、同风格，列出全部已配对设备与状态灯，当前目标保持与点击菜单行相同的常驻高亮，并在行尾显示与「自动 Enter」一致的绿色对勾（每行都预留该位置，文本宽度不抖动）；点选后菜单不收起，只有点击菜单外区域才关闭；名称过长时像音乐播放器歌名一样缓慢滚动；长按设备行并确认即可解绑
 - **跨网络秒级重连** — 每个保存的地址都会记录它在哪个手机网络成功过（schema v2 地址簿），按当前网络自适应排序并**并行竞速**拨号；同一台电脑在家/公司等多个网络各扫码一次后，回到任一网络约 1~2 秒自动连回，无需重扫
 - **无广播依赖** — 手机端启动后直接尝试已保存设备的 IP 池，不再依赖 UDP 广播发现
 - **PC 端运行时刷新网络地址** — 电脑切换到新局域网后，QR 码和 WebSocket 监听会自动刷新，无需重启桌面端
@@ -92,7 +92,7 @@ Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端�
 - "撤回上次输入"恢复刚才的文本
 - "刷新连接"手动重连
 - "扫码连接"（更多功能操作）把扫描到的 PC 追加到已配对列表；同一台 PC 重扫只合并地址历史
-- "设备选择"（更多功能操作里"扫码连接"下方）向左展开二级菜单，列出全部已配对设备与状态灯；当前目标保持与点击菜单行相同的常驻高亮，名称过长时会缓慢来回滚动。文本、shadow 增量与 Auto Enter 只发往选中设备。长按设备行并确认即可解绑该设备
+- "设备选择"（更多功能操作里"扫码连接"下方）向左展开二级菜单，列出全部已配对设备与状态灯；当前目标保持与点击菜单行相同的常驻高亮，并在行尾显示与「自动 Enter」同位置/样式的绿色对勾（所有行都预留该位置，文本宽度不抖动）；名称过长时会缓慢来回滚动。文本、shadow 增量与 Auto Enter 只发往选中设备。长按设备行并确认即可解绑该设备
 
 ### 电脑端
 
@@ -192,8 +192,8 @@ Voicing/
 正式发布通过 GitHub Actions 自动构建，只构建三个平台（Android / Windows / Linux）；macOS job 已删除，官方 Release 不再产出 macOS DMG。tag 发布固定产出 4 个构建产物（`voicing.apk`、`voicing-windows-x64.exe`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`）加 `SHA256SUMS.txt`：
 
 ```bash
-git tag v2.10.3
-git push origin v2.10.3
+git tag v2.10.4
+git push origin v2.10.4
 ```
 
 手动构建使用 `workflow_dispatch` 触发（GitHub Actions 页面 Run workflow，或命令行）：

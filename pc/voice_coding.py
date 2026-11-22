@@ -66,7 +66,7 @@ from voicing_state import AppState, UiSignals, state
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.10.3"
+APP_VERSION = "2.10.4"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = tuning.AUTO_ENTER_SETTLE_DELAY_SEC
 NATIVE_FONT_FAMILY = get_native_font_family()

@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.10.3-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.4-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -27,7 +27,7 @@ Voicing turns your phone's voice keyboard into your computer's "mouth" — speak
 
 - **QR pairing** — scan the desktop's QR code once and the device is remembered; every new PC is added to the paired-device list instead of replacing the previous one
 - **Multiple PCs at once** — pair several desktops on the same WiFi and keep them connected simultaneously; each paired PC has its own WebSocket, heartbeat, reconnect backoff and candidate race
-- **Device selection** — choose the send target under More → Device selection; the left-side submenu mirrors the header layout (same width/gap/style) and lists every paired PC with a status light, keeps the current target on the same persistent highlight used by the menu, slowly scrolls long names like a music-player title, and un-pairs a device by long-pressing its row and confirming
+- **Device selection** — choose the send target under More → Device selection; the left-side submenu mirrors the header layout (same width/gap/style) and lists every paired PC with a status light, keeps the current target on the same persistent highlight used by the menu plus a green check at the trailing position used by Auto Enter, slowly scrolls long names like a music-player title, and un-pairs a device by long-pressing its row and confirming
 - **Cross-network instant re-pairing** — the phone remembers which network each saved address worked on (schema v2 address book), ranks the best match for the current network, and races the top candidates in parallel (Happy Eyeballs). Once a PC has been paired once in each of several networks, coming back to any of them reconnects in about 1–2 s without re-scanning
 - **No broadcast required** — after launch, the phone tries the saved IP pool directly; no UDP discovery
 - **PC runtime network refresh** — when the desktop switches to a new LAN, the QR code and WebSocket listener refresh on the fly with no app restart
@@ -92,7 +92,7 @@ On Linux/GNOME Wayland the desktop app always sends a plain Ctrl+V: terminals an
 - "Undo last input" restores the previously sent text
 - "Refresh connection" forces a manual reconnect
 - "Scan to connect" (More menu) adds the scanned PC to the paired-device list; re-scanning the same PC only merges its address history
-- "Device selection" (More menu, below "Scan to connect") opens a left-side submenu listing every paired PC with its status light; the current target stays highlighted with the same effect as tapping a menu row and the menus stay open after selection (only tapping outside closes them); long names slowly scroll back and forth. Text, shadow deltas and Auto Enter are sent only to that PC. Long-press a row to un-pair that PC after a confirmation dialog
+- "Device selection" (More menu, below "Scan to connect") opens a left-side submenu listing every paired PC with its status light; the current target stays highlighted with the same effect as tapping a menu row and shows the same trailing green check as Auto Enter (the slot is reserved on every row, so text width does not shift); the menus stay open after selection (only tapping outside closes them); long names slowly scroll back and forth. Text, shadow deltas and Auto Enter are sent only to that PC. Long-press a row to un-pair that PC after a confirmation dialog
 
 ### Desktop
 
@@ -192,8 +192,8 @@ Voicing/
 Production releases run through GitHub Actions and build three platforms (Android / Windows / Linux); the macOS job was removed, so official releases no longer produce a macOS DMG. A tag release publishes the four build artifacts (`voicing.apk`, `voicing-windows-x64.exe`, `voicing-linux-amd64.deb`, `voicing-linux-x86_64`) plus `SHA256SUMS.txt`:
 
 ```bash
-git tag v2.10.3
-git push origin v2.10.3
+git tag v2.10.4
+git push origin v2.10.4
 ```
 
 Manual builds use the `workflow_dispatch` trigger from the Actions page (Build And Release → Run workflow) or:

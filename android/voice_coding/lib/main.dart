@@ -795,9 +795,9 @@ class _MainPageState extends State<MainPage>
     required bool isLast,
   }) {
     final statusColor = _deviceStatusColor(device);
-    // 当前发送目标用「常驻高亮」表示：颜色与右侧菜单点击时的 highlightColor
-    // 完全一致，因此用户对「选中」和「按下」的视觉反馈是同一套语言。
-    // 不额外放对勾/删除按钮，每格只保留状态灯 + 设备名。
+    // 当前发送目标用「常驻高亮 + 右侧绿色对勾」表示：高亮色与右侧菜单
+    // 点击时的 highlightColor 完全一致，对勾位置/尺寸/颜色与「自动 Enter」
+    // 行尾的绿色对勾一致，因此两套菜单的视觉语言保持一致。
     final highlightColor =
         device.isActive ? const Color(0x0DFFFFFF) : Colors.transparent;
     // 面板本身是圆角容器；高亮块必须跟着同样的圆角并裁剪，否则首/尾行的
@@ -845,6 +845,21 @@ class _MainPageState extends State<MainPage>
                     ),
                   ),
                 ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              // 右侧固定预留 18x18 对勾位（与「自动 Enter」行尾图标同尺寸）：
+              // 选中设备显示绿色对勾，未选中留空；所有设备行文本可用宽度
+              // 始终相同，切换选中时不会出现文字横向抖动。
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: device.isActive
+                    ? const Icon(
+                        Icons.check,
+                        color: AppColors.success,
+                        size: 18,
+                      )
+                    : null,
               ),
             ],
           ),
