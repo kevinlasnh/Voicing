@@ -726,3 +726,10 @@
 
 - 「点选设备后菜单收起」的根因在 `_handleDeviceSelected` 里显式调用了 `_closeMenu()`；与右侧菜单其他项（刷新连接/撤回输入/自动 Enter）不一致。修复为只调用 `selectDevice`，菜单保持展开，高亮由 controller notify 重建；backdrop 逻辑本来已是「先收子菜单、再收主菜单」，保持不变。[代码·confirmed]
 - 小交互改动仍需走完整发版流程（版本+CHANGELOG+文档+push+Action+核验 Release），本次 run `45006994328` 自动创建 tag `v2.10.3` 并发布 APK/Linux 资产；Linux 桌面运行时代码未变，故未重装本机 DEB。[CI·实测]
+
+
+## 2026-11-22 v2.10.4 选中对勾与安装发现
+
+- 设备行尾对勾位必须“永远占位”：用固定 `SizedBox(width:18,height:18)`，选中放 `Icon(Icons.check, success, 18)`、未选中 child 为空。这样与「自动 Enter」行尾（Expanded + sm + 18px 图标）位置/样式一致，同时 AutoScrollText 的可视宽度在所有行保持一致，切换目标不横向抖动。[代码·confirmed]
+- Release 资产四点校验链再次成立：DEB SHA256（93886147…c7e5）= SHA256SUMS 行 = Release API digest；DEB 内二进制与安装后 `/opt/voicing/voicing`（43f5f986…4e7f）= Release standalone 资产 digest，可确认本机装的是官方 v2.10.4 产物。[本地命令输出·confirmed]
+- 重启桌面端后旧手机 APK（2.9.14）仍在数秒内自动重连（okhttp/4.12.0，在线 1），协议/QR 零变更的兼容承诺继续成立；用户手机更新 APK 后即可使用新的设备选择对勾 UI。[日志·实测]

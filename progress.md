@@ -1598,3 +1598,22 @@
 - run `45006994328` success：Prepare（v2.10.3, is_release=false）→ Android/Linux 构建成功、Windows skipped → Publish GitHub Release 成功；workflow 自动建 tag `v2.10.3` 并发布 Voicing v2.10.3（latest）。
 - Release 资产：APK 32,397,083B（4200e3b7…85d3）、Linux DEB 75,795,484B（1e532144…8449）、standalone 76,805,824B（760d3368…9212）、SHA256SUMS.txt。
 - 按规则未下载 APK、未重装 Linux DEB（桌面运行时代码未变）。PWF 收尾后提交 push。
+
+
+## 会话：2026-11-22 CST — 阶段 46：选中设备显示绿色对勾（v2.10.4）
+
+### 需求（17:35）
+- 左侧设备子菜单选中单元格时，在单元格右侧与「自动 Enter」相同位置/样式显示绿色对勾；所有设备行文本区为对勾预留固定宽度；未选中行留空；保留常驻高亮、长按删除、长名滚动。完成发新 Release 并安装新 DEB。
+
+### 实现与验证（17:36–17:38）
+- `main.dart` 设备行 Row 末尾新增固定 `SizedBox(width: 18, height: 18)` 槽位：`device.isActive` 时放 `Icon(Icons.check, color: AppColors.success, size: 18)`，否则 child 为空；与前一项之间用 `SizedBox(width: AppSpacing.sm)`，与右侧「自动 Enter」行尾布局（Expanded + sm + 18px 图标）一致；所有行宽度一致，文字用 `AutoScrollText` 自动按变窄后的宽度滚动。
+- 版本 2.10.4（pubspec `2.10.4+20`、APP_VERSION 2.10.4）+ CHANGELOG [2.10.4] 双语块 + README/README.zh/android README 中英补充「行尾绿色对勾、预留位置、文本不抖动」+ AGENTS/CLAUDE 版本更新。
+- 验证：dart format 无改动；flutter analyze 4 条既有 info；`flutter test --no-pub` 67 项全绿；debug APK 构建成功；PC 138 测试 0.58s OK；`git diff --check` 干净。
+- 提交 push：`c28d5c1`；触发 Action run `45008347766`，等待自动发布 v2.10.4 Release，随后下载安装新 DEB。
+
+
+### v2.10.4 自动 Release + Linux 安装（17:38–17:45）
+- run `45008347766` success：Prepare（v2.10.4, is_release=false）→ Android/Linux 构建成功、Windows skipped → Publish GitHub Release 成功；workflow 自动建 tag `v2.10.4` 并发布 Voicing v2.10.4（latest）。
+- Release 资产：APK 32,397,428B（bf7d92ec…652b）、Linux DEB 75,795,182B（93886147…c7e5）、standalone 76,805,960B（43f5f986…4e7f）、SHA256SUMS.txt。
+- Linux 安装（用户要求本次安装）：Release DEB 12 路 Range 下载，SHA256 与 SHA256SUMS 一致；`dpkg -i` 由 2.10.1 升级 2.10.4；DEB 内/安装后二进制 SHA256 `43f5f986…4e7f` = standalone 资产 digest；启动后 service active、双地址 9527 监听、0 ERROR/WARNING；旧手机 APK 17:44:08 自动重连成功（在线 1）。
+- 本机安装包：`~/Downloads/Voicing-2.10.4/voicing-linux-amd64.deb`。PWF 收尾后提交 push。

@@ -603,3 +603,29 @@
 - 本地验证：flutter analyze 4 条既有 info；flutter test 67 项全绿；debug APK 构建成功；PC 138 测试 OK；dart format 无改动；`git diff --check` 干净。
 - Linux DEB 未重装：桌面运行时代码未变（仅版本号），按「需要才安装」跳过；APK 由用户从 Release 页面自行下载安装。
 - Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.3
+
+
+## 阶段 46：设备选择选中行显示与自动 Enter 同款绿色对勾（v2.10.4，2026-11-22 17:38）
+
+### 目标
+1. 设备子菜单每行右侧永久预留 18x18 对勾位（文本区相应变窄），选中行显示绿色对勾，未选中留空。
+2. 对勾位置/尺寸/颜色/内边距与右侧「自动 Enter」行尾对勾一致，切换选中时文字不横向抖动。
+3. 版本 2.10.4 + CHANGELOG/README/Android README/AGENTS 同步；验证后 push 并自动发布新 Release；发布后按需下载安装新 Linux DEB。
+
+### 计划
+- [x] 设备行 Row 末尾加固定 18x18 槽位，active 显示 `Icons.check`（success/18），否则空
+- [x] 版本 2.10.4（2.10.4+20）+ CHANGELOG 双语块 + 文档/AGENTS 版本同步
+- [x] 本地验证：dart format 无改动；flutter analyze 4 条既有 info；flutter test 67 项全绿；debug APK 构建成功；PC 138 测试 OK；diff-check 干净
+- [x] 触发 Action 自动发布 v2.10.4 Release 并核验
+- [x] 下载安装 v2.10.4 Linux DEB，校验版本/二进制哈希/服务/监听/日志
+- [x] PWF 收尾、commit/push
+
+- **状态：** complete
+
+
+### 收尾结果（2026-11-22 17:45）
+- Action run `45008347766` success：自动创建 tag `v2.10.4`（`c28d5c1`）并发布 **Voicing v2.10.4**（latest）。资产：APK 32,397,428B（bf7d92ec…652b）、Linux DEB 75,795,182B（93886147…c7e5）、standalone 76,805,960B（43f5f986…4e7f）、SHA256SUMS.txt；手动发布不含 Windows。
+- Linux 安装：Release DEB 12 路 Range 下载 75,795,182B 完成，SHA256 `93886147…c7e5` 与 SHA256SUMS/Release digest 一致；`dpkg -i` 由 2.10.1 升级 **2.10.4**；DEB 内与安装后 `/opt/voicing/voicing` SHA256 均为 `43f5f986…4e7f`（= standalone 资产 digest），76,805,960B root:root 0755。
+- 运行：`app-voicing@autostart.service` active，进程 136972/136983，监听 `192.168.50.113:9527` + `100.102.136.4:9527`；启动 0 ERROR/WARNING；旧手机 APK 17:44:08 自动重连（okhttp/4.12.0，在线 1）；autostart 配置未变。
+- 本地验证：flutter analyze 4 条既有 info；test 67 项全绿；debug APK 构建成功；PC 138 测试 OK；dart format 无改动；git diff --check 干净。
+- Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.4
