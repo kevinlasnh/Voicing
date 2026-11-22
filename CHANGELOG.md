@@ -15,6 +15,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.10.3] - 2026-11-22
+
+### Changed
+
+- Android: selecting a device in the Device selection submenu no longer closes the More menu or the submenu. The chosen row updates its persistent highlight immediately, matching the other More-menu entries; only tapping outside the menus closes them (the first tap closes the submenu, the next closes the main menu)
+
+### Notes
+
+- No protocol, QR payload or desktop behaviour change
+
+### 变更
+
+- 手机端：在「设备选择」子菜单里点选设备后不再收起「更多功能操作」主菜单和子菜单，被选中的单元格立即更新常驻高亮；行为与右侧更多功能菜单的其他项一致。只有点击菜单以外的区域才会收起（第一次点击收子菜单，再点收主菜单）
+
+### 说明
+
+- 协议、QR payload 与桌面端行为均未变化
+
+---
+
 ## [2.10.2] - 2026-11-22
 
 ### Changed

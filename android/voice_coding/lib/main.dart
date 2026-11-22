@@ -248,8 +248,10 @@ class _MainPageState extends State<MainPage>
   }
 
   void _handleDeviceSelected(String deviceKey) {
+    // 与右侧更多功能菜单的其他项一致：点选设备只切换发送目标，主菜单和
+    // 子菜单都保持展开（选中高亮由 controller 通知触发重建），只有点击
+    // 非菜单区域（backdrop）才会收起菜单。
     _controller.selectDevice(deviceKey);
-    _closeMenu();
   }
 
   void _refreshConnection() {

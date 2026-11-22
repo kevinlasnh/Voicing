@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.10.2-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.3-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -92,7 +92,7 @@ On Linux/GNOME Wayland the desktop app always sends a plain Ctrl+V: terminals an
 - "Undo last input" restores the previously sent text
 - "Refresh connection" forces a manual reconnect
 - "Scan to connect" (More menu) adds the scanned PC to the paired-device list; re-scanning the same PC only merges its address history
-- "Device selection" (More menu, below "Scan to connect") opens a left-side submenu listing every paired PC with its status light; the current target stays highlighted with the same effect as tapping a menu row, and long names slowly scroll back and forth. Text, shadow deltas and Auto Enter are sent only to that PC. Long-press a row to un-pair that PC after a confirmation dialog
+- "Device selection" (More menu, below "Scan to connect") opens a left-side submenu listing every paired PC with its status light; the current target stays highlighted with the same effect as tapping a menu row and the menus stay open after selection (only tapping outside closes them); long names slowly scroll back and forth. Text, shadow deltas and Auto Enter are sent only to that PC. Long-press a row to un-pair that PC after a confirmation dialog
 
 ### Desktop
 
@@ -192,8 +192,8 @@ Voicing/
 Production releases run through GitHub Actions and build three platforms (Android / Windows / Linux); the macOS job was removed, so official releases no longer produce a macOS DMG. A tag release publishes the four build artifacts (`voicing.apk`, `voicing-windows-x64.exe`, `voicing-linux-amd64.deb`, `voicing-linux-x86_64`) plus `SHA256SUMS.txt`:
 
 ```bash
-git tag v2.10.2
-git push origin v2.10.2
+git tag v2.10.3
+git push origin v2.10.3
 ```
 
 Manual builds use the `workflow_dispatch` trigger from the Actions page (Build And Release → Run workflow) or:
