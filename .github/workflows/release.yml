@@ -1,19 +1,27 @@
-name: Create Release
+name: Build And Release
 
+# 触发方式（2026-11-22 改造）：
+# 1) 推送 v* tag：完整发布流程，构建 Android / Windows / Linux 并创建 GitHub Release。
+# 2) workflow_dispatch 手动触发：只构建 Android APK 与 Linux DEB + standalone binary，
+#    产物通过 upload-artifact 保留在本次 run 页面；Windows 只在 tag 构建，不发布 Release。
+# macOS 构建已按用户要求彻底移除（不再编译 macOS Action），禁止再加回 build-macos。
 on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
   prepare-release:
-    name: Prepare Release Notes
+    name: Prepare Release Metadata
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      version_number: ${{ steps.version.outputs.version_number }}
+      is_release: ${{ steps.version.outputs.is_release }}
 
     steps:
       - name: Checkout code
@@ -22,11 +30,57 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Get version from tag
+      - name: Resolve build version
         id: version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          # 只有 push tag 才算正式发布；workflow_dispatch 即使 ref 指向 tag，
+          # 也按手动构建处理（不构建 Windows、不创建 GitHub Release）。
+          if [ "$EVENT_NAME" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
+            VERSION="$REF_NAME"
+            VERSION_NUMBER="${REF_NAME#v}"
+            IS_RELEASE=true
+          else
+            # 优先级：android/voice_coding/pubspec.yaml 的 version 前缀 -> pc/voice_coding.py 的 APP_VERSION。
+            # 两个来源互不影响：某个文件缺失时继续尝试另一个来源（|| true 防止 set -e 提前退出）。
+            PUBSPEC_VERSION="$(sed -nE 's/^version:[[:space:]]*([0-9]+\.[0-9]+\.[0-9]+)(\+[0-9A-Za-z.-]+)?[[:space:]]*$/\1/p' android/voice_coding/pubspec.yaml 2>/dev/null | head -n 1 || true)"
+            APP_VERSION="$(sed -nE 's/^APP_VERSION[[:space:]]*=[[:space:]]*"([^"]+)"[[:space:]]*$/\1/p' pc/voice_coding.py 2>/dev/null | head -n 1 || true)"
+            if [ -n "$PUBSPEC_VERSION" ]; then
+              VERSION_NUMBER="$PUBSPEC_VERSION"
+            elif [ -n "$APP_VERSION" ]; then
+              VERSION_NUMBER="$APP_VERSION"
+            else
+              echo "::error::无法从 pubspec.yaml 或 pc/voice_coding.py 推导版本号，手动构建中止"
+              exit 1
+            fi
+            if [ -n "$PUBSPEC_VERSION" ] && [ -n "$APP_VERSION" ] && [ "$PUBSPEC_VERSION" != "$APP_VERSION" ]; then
+              echo "::warning::pubspec 版本 $PUBSPEC_VERSION 与 APP_VERSION $APP_VERSION 不一致，本轮采用 pubspec 版本"
+            fi
+            if [ "$VERSION_NUMBER" = "$REF_NAME" ]; then
+              echo "::error::推导出的版本 $VERSION_NUMBER 与分支名相同，拒绝用分支名作为版本号"
+              exit 1
+            fi
+            VERSION="v$VERSION_NUMBER"
+            IS_RELEASE=false
+          fi
+
+          if ! printf '%s' "$VERSION_NUMBER" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$'; then
+            echo "::error::非法版本号：$VERSION_NUMBER（要求 X.Y.Z 或 X.Y.Z-suffix）"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_number=$VERSION_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
+          echo "::notice title=Build version::构建版本 $VERSION（version_number=$VERSION_NUMBER, release=$IS_RELEASE）"
 
       - name: Extract changelog for this release
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -46,7 +100,6 @@ jobs:
           |------|------|------|
           | `voicing.apk` | Android | 手机安装包 |
           | `voicing-windows-x64.exe` | Windows | Windows 10/11 (64-bit) |
-          | `voicing-macos-arm64.dmg` | macOS | Apple Silicon / arm64 |
           | `voicing-linux-amd64.deb` | Ubuntu | Ubuntu 22.04+ GNOME |
           | `voicing-linux-x86_64` | Ubuntu | Standalone Linux binary |
 
@@ -54,7 +107,6 @@ jobs:
 
           - Windows 10/11 (64位)
           - Android 5.0+ (API 21+)
-          - macOS 14+（Apple Silicon / arm64，首次打开需右键→打开，并授予 Accessibility 权限）
           - Ubuntu 22.04+ GNOME on X11, or GNOME Wayland with RemoteDesktop portal
 
           ### 完整性校验
@@ -65,13 +117,31 @@ jobs:
           EOF
 
       - name: Upload release notes artifact
+        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-notes
           path: release_notes.md
 
+      - name: Write build summary
+        env:
+          IS_RELEASE: ${{ steps.version.outputs.is_release }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ "$IS_RELEASE" = "true" ]; then TRIGGER="tag 发布"; else TRIGGER="workflow_dispatch 手动构建"; fi
+          {
+            echo "### Voicing CI"
+            echo ""
+            echo "- 触发方式：$TRIGGER"
+            echo "- 构建版本：$VERSION"
+            echo "- 发布 GitHub Release：$IS_RELEASE"
+            echo "- 手动构建产物 artifact：\`android-apk\`、\`linux-bin\`、\`linux-deb\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
   build-android:
     name: Build Android APK
+    # tag 发布与手动构建都产出 APK（手动构建 APK 仅作为 run artifact 保留）。
+    needs: prepare-release
     runs-on: ubuntu-latest
 
     steps:
@@ -152,9 +222,14 @@ jobs:
         with:
           name: android-apk
           path: android/voice_coding/build/app/outputs/flutter-apk/voicing.apk
+          if-no-files-found: error
 
   build-windows:
     name: Build Windows EXE
+    # Windows 只在 push tag 的正式发布构建；workflow_dispatch（即使 ref 是 tag）
+    # 也按手动构建处理，不产出 Windows EXE。
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: prepare-release
     runs-on: windows-latest
 
     steps:
@@ -192,87 +267,11 @@ jobs:
         with:
           name: windows-exe
           path: pc/dist/voicing-windows-x64.exe
-
-  build-macos:
-    name: Build macOS App
-    # 2026-11-21：GitHub 已于 2026-11-02 正式下线 macOS 14 runner 镜像，
-    # schedule/push 到 macos-14 会被秒取消并报
-    # "The configuration 'macos-14-arm64-us-default' is not supported"。
-    # 官方迁移建议使用 macOS arm64 标签之一（macos-latest / macos-15 等），
-    # 这里固定 macos-15 以继续产出 arm64 DMG。
-    runs-on: macos-15
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
-        with:
-          persist-credentials: false
-
-      - name: Set up Python
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        working-directory: pc
-        run: pip install -r requirements.txt
-
-      - name: Run desktop validation
-        working-directory: pc
-        run: |
-          python -m py_compile voice_coding.py platform_utils.py platform_keyboard.py platform_autostart.py platform_instance.py network_recovery.py voicing_protocol.py device_identity.py
-          python -m unittest discover -s tests
-          python -c "from voice_coding import calculate_broadcast_addresses, get_all_local_interfaces; interfaces = get_all_local_interfaces(); print('interfaces=', interfaces); print('broadcasts=', calculate_broadcast_addresses(interfaces))"
-
-      - name: Generate macOS icon
-        working-directory: pc
-        run: |
-          mkdir -p assets/Voicing.iconset
-          python - <<'PY'
-          from pathlib import Path
-          from PIL import Image
-
-          source = Path("assets/icon_1024.png")
-          target_dir = Path("assets/Voicing.iconset")
-          base = Image.open(source).convert("RGBA")
-          outputs = {
-              "icon_16x16.png": 16,
-              "icon_16x16@2x.png": 32,
-              "icon_32x32.png": 32,
-              "icon_32x32@2x.png": 64,
-              "icon_128x128.png": 128,
-              "icon_128x128@2x.png": 256,
-              "icon_256x256.png": 256,
-              "icon_256x256@2x.png": 512,
-              "icon_512x512.png": 512,
-              "icon_512x512@2x.png": 1024,
-          }
-          for file_name, size in outputs.items():
-              resized = base.resize((size, size), Image.Resampling.LANCZOS)
-              resized.save(target_dir / file_name)
-          PY
-          iconutil -c icns assets/Voicing.iconset -o assets/icon.icns
-
-      - name: Build macOS app bundle
-        working-directory: pc
-        run: pyinstaller --noconfirm --clean Voicing-macos.spec
-
-      - name: Create DMG
-        working-directory: pc
-        run: |
-          mkdir -p release
-          APP_PATH="$(find dist -maxdepth 1 -name 'Voicing.app' -print -quit)"
-          test -n "$APP_PATH"
-          hdiutil create -volname "Voicing" -srcfolder "$APP_PATH" -ov -format UDZO "release/voicing-macos-arm64.dmg"
-
-      - name: Upload workflow artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: macos-dmg
-          path: pc/release/voicing-macos-arm64.dmg
+          if-no-files-found: error
 
   build-linux:
     name: Build Linux Desktop Binary
+    needs: prepare-release
     runs-on: ubuntu-22.04
     env:
       QT_QPA_PLATFORM: offscreen
@@ -312,8 +311,20 @@ jobs:
         run: cp pc/dist/Voicing pc/dist/voicing-linux-x86_64
 
       - name: Build DEB package
+        env:
+          VERSION_NUMBER: ${{ needs.prepare-release.outputs.version_number }}
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
+          # DEB Version 只能来自 prepare-release 推导的仓库版本，禁止使用分支名。
+          VERSION="$VERSION_NUMBER"
+          if [ -z "$VERSION" ]; then
+            echo "缺少 DEB Version（prepare-release 未输出 version_number）" >&2
+            exit 1
+          fi
+          if [ "$VERSION" = "main" ] || [ "$VERSION" = "master" ]; then
+            echo "DEB Version 不能是分支名：$VERSION" >&2
+            exit 1
+          fi
+
           PKG_ROOT="pc/dist/deb-root"
           mkdir -p \
             "$PKG_ROOT/DEBIAN" \
@@ -356,20 +367,33 @@ jobs:
           find "$PKG_ROOT" -type d -exec chmod 0755 {} +
           dpkg-deb --root-owner-group --build "$PKG_ROOT" "pc/dist/voicing-linux-amd64.deb"
 
+      - name: Verify DEB package version
+        env:
+          VERSION_NUMBER: ${{ needs.prepare-release.outputs.version_number }}
+        run: |
+          DEB_VERSION="$(dpkg-deb -f pc/dist/voicing-linux-amd64.deb Version)"
+          echo "DEB Version = $DEB_VERSION（期望 $VERSION_NUMBER）"
+          test "$DEB_VERSION" = "$VERSION_NUMBER"
+
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: linux-bin
           path: pc/dist/voicing-linux-x86_64
+          if-no-files-found: error
 
       - name: Upload DEB workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: linux-deb
           path: pc/dist/voicing-linux-amd64.deb
+          if-no-files-found: error
 
   publish-release:
     name: Publish GitHub Release
+    # 只有 push tag 才创建 GitHub Release；workflow_dispatch 手动构建（包括
+    # ref 指向 tag 的情况）不进入本 job。
+    if: github.event_name == 'push' && github.ref_type == 'tag'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -377,7 +401,6 @@ jobs:
       - prepare-release
       - build-android
       - build-windows
-      - build-macos
       - build-linux
 
     steps:
@@ -399,12 +422,6 @@ jobs:
           name: windows-exe
           path: release-assets/windows
 
-      - name: Download macOS artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: macos-dmg
-          path: release-assets/macos
-
       - name: Download Linux artifact
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
@@ -423,12 +440,11 @@ jobs:
           sha256sum \
             android/voicing.apk \
             windows/voicing-windows-x64.exe \
-            macos/voicing-macos-arm64.dmg \
             linux/voicing-linux-amd64.deb \
             linux/voicing-linux-x86_64 \
-            | sed -E 's#  (android|windows|macos|linux)/#  #' \
+            | sed -E 's#  (android|windows|linux)/#  #' \
             > SHA256SUMS.txt
-          test "$(wc -l < SHA256SUMS.txt)" -eq 5
+          test "$(wc -l < SHA256SUMS.txt)" -eq 4
           if awk '{print $2}' SHA256SUMS.txt | grep -q '/'; then
             echo "SHA256SUMS.txt must use flat GitHub Release asset names" >&2
             exit 1
@@ -442,7 +458,6 @@ jobs:
           files: |
             release-assets/android/voicing.apk
             release-assets/windows/voicing-windows-x64.exe
-            release-assets/macos/voicing-macos-arm64.dmg
             release-assets/linux/voicing-linux-amd64.deb
             release-assets/linux/voicing-linux-x86_64
             release-assets/SHA256SUMS.txt

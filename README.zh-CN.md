@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.14-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.0-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -19,13 +19,15 @@
 
 ---
 
-> **说明**：macOS 和 Linux 桌面端目前仍处于内测阶段，正在持续测试中，稳定性暂时无法保证。
+> **说明**：macOS 和 Linux 桌面端目前仍处于内测阶段，正在持续测试中，稳定性暂时无法保证。官方 CI/Release 只产出 Windows、Linux 与 Android，macOS 应用需从源码自行构建（见「打包发布」）。
 
 ## 它能做什么
 
 Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说话，文字直接出现在电脑光标处
 
-- **扫码配对连接** — 首次扫描 PC 端二维码即可保存设备
+- **扫码配对连接** — 首次扫描 PC 端二维码即可保存设备；之后每扫一台新 PC 都会追加到已配对列表，不会覆盖之前的设备
+- **多台 PC 同时在线** — 同一 WiFi 下可以配对多台电脑并同时保持连接：每台设备都有独立的 WebSocket、心跳、重连退避与候选竞速
+- **设备选择** — 在「更多功能操作 → 设备选择」切换发送目标；向左弹出的二级菜单列出全部已配对设备、实时状态与当前目标勾选，每行行尾可删除解绑该设备，顶部状态栏显示「状态 · 当前设备名」（例如「已连接 · 我的电脑」）
 - **跨网络秒级重连** — 每个保存的地址都会记录它在哪个手机网络成功过（schema v2 地址簿），按当前网络自适应排序并**并行竞速**拨号；同一台电脑在家/公司等多个网络各扫码一次后，回到任一网络约 1~2 秒自动连回，无需重扫
 - **无广播依赖** — 手机端启动后直接尝试已保存设备的 IP 池，不再依赖 UDP 广播发现
 - **PC 端运行时刷新网络地址** — 电脑切换到新局域网后，QR 码和 WebSocket 监听会自动刷新，无需重启桌面端
@@ -37,7 +39,7 @@ Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说�
 - **撤回支持** — 发错了？一键撤回上次输入
 - **断线自动恢复** — 手机息屏再亮屏，优先保持已连接显示并快速恢复
 - **Linux 粘贴稳定** — GNOME Wayland 下统一发送普通 Ctrl+V，不再探测终端焦点，粘贴结果不受辅助功能总线状态影响
-- **跨平台** — 支持 Windows / macOS / Linux 桌面端，Android 手机端
+- **跨平台** — 桌面端代码支持 Windows / macOS / Linux，手机端为 Android；官方产物覆盖 Windows、Linux 与 Android，macOS 需从源码构建
 - **体积小巧** — APK 约 32MB、桌面端约 50–60MB；Linux DEB 会自动安装声明的桌面集成依赖
 
 ## 快速开始
@@ -49,11 +51,12 @@ Voicing 把手机的语音输入法变成电脑的"嘴"——你在手机上说�
 | 平台 | 文件 | 要求 |
 |------|------|------|
 | Windows | `voicing-windows-x64.exe` | Win 10/11 (64-bit) |
-| macOS | `voicing-macos-arm64.dmg` | Apple Silicon (M1+) |
 | Linux | `voicing-linux-amd64.deb` 或 `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11，或具备 RemoteDesktop portal 的 GNOME Wayland |
 | Android | `voicing.apk` | Android 5.0+ |
 
-Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要再安装或运行。
+Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要再安装或运行。tag 发布固定产出上面 4 个构建产物（APK、Windows EXE、Linux DEB 与 Linux 独立二进制）加 `SHA256SUMS.txt`。
+
+> **macOS**：官方不再产出 DMG（macOS CI job 已删除）。桌面端代码仍然保留——按「打包发布」里的命令从源码构建 `.app` 后本地运行。
 
 ### 2. 连接
 
@@ -62,12 +65,12 @@ Release 里同时提供 `SHA256SUMS.txt`，下载后可先校验 SHA-256 摘要�
 ```
 
 - **Windows**：运行 `voicing-windows-x64.exe`，开启"移动热点"
-- **macOS**：打开 `voicing-macos-arm64.dmg`，拖入 Applications（首次打开需右键→打开），开启"互联网共享"或连接同一局域网
+- **macOS**：按「打包发布」从源码构建 `.app`，再开启"互联网共享"或连接同一局域网
 - **Linux**：安装 `voicing-linux-amd64.deb`，或对独立二进制执行 `chmod +x voicing-linux-x86_64` 后运行；开启 Wi-Fi 热点或连接同一局域网。GNOME Wayland 在 Voicing 启动或首次粘贴文字时可能会要求授权 RemoteDesktop 键盘会话
 
-状态栏显示"已连接"就说明连上了
+状态栏显示「已连接 · 当前设备名」就说明连上了，点号后面的名字就是当前接收文字的电脑。
 
-扫码成功后手机会记住这台电脑及其候选 IP 池，并记录每个地址在哪个网络成功过。同一台电脑在两个不同网络（例如家里 WiFi 和公司 WiFi、或手机热点）各扫码配对一次后，回到其中任一网络都会在约 1~2 秒内自动连回，不需要重新扫码：候选地址按当前网络自适应排序（本网络成功过 > 同网段 > Tailscale 兜底），并以并行竞速方式同时尝试，而不是串行等待。电脑端切换到新局域网后会自动刷新 QR 码和 WebSocket 监听地址；手机在新局域网重新扫码同一台 PC 时，会把新 IP 合并进候选池，不丢旧网络地址。从 2.9.13 升级会保留原有候选池，第一次在某个网络连上时会自动补全该网络的地址历史。
+扫码成功后手机会记住这台电脑及其候选 IP 池，并记录每个地址在哪个网络成功过。每扫一台新 PC 都会追加到已配对列表而不是覆盖之前的设备，全部已配对电脑会并行尝试连接，因此可以多台同时在线；用「更多功能操作 → 设备选择」决定文字发往哪一台。同一台电脑在两个不同网络（例如家里 WiFi 和公司 WiFi、或手机热点）各扫码配对一次后，回到其中任一网络都会在约 1~2 秒内自动连回，不需要重新扫码：候选地址按当前网络自适应排序（本网络成功过 > 同网段 > Tailscale 兜底），并以并行竞速方式同时尝试，而不是串行等待。电脑端切换到新局域网后会自动刷新 QR 码和 WebSocket 监听地址；手机在新局域网重新扫码同一台 PC 时，会把新 IP 合并进候选池，不丢旧网络地址。从 2.9.14 升级会保留全部原有候选池，并把单台已保存设备自动迁移进多设备列表（存储 schema v3），无需重新扫码。
 
 ### 3. 使用
 
@@ -88,6 +91,8 @@ Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端�
 - "自动 Enter"开关：语音分段输入时只在静默后统一按一次回车（默认关闭）
 - "撤回上次输入"恢复刚才的文本
 - "刷新连接"手动重连
+- "扫码连接"（更多功能操作）把扫描到的 PC 追加到已配对列表；同一台 PC 重扫只合并地址历史
+- "设备选择"（更多功能操作里"扫码连接"下方）向左展开二级菜单，列出全部已配对设备的实时状态与当前目标勾选；文本、shadow 增量与 Auto Enter 只发往选中设备。行尾删除按钮可在确认后解绑该设备
 
 ### 电脑端
 
@@ -109,15 +114,16 @@ Linux/GNOME Wayland 下桌面端统一发送普通 Ctrl+V，不再区分终端�
 ## 工作原理
 
 1. 桌面端展示包含 `device_id/ip/ips/port/name/os` 的配对二维码，运行中会刷新当前物理 IPv4 地址池，并优先使用 WebSocket 实际绑定成功的 IP
-2. 手机扫描二维码后做 WebSocket（端口 9527）连通性 probe，成功后保存这台 PC
-3. 手机端持久化同一台 PC 的多个候选 IP，热点和不同局域网地址都会保留，并记录每个地址在哪个网络成功过；同一 `device_id` 重新扫码会同时合并候选池与网络历史，不覆盖旧地址
-4. 后续启动或手动刷新时，手机按当前网络给候选地址打分排序，并对最优的几个候选并行竞速（120ms 错峰、首个握手成功即胜出），不再依赖 UDP 广播发现
-5. PC 端 WebSocket server 会在地址池变化后重新绑定当前局域网 IP，避免继续监听旧网络地址
-6. QR payload 避免发布绑定失败的地址；macOS 网卡命名按保守策略处理，不再假设 `en0` 一定是 WiFi
-7. PC 端把局域网地址排在首位，并把 Tailscale 地址（经 `tailscale` CLI 读取）作为兜底候选一起写入 QR 且一并监听；Android 端对局域网目标按优先级绑定 WiFi Network（物理 WiFi → capability 受 VPN 影响的 WiFi → 继承 WiFi transport 的 VPN 网络），对 Tailscale CGNAT 段目标则走系统默认网络即 VPN 隧道
-8. 手机上的文字（语音输入或手动输入）实时发送到桌面端
-9. 桌面端通过剪贴板粘贴文本，并在需要时补发一次 Enter；Linux X11 走常规 Ctrl+V 路径，GNOME Wayland 走 RemoteDesktop portal 键盘授权
-10. GNOME Wayland 统一发送普通 Ctrl+V：不再做终端焦点探测，也不再提供粘贴模式切换，粘贴行为完全确定
+2. 手机扫描二维码后做 WebSocket（端口 9527）连通性 probe，成功后把这台 PC 追加到已配对设备列表（同一 `device_id` 重扫会合并记录，不产生重复项）
+3. 手机端为每台已配对 PC 持久化多个候选 IP，热点和不同局域网地址都会保留，并记录每个地址在哪个网络成功过；已配对设备与当前发送目标按 schema v3 存储（`saved_servers` 列表加 `active_device_key`），旧单设备数据自动迁移，同时继续写一份单设备记录供降级兼容；同一 `device_id` 重新扫码会同时合并候选池与网络历史，不覆盖旧地址
+4. 全部已配对 PC 并发建链：每台都有独立心跳、重连退避和候选竞速，因此同一 WiFi 下可以有多台电脑同时在线
+5. 后续启动或手动刷新时，手机按当前网络给候选地址打分排序，并对最优的几个候选并行竞速（120ms 错峰、首个握手成功即胜出），不再依赖 UDP 广播发现
+6. PC 端 WebSocket server 会在地址池变化后重新绑定当前局域网 IP，避免继续监听旧网络地址
+7. QR payload 避免发布绑定失败的地址；macOS 网卡命名按保守策略处理，不再假设 `en0` 一定是 WiFi
+8. PC 端把局域网地址排在首位，并把 Tailscale 地址（经 `tailscale` CLI 读取）作为兜底候选一起写入 QR 且一并监听；Android 端对局域网目标按优先级绑定 WiFi Network（物理 WiFi → capability 受 VPN 影响的 WiFi → 继承 WiFi transport 的 VPN 网络），对 Tailscale CGNAT 段目标则走系统默认网络即 VPN 隧道
+9. 手机上的文字（语音输入或手动输入）实时发送到桌面端；配对多台 PC 时只发给「更多功能操作 → 设备选择」选中的那一台（shadow 增量与 Auto Enter 同样跟随该目标），其它设备的迟到 ACK 不会清空输入框
+10. 桌面端通过剪贴板粘贴文本，并在需要时补发一次 Enter；Linux X11 走常规 Ctrl+V 路径，GNOME Wayland 走 RemoteDesktop portal 键盘授权
+11. GNOME Wayland 统一发送普通 Ctrl+V：不再做终端焦点探测，也不再提供粘贴模式切换，粘贴行为完全确定
 
 ## 开发
 
@@ -160,10 +166,10 @@ Voicing/
 │   └── requirements.txt         # Python 依赖
 ├── android/voice_coding/        # Android 端 (Flutter)
 │   ├── lib/
-│   │   ├── main.dart            # UI 层
+│   │   ├── main.dart            # UI 层（含「更多功能操作」与设备选择二级菜单）
 │   │   ├── voicing_connection_controller.dart  # 连接状态机
 │   │   ├── voicing_protocol.dart               # 协议常量
-│   │   ├── saved_server.dart    # 已配对 PC 持久化（schema v2 地址簿）
+│   │   ├── saved_server.dart    # 已配对 PC 持久化（schema v3 设备列表、v2 地址簿）
 │   │   ├── server_address_book.dart # 跨网络地址历史与评分排序
 │   │   ├── network_profile.dart # 手机网络画像（接口/子网）
 │   │   ├── connection_race.dart # Happy Eyeballs 并行竞速拨号
@@ -183,12 +189,20 @@ Voicing/
 
 ### 打包发布
 
-正式发布通过 GitHub Actions 自动构建（四平台：Android / Windows / macOS / Linux）：
+正式发布通过 GitHub Actions 自动构建，只构建三个平台（Android / Windows / Linux）；macOS job 已删除，官方 Release 不再产出 macOS DMG。tag 发布固定产出 4 个构建产物（`voicing.apk`、`voicing-windows-x64.exe`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`）加 `SHA256SUMS.txt`：
 
 ```bash
-git tag v2.9.14
-git push origin v2.9.14
+git tag v2.10.0
+git push origin v2.10.0
 ```
+
+手动构建使用 `workflow_dispatch` 触发（GitHub Actions 页面 Run workflow，或命令行）：
+
+```bash
+gh workflow run release.yml --ref main
+```
+
+手动构建只产出当前 APK 与 Linux DEB / standalone 二进制，作为 workflow artifact（`android-apk`、`linux-deb`、`linux-bin`）保留在本次 run 页面，不会创建 GitHub Release，也不产出 Windows EXE；版本号只从仓库版本文件（`pubspec.yaml` / `APP_VERSION`）推导，不会使用分支名。
 
 本地调试用：
 
@@ -197,7 +211,7 @@ git push origin v2.9.14
 cd pc && pyinstaller --onefile --windowed --name=Voicing \
   --icon=assets/icon.ico --add-data "assets;assets" voice_coding.py
 
-# macOS（生成 .app bundle）
+# macOS（生成 .app bundle，仅限源码自行构建，官方 CI/Release 不再产出）
 cd pc && pyinstaller --windowed --name=Voicing \
   --icon=assets/icon.icns --add-data "assets:assets" voice_coding.py
 
@@ -216,10 +230,13 @@ cd android/voice_coding && flutter build apk --release
 **手机无法连接电脑？**
 1. 确认电脑和手机在同一个 WiFi 热点或局域网下
 2. 检查电脑防火墙是否放行 TCP 9527
-3. 首次使用或换电脑后，用电脑端"显示 QR 码"和手机端"扫码连接"配对一次
+3. 首次使用或换电脑后，用电脑端"显示 QR 码"和手机端"扫码连接"配对一次（每次扫码都会把 PC 追加到已配对列表，不覆盖之前的设备）
 4. 手机息屏恢复后会立即进入快速重连，通常无需手动刷新
 5. 刚切换到新局域网后，PC 端会自动刷新 QR 码和监听地址；仍然不行就点手机端"刷新连接"，或重新扫描 PC 端二维码把新 IP 合并进候选池
 6. 如果电脑端是 macOS，请确认已更新并重启到 v2.9.4 或更新版本，这些版本不再因为 `en0/en1` 网卡命名误判而优先发布错误地址
+
+**同一 WiFi 下有多台电脑，怎么选择把文字发给哪一台？**
+每台电脑扫码配对一次即可：每次扫码都会追加到已配对列表，之前的设备不会被替换，刚扫码的这台 PC 会自动成为当前发送目标，全部已配对电脑各自保持连接。打开「更多功能操作 → 设备选择」（菜单最后一项、在"扫码连接"下方），向左展开的二级菜单会列出所有已配对设备、实时状态，以及当前目标上的勾选标记。选中后文本、shadow 增量与 Auto Enter 只发往该设备；顶部状态栏以「已连接 · 当前设备名」显示当前目标。
 
 **本地 Flutter 打 APK 失败，提示 Java / Gradle 不兼容？**
 本机如果默认使用 Java 25，`flutter build apk --release` 会失败。请安装 JDK 17/21，并在 `android/voice_coding/android/local.properties` 中设置 `org.gradle.java.home=...`；正式 release 走 GitHub Actions 的 Java 17 环境。

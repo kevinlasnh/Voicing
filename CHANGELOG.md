@@ -15,6 +15,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.10.0] - 2026-11-22
+
+### Added
+
+- Android: multi-device pairing. Every newly scanned PC is appended to the paired-device list instead of replacing the previous one, and re-scanning the same `device_id` only merges its address book and candidate history, so no duplicate entry appears
+- Android: all paired PCs now connect concurrently, each with its own WebSocket, heartbeat, reconnect backoff and Happy Eyeballs candidate race, so several PCs on the same WiFi can stay online at the same time
+- Android: a "Device selection" entry at the bottom of the "More" menu, right below "Scan to connect". Tapping it opens a secondary menu to the left in the same style as the existing dropdown, listing every paired PC with live status (connected / connecting / disconnected, with sync off shown as a warning) and a check mark on the current send target; each row offers a delete button to un-pair that PC after a confirmation dialog
+- Android: the header status bar now shows "status · current device name", for example `Connected · My PC`
+
+### Changed
+
+- Android: text, shadow incremental updates and Auto Enter are routed only to the currently selected device; switching the target leaves the other connections untouched
+- Android: only the active device's ACK may clear the input box; a late ACK from another device is ignored, so the text being typed for the active device is never erased
+- Android: paired-device storage upgraded to schema v3 — a `saved_servers` list plus `active_device_key`. Existing v1/v2 `saved_server` data migrates automatically on first launch and no re-scan is needed; a single-device `saved_server` (equal to the active device) keeps being written so downgrading to an older APK still finds a usable PC
+- CI: tag releases (`vX.Y.Z`) now build Android / Windows / Linux only. The macOS job was removed as requested, so official releases no longer produce a macOS DMG; the release assets are `voicing.apk`, `voicing-windows-x64.exe`, `voicing-linux-amd64.deb`, `voicing-linux-x86_64` plus `SHA256SUMS.txt`
+- CI: added a `workflow_dispatch` manual build (Actions page or `gh workflow run release.yml --ref main`). It builds only the current APK and the Linux DEB / standalone binary and keeps them as workflow artifacts; it does not create a GitHub Release
+
+### Notes
+
+- The wire protocol (port 9527, message types) and the QR payload are unchanged, and the PC side needs no update: the existing desktop build stays compatible with the new APK, so updating the Android app is sufficient
+- Upgrading from 2.9.14 preserves the saved candidate pools and migrates the single saved PC into the multi-device list automatically (storage schema v3), so no re-scan is needed
+- The macOS desktop code is retained and can still be built from source, but official CI/Release no longer provides macOS artifacts
+
+### 新增
+
+- 手机端：多设备配对。每扫描一台新 PC 都会追加到已配对设备列表，不再覆盖上一台；同一 `device_id` 重新扫码只合并地址簿与候选历史，不产生重复项
+- 手机端：全部已配对 PC 并发建立 WebSocket 连接，每台都有独立的心跳、重连退避与 Happy Eyeballs 候选竞速，同一 WiFi 下可以同时在线多台电脑
+- 手机端：「更多功能操作」最下方（「扫码连接」下面）新增「设备选择」入口。点击后向左侧弹出二级菜单，风格与现有下拉菜单一致，列出全部已配对设备及其实时状态（已连接 / 连接中 / 未连接，同步关闭显示为警告色），当前发送目标带勾选标记；每行行尾提供删除按钮，确认后可解绑该设备
+- 手机端：顶部状态栏显示「状态 · 当前设备名」，例如「已连接 · 我的电脑」
+
+### 变更
+
+- 手机端：文本、shadow 增量与 Auto Enter 只发往当前选中的设备；切换发送目标不会影响其它设备的连接
+- 手机端：只有当前活跃设备的 ACK 才能清空输入框；其它设备的迟到 ACK 会被忽略，不会误清正在给当前设备输入的内容
+- 手机端：配对存储升级为 schema v3 —— `saved_servers` 列表 + `active_device_key`。旧 v1/v2 的 `saved_server` 数据首次启动自动迁移，无需重新扫码；同时继续写一份单设备 `saved_server`（等于活跃设备），降级到旧版 APK 仍能读到一台可用设备
+- CI：tag 发布（`vX.Y.Z`）只构建 Android / Windows / Linux。按用户要求删除了 macOS job，官方 Release 不再产出 macOS DMG；发布资产为 `voicing.apk`、`voicing-windows-x64.exe`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64` 加 `SHA256SUMS.txt`
+- CI：新增 `workflow_dispatch` 手动构建（GitHub Actions 页面或 `gh workflow run release.yml --ref main`），只构建当前 APK 与 Linux DEB / standalone 二进制，作为 workflow artifact 下载；不会创建 GitHub Release
+
+### 说明
+
+- 通信协议（端口 9527、消息类型）与 QR payload 均未变更，PC 端无需改动：现有桌面端可直接与新版 APK 互通，只需更新 Android 端
+- 从 2.9.14 升级会保留原有候选池，并将单台已保存设备自动迁移进多设备列表（存储 schema v3），无需重新扫码
+- macOS 桌面端代码仍然保留、可从源码自行构建，但官方 CI/Release 不再提供 macOS 产物
+
+---
+
 ## [2.9.14] - 2026-11-20
 
 ### Added

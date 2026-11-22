@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.14-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.0-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -19,13 +19,15 @@ Tired of typing while talking to AI? Voicing lets your mouth replace your hands.
 
 ---
 
-> **Note**: macOS and Linux desktop builds are still in beta. Stability is not yet guaranteed.
+> **Note**: macOS and Linux desktop builds are still in beta. Stability is not yet guaranteed. Official CI/Release artifacts cover Windows, Linux and Android only; the macOS app must be built from source (see Build & release).
 
 ## What it does
 
 Voicing turns your phone's voice keyboard into your computer's "mouth" — speak on your phone, and the text lands directly at the cursor on your computer.
 
-- **QR pairing** — scan the desktop's QR code once and the device is remembered
+- **QR pairing** — scan the desktop's QR code once and the device is remembered; every new PC is added to the paired-device list instead of replacing the previous one
+- **Multiple PCs at once** — pair several desktops on the same WiFi and keep them connected simultaneously; each paired PC has its own WebSocket, heartbeat, reconnect backoff and candidate race
+- **Device selection** — choose the send target under More → Device selection; the left-side submenu lists every paired PC with live status and a check mark on the current one, each row has a delete button to unpair that PC, and the header shows the target (for example `Connected · My PC`)
 - **Cross-network instant re-pairing** — the phone remembers which network each saved address worked on (schema v2 address book), ranks the best match for the current network, and races the top candidates in parallel (Happy Eyeballs). Once a PC has been paired once in each of several networks, coming back to any of them reconnects in about 1–2 s without re-scanning
 - **No broadcast required** — after launch, the phone tries the saved IP pool directly; no UDP discovery
 - **PC runtime network refresh** — when the desktop switches to a new LAN, the QR code and WebSocket listener refresh on the fly with no app restart
@@ -37,7 +39,7 @@ Voicing turns your phone's voice keyboard into your computer's "mouth" — speak
 - **Undo** — accidentally sent something? One tap to take it back
 - **Auto reconnect** — wakes from screen-off and prefers showing "connected" while reconnecting
 - **Stable Linux paste** — GNOME Wayland always sends a plain Ctrl+V, with no terminal focus probing, so pasting no longer depends on accessibility bus state
-- **Cross-platform** — Windows / macOS / Linux desktop, plus Android phone client
+- **Cross-platform** — a Windows / macOS / Linux desktop codebase plus an Android phone client; official builds cover Windows, Linux and Android, while the macOS app is built from source
 - **Compact** — ~32 MB APK and ~50–60 MB desktop bundles; the Linux DEB installs its declared desktop-integration dependencies
 
 ## Quick start
@@ -49,11 +51,12 @@ Grab the right file from [Releases](https://github.com/kevinlasnh/Voicing/releas
 | Platform | File | Requirements |
 |------|------|------|
 | Windows | `voicing-windows-x64.exe` | Win 10/11 (64-bit) |
-| macOS | `voicing-macos-arm64.dmg` | Apple Silicon (M1+) |
 | Linux | `voicing-linux-amd64.deb` or `voicing-linux-x86_64` | Ubuntu 22.04+ GNOME X11, or GNOME Wayland with RemoteDesktop portal |
 | Android | `voicing.apk` | Android 5.0+ |
 
-Each release also ships `SHA256SUMS.txt` so you can verify the SHA-256 digest before installing.
+Each release also ships `SHA256SUMS.txt` so you can verify the SHA-256 digest before installing. A tag release publishes the four build artifacts listed above (APK, Windows EXE, Linux DEB and Linux standalone binary) plus `SHA256SUMS.txt`.
+
+> **macOS**: no official DMG is published anymore (the macOS CI job was removed). The desktop code is still maintained — build the `.app` from source with the command in [Build & release](#build--release) and run it locally.
 
 ### 2. Connect
 
@@ -62,12 +65,12 @@ Run the desktop app → start a hotspot / Internet sharing / join the same LAN �
 ```
 
 - **Windows**: run `voicing-windows-x64.exe` and turn on "Mobile hotspot"
-- **macOS**: open `voicing-macos-arm64.dmg`, drag to Applications (right-click → Open the first time), enable "Internet Sharing" or join the same LAN
+- **macOS**: build the `.app` from source (see Build & release), then enable "Internet Sharing" or join the same LAN
 - **Linux**: install `voicing-linux-amd64.deb`, or run the standalone binary with `chmod +x voicing-linux-x86_64`; start a Wi-Fi hotspot or join the same LAN. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session when Voicing starts or when text is pasted.
 
-When the status bar shows "Connected" you're good to go.
+When the status bar shows `Connected · <device name>` you're good to go. The name after the dot is the PC that currently receives your text.
 
-After a successful scan the phone remembers this PC and its candidate IP pool, including which network each address worked on. If you pair the same PC once on two different networks (home Wi-Fi and office Wi-Fi, or a phone hotspot), returning to either network reconnects automatically in about 1–2 s — no re-scan. Saved candidates are raced in parallel instead of tried one by one, and the ranking adapts to the current network (same network first, then the same local subnet, then the Tailscale fallback). When the desktop switches to a new LAN, the QR code and WebSocket listener refresh in place; re-scanning merges the new IP into the pool without dropping old networks. Upgrading from 2.9.13 keeps the existing candidate pool, and the per-network history is filled in automatically the first time each network connects.
+After a successful scan the phone remembers this PC and its candidate IP pool, including which network each address worked on. Each newly scanned PC is appended to the paired-device list instead of replacing the previous one, and all paired PCs attempt their connection in parallel, so several computers can be online at the same time; use More → Device selection to choose which one receives text. If you pair the same PC once on two different networks (home Wi-Fi and office Wi-Fi, or a phone hotspot), returning to either network reconnects automatically in about 1–2 s — no re-scan. Saved candidates are raced in parallel instead of tried one by one, and the ranking adapts to the current network (same network first, then the same local subnet, then the Tailscale fallback). When the desktop switches to a new LAN, the QR code and WebSocket listener refresh in place; re-scanning merges the new IP into the pool without dropping old networks. Upgrading from 2.9.14 keeps every saved candidate pool and migrates the single saved PC into the multi-device list automatically (storage schema v3), so no re-scan is needed.
 
 ### 3. Use it
 
@@ -88,6 +91,8 @@ On Linux/GNOME Wayland the desktop app always sends a plain Ctrl+V: terminals an
 - "Auto Enter" toggle: with chunked voice input, only one Enter is fired after silence (off by default)
 - "Undo last input" restores the previously sent text
 - "Refresh connection" forces a manual reconnect
+- "Scan to connect" (More menu) adds the scanned PC to the paired-device list; re-scanning the same PC only merges its address history
+- "Device selection" (More menu, below "Scan to connect") opens a left-side submenu listing every paired PC with live status and a check mark on the current target; text, shadow deltas and Auto Enter are sent only to that PC. The delete button at the end of a row un-pairs that PC after a confirmation dialog
 
 ### Desktop
 
@@ -109,15 +114,16 @@ Tray icon states:
 ## How it works
 
 1. The desktop displays a pairing QR with `device_id/ip/ips/port/name/os`, refreshing the physical IPv4 address pool at runtime and preferring the WebSocket listener's actually bound IPs
-2. The phone scans the QR and runs a WebSocket (port 9527) connectivity probe; on success it saves this PC
-3. The phone persists multiple candidate IPs for the same PC — hotspot and various LAN addresses are all kept — and records the phone network each address succeeded on. Re-scanning the same `device_id` merges both the candidate pool and the per-network history rather than overwriting it
-4. On later launches or manual refresh, the phone ranks the saved addresses for the current network and races the best candidates in parallel (120 ms stagger, first handshake wins); UDP discovery is no longer used
-5. The PC WebSocket server rebinds to the current LAN IP whenever the address pool changes, so it never lingers on stale addresses
-6. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
-7. The desktop lists LAN addresses first and appends its Tailscale address (read from the `tailscale` CLI) as a fallback candidate, binding and advertising both. The Android WebSocket ranks WiFi candidates for LAN targets (plain physical WiFi, then WiFi whose VPN capability is affected, then a VPN network that inherited the WiFi transport), while a target inside the Tailscale CGNAT range is reached through the system default network, i.e. the VPN tunnel
-8. Phone text (voice or typed) streams to the desktop in real time
-9. The desktop pastes via the clipboard and emits an Enter when needed; Linux X11 uses the normal Ctrl+V path, while GNOME Wayland uses the RemoteDesktop portal keyboard permission
-10. GNOME Wayland always sends a plain Ctrl+V: terminal focus is no longer probed and there is no paste mode switch, so paste behavior is fully deterministic
+2. The phone scans the QR and runs a WebSocket (port 9527) connectivity probe; on success it adds this PC to the paired-device list (a re-scanned `device_id` is merged, not duplicated)
+3. The phone persists multiple candidate IPs for every paired PC — hotspot and various LAN addresses are all kept — and records the phone network each address succeeded on. Paired devices and the active send target are stored as schema v3 (`saved_servers` list plus `active_device_key`); old single-device data migrates automatically, and a single-device record is still written for downgrade compatibility. Re-scanning the same `device_id` merges both the candidate pool and the per-network history rather than overwriting it
+4. All paired PCs connect concurrently, each with its own heartbeat, reconnect backoff and candidate race, so several computers on the same WiFi can be online at the same time
+5. On later launches or manual refresh, the phone ranks the saved addresses for the current network and races the best candidates in parallel (120 ms stagger, first handshake wins); UDP discovery is no longer used
+6. The PC WebSocket server rebinds to the current LAN IP whenever the address pool changes, so it never lingers on stale addresses
+7. QR payloads avoid advertising addresses that failed to bind; macOS interface names are handled conservatively instead of assuming `en0` is WiFi
+8. The desktop lists LAN addresses first and appends its Tailscale address (read from the `tailscale` CLI) as a fallback candidate, binding and advertising both. The Android WebSocket ranks WiFi candidates for LAN targets (plain physical WiFi, then WiFi whose VPN capability is affected, then a VPN network that inherited the WiFi transport), while a target inside the Tailscale CGNAT range is reached through the system default network, i.e. the VPN tunnel
+9. Phone text (voice or typed) streams to the desktop in real time; with several paired PCs it is sent only to the one selected under More → Device selection (shadow deltas and Auto Enter follow the same target), and a late ACK from another device cannot clear the input
+10. The desktop pastes via the clipboard and emits an Enter when needed; Linux X11 uses the normal Ctrl+V path, while GNOME Wayland uses the RemoteDesktop portal keyboard permission
+11. GNOME Wayland always sends a plain Ctrl+V: terminal focus is no longer probed and there is no paste mode switch, so paste behavior is fully deterministic
 
 ## Development
 
@@ -160,10 +166,10 @@ Voicing/
 │   └── requirements.txt         # Python dependencies
 ├── android/voice_coding/        # Android (Flutter)
 │   ├── lib/
-│   │   ├── main.dart            # UI layer
+│   │   ├── main.dart            # UI layer, More menu and device-selection submenu
 │   │   ├── voicing_connection_controller.dart  # Connection state machine
 │   │   ├── voicing_protocol.dart               # Protocol constants
-│   │   ├── saved_server.dart    # Paired-PC persistence (schema v2 address book)
+│   │   ├── saved_server.dart    # Paired-PC persistence (schema v3 device list, v2 address book)
 │   │   ├── server_address_book.dart # Per-network address history and ranking
 │   │   ├── network_profile.dart # Phone network fingerprint (interfaces/subnets)
 │   │   ├── connection_race.dart # Happy Eyeballs parallel dialing
@@ -183,12 +189,20 @@ Voicing/
 
 ### Build & release
 
-Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
+Production releases run through GitHub Actions and build three platforms (Android / Windows / Linux); the macOS job was removed, so official releases no longer produce a macOS DMG. A tag release publishes the four build artifacts (`voicing.apk`, `voicing-windows-x64.exe`, `voicing-linux-amd64.deb`, `voicing-linux-x86_64`) plus `SHA256SUMS.txt`:
 
 ```bash
-git tag v2.9.14
-git push origin v2.9.14
+git tag v2.10.0
+git push origin v2.10.0
 ```
+
+Manual builds use the `workflow_dispatch` trigger from the Actions page (Build And Release → Run workflow) or:
+
+```bash
+gh workflow run release.yml --ref main
+```
+
+A manual run builds only the current APK and the Linux DEB / standalone binary, keeps them as workflow artifacts (`android-apk`, `linux-deb`, `linux-bin`) on the run page, and does not create a GitHub Release or a Windows EXE. Its version always comes from the repository version files (`pubspec.yaml` / `APP_VERSION`), never from a branch name.
 
 Local debug builds:
 
@@ -197,7 +211,7 @@ Local debug builds:
 cd pc && pyinstaller --onefile --windowed --name=Voicing \
   --icon=assets/icon.ico --add-data "assets;assets" voice_coding.py
 
-# macOS (.app bundle)
+# macOS (.app bundle — source build only; no longer produced by official CI/Release)
 cd pc && pyinstaller --windowed --name=Voicing \
   --icon=assets/icon.icns --add-data "assets:assets" voice_coding.py
 
@@ -216,10 +230,13 @@ Note: a local Android release build needs a compatible JDK 17/21 and a valid sig
 **Phone can't connect to the PC?**
 1. Check that both are on the same WiFi hotspot or LAN
 2. Make sure the PC firewall allows TCP 9527
-3. First-time setup or a new PC: run "Show QR code" on the desktop and "Scan to connect" on the phone
+3. First-time setup or a new PC: run "Show QR code" on the desktop and "Scan to connect" on the phone (each successful scan adds a PC to the paired list instead of replacing the previous one)
 4. After the screen wakes up the phone enters fast-reconnect mode automatically — usually no manual refresh is needed
 5. Right after switching to a new LAN, the desktop refreshes the QR and listener automatically; if it still fails, tap "Refresh connection" on the phone or re-scan the desktop QR to merge the new IP into the candidate pool
 6. If the PC is on macOS, make sure Voicing has been restarted after updating to v2.9.4 or later so QR codes no longer prefer a misclassified `en0/en1` interface
+
+**Several PCs share the same WiFi — how do I choose which one receives text?**
+Pair each PC once by scanning its QR code; every scan is added to the paired-device list and the previous PC is not replaced, and the PC you just scanned becomes the current target. All paired PCs keep their own connection. Open More → Device selection (the last entry, below "Scan to connect"), which opens a left-side submenu with every paired PC, its live status and a check mark on the current target. Text, shadow deltas and Auto Enter are then sent only to the selected PC; the header shows the target as `Connected · <device name>`.
 
 **Local Flutter APK build fails with a Java / Gradle error?**
 If your default Java is 25, `flutter build apk --release` will fail. Install JDK 17/21 and set `org.gradle.java.home=...` in `android/voice_coding/android/local.properties`. Production releases use the Java 17 environment in GitHub Actions.
