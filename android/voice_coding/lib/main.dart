@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'app_theme.dart';
+import 'auto_scroll_text.dart';
 import 'connection_recovery_policy.dart';
 import 'voicing_connection_controller.dart';
 
@@ -408,12 +409,6 @@ class _MainPageState extends State<MainPage>
       connectionDotColor = AppColors.error;
       connectionText = '未连接';
     }
-    // 多设备时把当前发送目标显示在状态后面，让用户一眼知道消息发往哪台 PC。
-    final activeDeviceName = _controller.activeDeviceName;
-    if (activeDeviceName.isNotEmpty) {
-      connectionText = '$connectionText · $activeDeviceName';
-    }
-
     return Row(
       children: [
         Expanded(
@@ -660,59 +655,17 @@ class _MainPageState extends State<MainPage>
     );
   }
 
-  /// 「设备选择」主菜单项：显示当前发送目标名称，尾部 chevron 指示可向左展开。
+  /// 「设备选择」主菜单项：与刷新连接/撤回上次输入等行完全同款，
+  /// 只有统一小图标 + 四字文本，不显示当前设备名、也没有额外箭头，
+  /// 从而保证每一格高度与左右内边距完全一致。
   Widget _buildDeviceSelectorMenuItem() {
-    final activeDeviceName = _controller.activeDeviceName;
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: _toggleDeviceMenu,
-        splashColor: const Color(0x1AFFFFFF),
-        highlightColor: const Color(0x0DFFFFFF),
-        customBorder: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(AppSpacing.borderRadius),
-            bottomRight: Radius.circular(AppSpacing.borderRadius),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.componentPadding),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.devices_other,
-                color: AppColors.textPrimary,
-                size: 18,
-              ),
-              const SizedBox(width: AppSpacing.sm),
-              const Expanded(
-                child: Text(
-                  '设备选择',
-                  style: AppTextStyles.label,
-                ),
-              ),
-              if (activeDeviceName.isNotEmpty) ...[
-                const SizedBox(width: AppSpacing.sm),
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 92),
-                  child: Text(
-                    activeDeviceName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.right,
-                    style: AppTextStyles.hint,
-                  ),
-                ),
-              ],
-              const SizedBox(width: 2),
-              const Icon(
-                Icons.chevron_left,
-                color: AppColors.textHint,
-                size: 18,
-              ),
-            ],
-          ),
-        ),
+    return _buildMenuItem(
+      icon: Icons.devices_other,
+      text: '设备选择',
+      onTap: _toggleDeviceMenu,
+      borderRadius: const BorderRadius.only(
+        bottomLeft: Radius.circular(AppSpacing.borderRadius),
+        bottomRight: Radius.circular(AppSpacing.borderRadius),
       ),
     );
   }
@@ -722,8 +675,10 @@ class _MainPageState extends State<MainPage>
     required Offset offset,
     required Size size,
   }) {
+    // 与主界面「已连接」和「更多功能操作」两个格子之间的间距一致，
+    // 视觉上左侧子菜单就是右侧菜单的对称邻居。
     final left = max(
-      offset.dx - size.width - AppSpacing.sm,
+      offset.dx - size.width - AppSpacing.componentGap,
       AppSpacing.md,
     );
     return Positioned(
@@ -750,6 +705,7 @@ class _MainPageState extends State<MainPage>
           child: Material(
             color: Colors.transparent,
             child: Container(
+              clipBehavior: Clip.antiAlias,
               decoration: BoxDecoration(
                 color: AppColors.surface,
                 borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
@@ -780,21 +736,26 @@ class _MainPageState extends State<MainPage>
   List<Widget> _buildDeviceSelectionRows() {
     final devices = _controller.pairedDevices;
     if (devices.isEmpty) {
-      return const [
+      return [
         Padding(
-          padding: EdgeInsets.all(AppSpacing.componentPadding),
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
           child: Row(
             children: [
-              Icon(
+              const Icon(
                 Icons.devices_other,
                 color: AppColors.textHint,
                 size: 18,
               ),
-              SizedBox(width: AppSpacing.sm),
+              const SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: Text(
                   '暂无已配对设备，请先扫码连接',
-                  style: AppTextStyles.hint,
+                  // 用 label 的字号/行高（只换颜色与字重）保证空态行与
+                  // 右侧菜单项高度一致，不出现半像素级参差。
+                  style: AppTextStyles.label.copyWith(
+                    color: AppColors.textHint,
+                    fontWeight: FontWeight.w400,
+                  ),
                 ),
               ),
             ],
@@ -832,28 +793,32 @@ class _MainPageState extends State<MainPage>
     required bool isLast,
   }) {
     final statusColor = _deviceStatusColor(device);
+    // 当前发送目标用「常驻高亮」表示：颜色与右侧菜单点击时的 highlightColor
+    // 完全一致，因此用户对「选中」和「按下」的视觉反馈是同一套语言。
+    // 不额外放对勾/删除按钮，每格只保留状态灯 + 设备名。
+    final highlightColor =
+        device.isActive ? const Color(0x0DFFFFFF) : Colors.transparent;
+    // 面板本身是圆角容器；高亮块必须跟着同样的圆角并裁剪，否则首/尾行的
+    // 高亮会盖住面板圆角、露出方形边。
+    final rowBorderRadius = BorderRadius.only(
+      topLeft: Radius.circular(isFirst ? AppSpacing.borderRadius : 0),
+      topRight: Radius.circular(isFirst ? AppSpacing.borderRadius : 0),
+      bottomLeft: Radius.circular(isLast ? AppSpacing.borderRadius : 0),
+      bottomRight: Radius.circular(isLast ? AppSpacing.borderRadius : 0),
+    );
     return Material(
-      color: Colors.transparent,
+      color: highlightColor,
+      shape: RoundedRectangleBorder(borderRadius: rowBorderRadius),
+      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: () => _handleDeviceSelected(device.deviceKey),
+        onLongPress: () => _confirmRemoveDevice(device),
         splashColor: const Color(0x1AFFFFFF),
-        highlightColor: const Color(0x0DFFFFFF),
-        customBorder: RoundedRectangleBorder(
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(
-              isFirst ? AppSpacing.borderRadius : 0,
-            ),
-            topRight: Radius.circular(
-              isFirst ? AppSpacing.borderRadius : 0,
-            ),
-            bottomLeft: Radius.circular(
-              isLast ? AppSpacing.borderRadius : 0,
-            ),
-            bottomRight: Radius.circular(
-              isLast ? AppSpacing.borderRadius : 0,
-            ),
-          ),
-        ),
+        // 选中行已经有常驻高亮底色，按压时不再叠加同一层 highlight，
+        // 保证「选中行按压」与「普通行按压」的视觉亮度一致。
+        highlightColor:
+            device.isActive ? Colors.transparent : const Color(0x0DFFFFFF),
+        customBorder: RoundedRectangleBorder(borderRadius: rowBorderRadius),
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.componentPadding),
           child: Row(
@@ -861,36 +826,23 @@ class _MainPageState extends State<MainPage>
               _buildStatusDot(statusColor),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
-                child: Text(
-                  device.displayName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: AppTextStyles.label,
+                // 顶部「已连接」格的文字有 +2px 光学位移，这里复刻同一偏移，
+                // 保证「灯→文字」视觉间距与顶部格完全一致；minHeight 18 用于
+                // 兼容个别字体行高小于菜单图标的场景，实际等高主要来自设备行
+                // 与菜单行都使用 AppTextStyles.label 的同一套文本行高。
+                child: Transform.translate(
+                  offset: const Offset(_statusTextHorizontalOffset, 0),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 18),
+                    child: RepaintBoundary(
+                      child: AutoScrollText(
+                        key: ValueKey(device.deviceKey),
+                        text: device.displayName,
+                        style: AppTextStyles.label,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              if (device.isActive) ...[
-                const SizedBox(width: AppSpacing.sm),
-                const Icon(
-                  Icons.check,
-                  color: AppColors.success,
-                  size: 18,
-                ),
-              ],
-              const SizedBox(width: 2),
-              // 多设备后需要能解绑扫错/不再使用的 PC：行尾提供删除入口，
-              // 点击行本身仍然是切换发送目标，两者互不干扰。
-              IconButton(
-                onPressed: () => _confirmRemoveDevice(device),
-                tooltip: '移除已配对设备',
-                icon: const Icon(
-                  Icons.delete_outline,
-                  color: AppColors.textHint,
-                  size: 18,
-                ),
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
-                splashRadius: 16,
               ),
             ],
           ),
@@ -908,9 +860,9 @@ class _MainPageState extends State<MainPage>
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('移除已配对设备？'),
+          title: const Text('删除已配对设备？'),
           content: Text(
-            '${device.displayName} 将从设备选择中移除，下次使用需要重新扫码配对。',
+            '确定要从设备选择中删除 ${device.displayName} 吗？删除后下次使用需要重新扫码配对。',
           ),
           actions: [
             TextButton(
@@ -919,7 +871,7 @@ class _MainPageState extends State<MainPage>
             ),
             FilledButton(
               onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('移除'),
+              child: const Text('删除'),
             ),
           ],
         );

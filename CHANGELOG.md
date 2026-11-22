@@ -15,6 +15,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.10.2] - 2026-11-22
+
+### Changed
+
+- Android: the header status cell is back to the plain connection state (`Connected` / `Connecting…` / `Disconnected`) and no longer appends the current device name
+- Android: the "Device selection" row in the More menu is now a normal row like every other entry — one small icon plus the four-character label, no device name and no arrow, so all rows share the same height and padding
+- Android: the device submenu is laid out as the symmetric left neighbour of the More menu: same width as the header status cell, same gap as the two header buttons, same container/menu-item style and row height. The selected target is shown by the same persistent highlight used when tapping a More-menu row; the green check mark and the trailing delete button were removed
+- Android: a long name in a device row now slowly scrolls back and forth like a music-player song title, while short names stay static
+- Android: un-pairing a device is now done by long-pressing its row and confirming the dialog (cancel/delete)
+
+### Notes
+
+- No protocol, QR payload or desktop behaviour change: the APK and existing desktop builds stay interchangeable
+
+### 变更
+
+- 手机端：顶部状态格恢复为纯连接状态（已连接 / 连接中… / 未连接），不再拼接当前设备名
+- 手机端：「更多功能操作」里的「设备选择」改为与其他项完全一致的一行——统一小图标 + 四字文本，不显示设备名、没有额外箭头，所有行高度与内边距统一
+- 手机端：设备子菜单按「更多功能操作」的对称左邻居布局：宽度与顶部状态格一致、与主界面两按钮间距一致、容器与菜单项样式及单元格高度一致。当前发送目标用与点击右侧菜单行相同的常驻高亮表示；去掉了绿色对勾和行尾删除按钮
+- 手机端：设备名过长时像音乐播放器歌名一样缓慢来回滚动，短名字保持静止
+- 手机端：解绑设备改为长按该设备行，弹出确认框后选择取消/删除
+
+### 说明
+
+- 协议、QR payload 与桌面端行为均未变化：新版 APK 与现有桌面端继续互通
+
+---
+
 ## [2.10.1] - 2026-11-22
 
 ### Changed
