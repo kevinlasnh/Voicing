@@ -8,7 +8,6 @@ import 'package:mobile_scanner/mobile_scanner.dart';
 
 import 'app_theme.dart';
 import 'connection_recovery_policy.dart';
-import 'saved_server.dart';
 import 'voicing_connection_controller.dart';
 
 void main() {
@@ -53,11 +52,17 @@ class _MainPageState extends State<MainPage>
   late final AnimationController _menuAnimationController;
   late final Animation<double> _menuSlideAnimation;
   late final Animation<double> _menuFadeAnimation;
+  late final AnimationController _deviceMenuAnimationController;
+  late final Animation<double> _deviceMenuSlideAnimation;
+  late final Animation<double> _deviceMenuFadeAnimation;
   StreamSubscription<dynamic>? _keyboardInsetsSubscription;
 
   bool _showMenu = false;
   bool _menuOverlayMounted = false;
   bool _prepaintMenuOverlay = false;
+  // 2026-11-22 多设备：更多功能操作里的「设备选择」向左弹出的二级菜单状态。
+  bool _showDeviceMenu = false;
+  bool _deviceMenuOverlayMounted = false;
   bool _qrLocking = false;
   double? _nativeKeyboardInset;
   Size _qrScannerLayoutSize = Size.zero;
@@ -70,9 +75,7 @@ class _MainPageState extends State<MainPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
 
-    _controller = VoicingConnectionController(
-      confirmDeviceReplacement: _confirmDeviceReplacement,
-    );
+    _controller = VoicingConnectionController();
     _controller.addListener(_handleControllerUpdate);
     _qrScannerController = MobileScannerController(
       detectionSpeed: DetectionSpeed.normal,
@@ -89,6 +92,20 @@ class _MainPageState extends State<MainPage>
     );
     _menuFadeAnimation = CurvedAnimation(
       parent: _menuAnimationController,
+      curve: Curves.easeOut,
+    );
+    // 设备选择二级菜单：与主菜单同款淡入 + 轻微位移，方向改为从右侧滑入
+    // （视觉上它是从主菜单左侧展开，所以起点在右往左靠拢）。
+    _deviceMenuAnimationController = AnimationController(
+      duration: const Duration(milliseconds: 200),
+      vsync: this,
+    );
+    _deviceMenuSlideAnimation = CurvedAnimation(
+      parent: _deviceMenuAnimationController,
+      curve: Curves.easeOutCubic,
+    );
+    _deviceMenuFadeAnimation = CurvedAnimation(
+      parent: _deviceMenuAnimationController,
       curve: Curves.easeOut,
     );
 
@@ -117,6 +134,7 @@ class _MainPageState extends State<MainPage>
     _controller.dispose();
     _qrScannerController.dispose();
     _menuAnimationController.dispose();
+    _deviceMenuAnimationController.dispose();
     _keyboardInsetsSubscription?.cancel();
     super.dispose();
   }
@@ -177,11 +195,60 @@ class _MainPageState extends State<MainPage>
   }
 
   void _closeMenu() {
+    _showDeviceMenu = false;
+    _deviceMenuOverlayMounted = false;
+    _deviceMenuAnimationController.value = 0;
     _menuAnimationController.reverse().then((_) {
       if (mounted) {
         setState(() => _showMenu = false);
       }
     });
+  }
+
+  /// 打开/关闭「设备选择」二级菜单（点击外部时先关二级菜单）。
+  void _toggleDeviceMenu() {
+    if (_showDeviceMenu) {
+      _closeDeviceMenu();
+      return;
+    }
+    setState(() {
+      _showDeviceMenu = true;
+      _deviceMenuOverlayMounted = true;
+    });
+    _deviceMenuAnimationController.value = 0;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _showDeviceMenu) {
+        _deviceMenuAnimationController.forward(from: 0);
+      }
+    });
+  }
+
+  void _closeDeviceMenu() {
+    _deviceMenuAnimationController.reverse().then((_) {
+      if (mounted) {
+        // 动画结束后必须把二级菜单从树里真正移除：Opacity 为 0 时仍会参与
+        // 命中测试，若不卸载，收起后原地仍能点到不可见的设备行。
+        setState(() {
+          _showDeviceMenu = false;
+          _deviceMenuOverlayMounted = false;
+        });
+      }
+    });
+  }
+
+  void _handleMenuBackdropTap() {
+    // 二级菜单打开时，第一次点遮罩只收起二级菜单，主菜单保持展开，
+    // 避免用户误触后整个「更多功能操作」消失。
+    if (_showDeviceMenu) {
+      _closeDeviceMenu();
+      return;
+    }
+    _closeMenu();
+  }
+
+  void _handleDeviceSelected(String deviceKey) {
+    _controller.selectDevice(deviceKey);
+    _closeMenu();
   }
 
   void _refreshConnection() {
@@ -288,40 +355,6 @@ class _MainPageState extends State<MainPage>
     }
   }
 
-  Future<bool> _confirmDeviceReplacement(
-    SavedServer current,
-    SavedServer incoming,
-  ) async {
-    if (!mounted) {
-      return false;
-    }
-
-    final result = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('替换已保存设备？'),
-          content: Text(
-            '当前已保存 ${current.displayName}，要替换为 ${incoming.displayName} 吗？',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('取消'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('替换'),
-            ),
-          ],
-        );
-      },
-    );
-
-    return result ?? false;
-  }
-
   @override
   Widget build(BuildContext context) {
     final keyboardInset =
@@ -363,7 +396,7 @@ class _MainPageState extends State<MainPage>
             !_controller.syncEnabled;
 
     late final Color connectionDotColor;
-    late final String connectionText;
+    String connectionText;
     if (_controller.displayStatus == ConnectionStatus.connecting) {
       connectionDotColor = AppColors.warning;
       connectionText = '连接中...';
@@ -374,6 +407,11 @@ class _MainPageState extends State<MainPage>
     } else {
       connectionDotColor = AppColors.error;
       connectionText = '未连接';
+    }
+    // 多设备时把当前发送目标显示在状态后面，让用户一眼知道消息发往哪台 PC。
+    final activeDeviceName = _controller.activeDeviceName;
+    if (activeDeviceName.isNotEmpty) {
+      connectionText = '$connectionText · $activeDeviceName';
     }
 
     return Row(
@@ -498,7 +536,7 @@ class _MainPageState extends State<MainPage>
             );
           },
           child: GestureDetector(
-            onTap: _closeMenu,
+            onTap: _handleMenuBackdropTap,
             behavior: HitTestBehavior.translucent,
             child: Container(
               color: Colors.black54,
@@ -594,15 +632,16 @@ class _MainPageState extends State<MainPage>
                                   icon: Icons.qr_code_scanner,
                                   text: '扫码连接',
                                   onTap: _openQrScannerFromMenu,
-                                  borderRadius: const BorderRadius.only(
-                                    bottomLeft: Radius.circular(
-                                      AppSpacing.borderRadius,
-                                    ),
-                                    bottomRight: Radius.circular(
-                                      AppSpacing.borderRadius,
-                                    ),
-                                  ),
                                 ),
+                                const Divider(
+                                  height: 1,
+                                  color: AppColors.divider,
+                                  indent: AppSpacing.md,
+                                  endIndent: AppSpacing.md,
+                                ),
+                                // 2026-11-22 多设备：设备选择放在扫码连接下方，
+                                // 点击后向左侧展开二级菜单，风格与主菜单一致。
+                                _buildDeviceSelectorMenuItem(),
                               ],
                             ),
                           ),
@@ -610,6 +649,8 @@ class _MainPageState extends State<MainPage>
                       ),
                     ),
                   ),
+                  if (_deviceMenuOverlayMounted)
+                    _buildDeviceSelectionSubmenu(offset: offset, size: size),
                 ],
               ),
             ),
@@ -617,6 +658,313 @@ class _MainPageState extends State<MainPage>
         ),
       ),
     );
+  }
+
+  /// 「设备选择」主菜单项：显示当前发送目标名称，尾部 chevron 指示可向左展开。
+  Widget _buildDeviceSelectorMenuItem() {
+    final activeDeviceName = _controller.activeDeviceName;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _toggleDeviceMenu,
+        splashColor: const Color(0x1AFFFFFF),
+        highlightColor: const Color(0x0DFFFFFF),
+        customBorder: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(AppSpacing.borderRadius),
+            bottomRight: Radius.circular(AppSpacing.borderRadius),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.devices_other,
+                color: AppColors.textPrimary,
+                size: 18,
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              const Expanded(
+                child: Text(
+                  '设备选择',
+                  style: AppTextStyles.label,
+                ),
+              ),
+              if (activeDeviceName.isNotEmpty) ...[
+                const SizedBox(width: AppSpacing.sm),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 92),
+                  child: Text(
+                    activeDeviceName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: AppTextStyles.hint,
+                  ),
+                ),
+              ],
+              const SizedBox(width: 2),
+              const Icon(
+                Icons.chevron_left,
+                color: AppColors.textHint,
+                size: 18,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 设备选择二级菜单：从主菜单左侧展开，列出全部已配对设备及其连接状态。
+  Widget _buildDeviceSelectionSubmenu({
+    required Offset offset,
+    required Size size,
+  }) {
+    final left = max(
+      offset.dx - size.width - AppSpacing.sm,
+      AppSpacing.md,
+    );
+    return Positioned(
+      left: left,
+      top: offset.dy + size.height + AppSpacing.sm,
+      width: size.width,
+      child: RepaintBoundary(
+        child: AnimatedBuilder(
+          animation: Listenable.merge([
+            _deviceMenuSlideAnimation,
+            _deviceMenuFadeAnimation,
+          ]),
+          builder: (context, child) {
+            // 从右往左轻微滑入（视觉上从主菜单左侧“推出来”），与主菜单的
+            // 上滑 + 淡入保持同一套动效语言。
+            return Transform.translate(
+              offset: Offset(14 * (1 - _deviceMenuSlideAnimation.value), 0),
+              child: Opacity(
+                opacity: _deviceMenuFadeAnimation.value,
+                child: child,
+              ),
+            );
+          },
+          child: Material(
+            color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(AppSpacing.borderRadius),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 360),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: _buildDeviceSelectionRows(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildDeviceSelectionRows() {
+    final devices = _controller.pairedDevices;
+    if (devices.isEmpty) {
+      return const [
+        Padding(
+          padding: EdgeInsets.all(AppSpacing.componentPadding),
+          child: Row(
+            children: [
+              Icon(
+                Icons.devices_other,
+                color: AppColors.textHint,
+                size: 18,
+              ),
+              SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  '暂无已配对设备，请先扫码连接',
+                  style: AppTextStyles.hint,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    final rows = <Widget>[];
+    for (var index = 0; index < devices.length; index++) {
+      if (index > 0) {
+        rows.add(
+          const Divider(
+            height: 1,
+            color: AppColors.divider,
+            indent: AppSpacing.md,
+            endIndent: AppSpacing.md,
+          ),
+        );
+      }
+      rows.add(
+        _buildDeviceSelectionRow(
+          devices[index],
+          isFirst: index == 0,
+          isLast: index == devices.length - 1,
+        ),
+      );
+    }
+    return rows;
+  }
+
+  Widget _buildDeviceSelectionRow(
+    PairedDeviceState device, {
+    required bool isFirst,
+    required bool isLast,
+  }) {
+    final statusColor = _deviceStatusColor(device);
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _handleDeviceSelected(device.deviceKey),
+        splashColor: const Color(0x1AFFFFFF),
+        highlightColor: const Color(0x0DFFFFFF),
+        customBorder: RoundedRectangleBorder(
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(
+              isFirst ? AppSpacing.borderRadius : 0,
+            ),
+            topRight: Radius.circular(
+              isFirst ? AppSpacing.borderRadius : 0,
+            ),
+            bottomLeft: Radius.circular(
+              isLast ? AppSpacing.borderRadius : 0,
+            ),
+            bottomRight: Radius.circular(
+              isLast ? AppSpacing.borderRadius : 0,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.componentPadding),
+          child: Row(
+            children: [
+              _buildStatusDot(statusColor),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  device.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.label,
+                ),
+              ),
+              if (device.isActive) ...[
+                const SizedBox(width: AppSpacing.sm),
+                const Icon(
+                  Icons.check,
+                  color: AppColors.success,
+                  size: 18,
+                ),
+              ],
+              const SizedBox(width: 2),
+              // 多设备后需要能解绑扫错/不再使用的 PC：行尾提供删除入口，
+              // 点击行本身仍然是切换发送目标，两者互不干扰。
+              IconButton(
+                onPressed: () => _confirmRemoveDevice(device),
+                tooltip: '移除已配对设备',
+                icon: const Icon(
+                  Icons.delete_outline,
+                  color: AppColors.textHint,
+                  size: 18,
+                ),
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                splashRadius: 16,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 移除已配对设备前的确认框（风格与手动 IP 对话框一致）。
+  Future<void> _confirmRemoveDevice(PairedDeviceState device) async {
+    if (!mounted) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('移除已配对设备？'),
+          content: Text(
+            '${device.displayName} 将从设备选择中移除，下次使用需要重新扫码配对。',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('取消'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('移除'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!mounted || confirmed != true) {
+      return;
+    }
+    // 对话框打开期间设备可能刚好完成 legacy key -> device_id 身份升级，
+    // 此时快照里的 deviceKey 已过期；按当前列表重新解析一次再删。
+    final currentKey = _resolveCurrentDeviceKey(device);
+    if (currentKey != null) {
+      _controller.removeDevice(currentKey);
+    }
+  }
+
+  String? _resolveCurrentDeviceKey(PairedDeviceState snapshot) {
+    final devices = _controller.pairedDevices;
+    for (final device in devices) {
+      if (device.deviceKey == snapshot.deviceKey) {
+        return device.deviceKey;
+      }
+    }
+    for (final device in devices) {
+      if (snapshot.server.deviceId.isNotEmpty &&
+          device.server.deviceId == snapshot.server.deviceId) {
+        return device.deviceKey;
+      }
+      if (device.server.ip == snapshot.server.ip) {
+        return device.deviceKey;
+      }
+    }
+    return null;
+  }
+
+  /// 设备行状态颜色：与头部状态点同一套语义（已连接/连接中/未连接），
+  /// 同步关闭时用警告色，避免用户以为消息发不出去是设备问题。
+  Color _deviceStatusColor(PairedDeviceState device) {
+    if (device.status == ConnectionStatus.connected) {
+      return device.syncEnabled ? AppColors.success : AppColors.warning;
+    }
+    if (device.status == ConnectionStatus.connecting) {
+      return AppColors.warning;
+    }
+    return AppColors.error;
   }
 
   Widget _buildMenuItem({

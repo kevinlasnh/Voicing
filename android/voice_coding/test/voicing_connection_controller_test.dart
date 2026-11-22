@@ -289,6 +289,516 @@ void main() {
       expect(factory.channels.length, connectionsAfterConnected);
     },
   );
+
+  test(
+    'multiple paired devices connect concurrently and text goes to active device',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 2000,
+      );
+      final pcB = SavedServer(
+        deviceId: 'pc-b',
+        ip: '192.168.1.60',
+        ips: const ['192.168.1.60'],
+        port: 9527,
+        name: 'Home-Laptop',
+        os: 'linux',
+        lastConnectedTs: nowMs - 1000,
+      );
+      // 2026-11-22：v3 多设备列表 + 活跃设备 = pc-b。
+      await seedPairedDevices([pcA, pcB], activeDeviceKey: 'pc-b');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+      factory.behaviors['192.168.1.60'] = FakeServerBehavior(accept: true);
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(
+        () => controller.pairedDevices.length == 2 &&
+            controller.pairedDevices.every((device) => device.connected),
+      );
+
+      expect(
+        controller.pairedDevices.map((device) => device.deviceKey),
+        ['pc-a', 'pc-b'],
+      );
+      expect(controller.activeDeviceKey, 'pc-b');
+      expect(controller.status, ConnectionStatus.connected);
+      expect(controller.activeDeviceName, 'Home-Laptop');
+
+      controller.textController.text = 'hello pc-b';
+      await controller.sendText();
+      final pcBChannel = factory.channels
+          .where((channel) => channel.uri.host == '192.168.1.60')
+          .last;
+      expect(
+        pcBChannel.sentMessages.any(
+          (message) =>
+              (jsonDecode(message) as Map<String, dynamic>)['content'] ==
+              'hello pc-b',
+        ),
+        isTrue,
+      );
+
+      // 切换发送目标后只发新目标，且两台设备的连接都保持（不重开 socket）。
+      controller.selectDevice('pc-a');
+      expect(controller.activeDeviceKey, 'pc-a');
+      final connectionsBeforeSwitch = factory.channels.length;
+      controller.textController.text = 'hello pc-a';
+      await controller.sendText();
+      final pcAChannel = factory.channels
+          .where((channel) => channel.uri.host == '192.168.1.50')
+          .last;
+      expect(
+        pcAChannel.sentMessages.any(
+          (message) =>
+              (jsonDecode(message) as Map<String, dynamic>)['content'] ==
+              'hello pc-a',
+        ),
+        isTrue,
+      );
+      expect(factory.channels.length, connectionsBeforeSwitch);
+      expect(
+        controller.pairedDevices.every((device) => device.connected),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'ACK from a non-active device never clears the active input box',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 2000,
+      );
+      final pcB = SavedServer(
+        deviceId: 'pc-b',
+        ip: '192.168.1.60',
+        ips: const ['192.168.1.60'],
+        port: 9527,
+        name: 'Home-Laptop',
+        os: 'linux',
+        lastConnectedTs: nowMs - 1000,
+      );
+      await seedPairedDevices([pcA, pcB], activeDeviceKey: 'pc-b');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+      factory.behaviors['192.168.1.60'] = FakeServerBehavior(accept: true);
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(
+        () => controller.pairedDevices.length == 2 &&
+            controller.pairedDevices.every((device) => device.connected),
+      );
+
+      final pcAChannel = factory.channels
+          .where((channel) => channel.uri.host == '192.168.1.50')
+          .last;
+      final pcBChannel = factory.channels
+          .where((channel) => channel.uri.host == '192.168.1.60')
+          .last;
+
+      controller.textController.text = 'draft for active device';
+      // 非活跃设备的迟到 ACK 不应清空当前输入。
+      pcAChannel.emitAck();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      expect(controller.textController.text, 'draft for active device');
+
+      // 活跃设备的 ACK 才清空输入（与原单设备语义一致）。
+      pcBChannel.emitAck();
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+      expect(controller.textController.text, isEmpty);
+    },
+  );
+
+  test('legacy manual device upgrades its key to the connected device_id', () async {
+    // 旧版手动 IP 记录没有 device_id；连上后必须把列表 Key 原地升级为
+    // PC 的真实 device_id，否则设备选择菜单会出现一条永远对不上身份的旧记录。
+    const legacy = SavedServer(
+      deviceId: '',
+      ip: '192.168.1.50',
+      port: 9527,
+      name: '',
+      os: '',
+      lastConnectedTs: 1713883200000,
+    );
+    await seedSavedServer(legacy);
+
+    final provider = FakeNetworkSnapshotProvider(
+      wifiSnapshot(ip: '192.168.1.5'),
+    );
+    final factory = FakeChannelFactory();
+    factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+
+    final controller = VoicingConnectionController(
+      tuning: fastTuning(),
+      networkSnapshotProvider: provider,
+      channelFactory: factory.call,
+    );
+    addTearDown(() async {
+      controller.dispose();
+      await provider.dispose();
+    });
+
+    await controller.initialize();
+    await settleUntil(() => controller.status == ConnectionStatus.connected);
+
+    expect(controller.pairedDevices, hasLength(1));
+    expect(controller.pairedDevices.single.deviceKey, 'pc-1');
+    expect(controller.activeDeviceKey, 'pc-1');
+    expect(controller.savedServer!.deviceId, 'pc-1');
+    expect(controller.activeDeviceName, 'FakePC');
+  });
+
+  test(
+    'manual address update keeps the existing device identity and single entry',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 1000,
+      );
+      await seedPairedDevices([pcA], activeDeviceKey: 'pc-a');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(() => controller.status == ConnectionStatus.connected);
+
+      // 手动输入一台已经 QR 配对过的 PC 的地址：应更新原记录而不是新增一条。
+      await controller.setManualServer(ip: '192.168.1.50', port: 9527);
+      await settleUntil(() => controller.status == ConnectionStatus.connected);
+
+      expect(controller.pairedDevices, hasLength(1));
+      expect(controller.activeDeviceKey, 'pc-a');
+      expect(controller.savedServer!.deviceId, 'pc-a');
+      expect(controller.savedServer!.displayName, 'Office-PC');
+    },
+  );
+
+  test(
+    'removing the active device falls back to another connected device',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 2000,
+      );
+      final pcB = SavedServer(
+        deviceId: 'pc-b',
+        ip: '192.168.1.60',
+        ips: const ['192.168.1.60'],
+        port: 9527,
+        name: 'Home-Laptop',
+        os: 'linux',
+        lastConnectedTs: nowMs - 1000,
+      );
+      await seedPairedDevices([pcA, pcB], activeDeviceKey: 'pc-b');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+      factory.behaviors['192.168.1.60'] = FakeServerBehavior(accept: true);
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(
+        () => controller.pairedDevices.length == 2 &&
+            controller.pairedDevices.every((device) => device.connected),
+      );
+
+      controller.removeDevice('pc-b');
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(
+        controller.pairedDevices.map((device) => device.deviceKey),
+        ['pc-a'],
+      );
+      expect(controller.activeDeviceKey, 'pc-a');
+      expect(controller.status, ConnectionStatus.connected);
+
+      // 持久化列表也必须同步删除，不能下次启动又复活设备。
+      final prefs = await SharedPreferences.getInstance();
+      final decoded = jsonDecode(
+        prefs.getString(SavedServerStore.savedServersKey)!,
+      ) as Map<String, dynamic>;
+      final stored = decoded['servers'] as List<dynamic>;
+      expect(stored, hasLength(1));
+      expect((stored.single as Map<String, dynamic>)['device_id'], 'pc-a');
+    },
+  );
+
+  test(
+    'dispose during the QR reveal window causes no post-dispose notifications',
+    () async {
+      final provider = FakeNetworkSnapshotProvider(NetworkSnapshot.empty);
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(
+        accept: true,
+        respondToPing: true,
+      );
+
+      final controller = VoicingConnectionController(
+        tuning: const ConnectionTuning(
+          raceStagger: Duration(milliseconds: 5),
+          raceWidth: 3,
+          savedRaceCandidateCount: 3,
+          knownNetworkAttemptTimeout: Duration(milliseconds: 150),
+          unknownNetworkAttemptTimeout: Duration(milliseconds: 150),
+          raceBudget: Duration(milliseconds: 400),
+          qrResultRevealDelay: Duration(milliseconds: 200),
+          qrSuccessHoldDelay: Duration(milliseconds: 1),
+          qrFailureHoldDelay: Duration(milliseconds: 1),
+        ),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      controller.enterQrScanMode();
+      controller.handleQrDetected(
+        jsonEncode({
+          'v': 1,
+          'type': 'voicing',
+          'device_id': 'pc-a',
+          'ip': '192.168.1.50',
+          'ips': ['192.168.1.50'],
+          'port': 9527,
+          'name': 'Office-PC',
+          'os': 'windows',
+        }),
+        const [],
+      );
+      // 让 QR 竞速胜出并进入 reveal 延时窗口。
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      controller.dispose();
+      // 跨过 reveal/hold 窗口：旧回调必须被 generation 失效，不 notify 已销毁对象。
+      await Future<void>.delayed(const Duration(milliseconds: 350));
+      expect(controller.qrScanMode, isFalse);
+      // 旧回调若在 dispose 后继续跑，会把扫码设备写回 links；这里断言没有。
+      expect(controller.pairedDevices, isEmpty);
+    },
+  );
+
+  test(
+    'QR pairing appends a new device and keeps the previous connection alive',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 1000,
+      );
+      await seedPairedDevices([pcA], activeDeviceKey: 'pc-a');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+      factory.behaviors['192.168.1.60'] = FakeServerBehavior(
+        accept: true,
+        respondToPing: true,
+      );
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(() => controller.status == ConnectionStatus.connected);
+      final pcAChannel = factory.channels
+          .where((channel) => channel.uri.host == '192.168.1.50')
+          .last;
+
+      controller.enterQrScanMode();
+      controller.handleQrDetected(
+        jsonEncode({
+          'v': 1,
+          'type': 'voicing',
+          'device_id': 'pc-b',
+          'ip': '192.168.1.60',
+          'ips': ['192.168.1.60'],
+          'port': 9527,
+          'name': 'Home-Laptop',
+          'os': 'linux',
+        }),
+        const [],
+      );
+      await settleUntil(
+        () => controller.pairedDevices.length == 2 &&
+            controller.activeDeviceKey == 'pc-b' &&
+            controller.status == ConnectionStatus.connected,
+      );
+
+      expect(controller.qrScanMode, isFalse);
+      expect(
+        controller.pairedDevices
+            .firstWhere((device) => device.deviceKey == 'pc-a')
+            .connected,
+        isTrue,
+      );
+      // 旧设备没有被新的扫码覆盖/断开。
+      expect(pcAChannel.closed, isFalse);
+      expect(controller.activeDeviceName, 'Home-Laptop');
+    },
+  );
+
+  test(
+    'QR rescan of the same device merges candidates without duplicate entry',
+    () async {
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final pcA = SavedServer(
+        deviceId: 'pc-a',
+        ip: '192.168.1.50',
+        ips: const ['192.168.1.50'],
+        port: 9527,
+        name: 'Office-PC',
+        os: 'windows',
+        lastConnectedTs: nowMs - 1000,
+      );
+      await seedPairedDevices([pcA], activeDeviceKey: 'pc-a');
+
+      final provider = FakeNetworkSnapshotProvider(
+        wifiSnapshot(ip: '192.168.1.5'),
+      );
+      final factory = FakeChannelFactory();
+      factory.behaviors['192.168.1.50'] = FakeServerBehavior(accept: true);
+      factory.behaviors['192.168.1.51'] = FakeServerBehavior(
+        accept: true,
+        respondToPing: true,
+      );
+
+      final controller = VoicingConnectionController(
+        tuning: fastTuning(),
+        networkSnapshotProvider: provider,
+        channelFactory: factory.call,
+      );
+      addTearDown(() async {
+        controller.dispose();
+        await provider.dispose();
+      });
+
+      await controller.initialize();
+      await settleUntil(() => controller.status == ConnectionStatus.connected);
+
+      controller.enterQrScanMode();
+      controller.handleQrDetected(
+        jsonEncode({
+          'v': 1,
+          'type': 'voicing',
+          'device_id': 'pc-a',
+          'ip': '192.168.1.51',
+          'ips': ['192.168.1.51', '192.168.1.50'],
+          'port': 9527,
+          'name': 'Office-PC',
+          'os': 'windows',
+        }),
+        const [],
+      );
+      await settleUntil(
+        () => controller.status == ConnectionStatus.connected &&
+            controller.savedServer?.ip == '192.168.1.51',
+      );
+
+      expect(controller.pairedDevices, hasLength(1));
+      expect(controller.activeDeviceKey, 'pc-a');
+      expect(
+        controller.savedServer!.candidateIps,
+        containsAll(<String>['192.168.1.51', '192.168.1.50']),
+      );
+    },
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -326,6 +836,19 @@ ConnectionTuning fastTuning() {
 Future<void> seedSavedServer(SavedServer server) async {
   SharedPreferences.setMockInitialValues({
     SavedServerStore.savedServerKey: jsonEncode(server.toJson()),
+  });
+}
+
+Future<void> seedPairedDevices(
+  List<SavedServer> servers, {
+  required String activeDeviceKey,
+}) async {
+  SharedPreferences.setMockInitialValues({
+    SavedServerStore.savedServersKey: jsonEncode({
+      'schema_version': SavedServerStore.savedServersSchemaVersion,
+      'servers': servers.map((server) => server.toJson()).toList(),
+    }),
+    SavedServerStore.activeDeviceKey: activeDeviceKey,
   });
 }
 
@@ -413,6 +936,9 @@ class FakeVoicingWebSocketChannel implements VoicingWebSocketChannel {
   late final FakeVoicingWebSocketSink _sink;
   bool closed = false;
 
+  /// 记录本通道收到的客户端消息，多设备路由断言用。
+  final List<String> sentMessages = <String>[];
+
   @override
   Stream<dynamic> get stream => _controller.stream;
 
@@ -446,7 +972,18 @@ class FakeVoicingWebSocketChannel implements VoicingWebSocketChannel {
     }
   }
 
+  /// 主动向客户端发送一条 ACK（模拟 PC 端注入完成），用于多设备路由断言。
+  void emitAck({bool clearInput = true}) {
+    _emit(
+      jsonEncode({
+        'type': 'ack',
+        'clear_input': clearInput,
+      }),
+    );
+  }
+
   void handleSent(String message) {
+    sentMessages.add(message);
     final decoded = jsonDecode(message);
     if (decoded is Map && decoded['type'] == 'ping' && _behavior.respondToPing) {
       _emit(jsonEncode({'type': 'pong', 'sync_enabled': true}));

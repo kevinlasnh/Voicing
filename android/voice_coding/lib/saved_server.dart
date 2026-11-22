@@ -41,6 +41,13 @@ class SavedServer {
 
   bool get hasDeviceId => deviceId.isNotEmpty;
 
+  /// 多设备列表内的稳定 Key（2026-11-22 新增）。
+  ///
+  /// 有 PC 的持久 `device_id` 时直接用它；早期手动 IP / 旧数据没有 device_id，
+  /// 退化为 `legacy:ip:port`，保证同一台设备重复添加时能被识别而不是并列两份。
+  String get deviceKey =>
+      deviceId.isNotEmpty ? deviceId : 'legacy:$ip:$port';
+
   String get displayName => name.isNotEmpty ? name : ip;
 
   /// 地址簿（保证包含主地址与所有候选；无显式地址簿时按 v1 语义推导）。
@@ -159,8 +166,9 @@ class SavedServer {
 
   /// v2 合并：候选 IP + 地址簿历史一起合并，保留不同网络的全部成功记录。
   ///
-  /// 只在同一设备（或旧数据没有 device_id）时合并；不同设备必须经用户确认
-  /// 后直接替换，不能把旧设备的历史地址混进来。
+  /// 只在同一设备（或旧数据没有 device_id）时合并；2026-11-22 多设备后，
+  /// 不同设备是并列保存在设备列表里，不再存在「替换」语义，也绝不能把
+  /// 不同设备的地址历史混进同一条记录。
   SavedServer mergeAddressHistoryFrom(SavedServer previous) {
     if (!_canMergeCandidateIps(previous, this)) {
       return this;
@@ -312,49 +320,280 @@ bool _listEquals(List<String> a, List<String> b) {
   return true;
 }
 
+/// 多设备快照（2026-11-22 新增，schema v3）。
+///
+/// [servers] 是这台手机配对过的全部 PC（按配对先后顺序，稳定不重排），
+/// [activeDeviceKey] 是用户当前在「设备选择」里选中的发送目标。
+class PairedDevicesSnapshot {
+  const PairedDevicesSnapshot({
+    this.servers = const <SavedServer>[],
+    this.activeDeviceKey = '',
+  });
+
+  static const PairedDevicesSnapshot empty = PairedDevicesSnapshot();
+
+  final List<SavedServer> servers;
+  final String activeDeviceKey;
+}
+
+/// 已配对 PC 的本地存储。
+///
+/// 2026-11-22 由「单设备覆盖」升级为「多设备列表」（schema v3）：
+/// - 新格式写在 `saved_servers`（JSON：schema_version + servers 数组），
+///   活跃设备 Key 单独写 `active_device_key`；
+/// - 旧格式 `saved_server`（v1/v2 单设备）读入时自动迁移成列表，
+///   同时继续回写一份单设备 `saved_server`（= 活跃设备），保证降级/回滚
+///   到旧版本仍能读到一台可用设备；
+/// - 所有写入都在 SharedPreferences 上串行执行（见 controller 的持久化队列），
+///   这里保持纯数据层，不做网络 IO、不做业务合并。
 class SavedServerStore {
   static const String savedServerKey = 'saved_server';
+  static const String savedServersKey = 'saved_servers';
+  static const String activeDeviceKey = 'active_device_key';
   static const String legacyManualServerIpKey = 'manual_server_ip';
   static const String legacyManualServerPortKey = 'manual_server_port';
 
+  /// 列表存储格式版本；单台设备内部仍是 [SavedServer.currentSchemaVersion]。
+  static const int savedServersSchemaVersion = 3;
+
   const SavedServerStore();
 
+  /// 兼容旧单设备 API：返回活跃设备（无活跃记录时取第一台）。
   Future<SavedServer?> load() async {
+    final snapshot = await loadSnapshot();
+    if (snapshot.servers.isEmpty) {
+      return null;
+    }
+    for (final server in snapshot.servers) {
+      if (server.deviceKey == snapshot.activeDeviceKey) {
+        return server;
+      }
+    }
+    return snapshot.servers.first;
+  }
+
+  /// 读取全部已配对设备 + 活跃设备 Key，并完成 v1/v2 单设备数据迁移。
+  Future<PairedDevicesSnapshot> loadSnapshot() async {
     final prefs = await SharedPreferences.getInstance();
-    final rawSavedServer = prefs.getString(savedServerKey);
-    if (rawSavedServer != null && rawSavedServer.isNotEmpty) {
-      try {
-        final decoded = json.decode(rawSavedServer);
-        if (decoded is Map) {
-          final map = Map<String, dynamic>.from(decoded);
-          final server = SavedServer.fromJson(map);
-          // v1 -> v2：读入时已迁移成地址簿，顺手回写一次，避免每次启动重复迁移。
-          if (SavedServer.readInt(map['schema_version']) !=
-              SavedServer.currentSchemaVersion) {
-            await save(server);
-          }
-          return server;
+
+    final rawList = prefs.getString(savedServersKey);
+    if (rawList != null && rawList.isNotEmpty) {
+      final servers = _decodeServerList(rawList);
+      // 空列表 / 所有条目都损坏时不能当成「用户删空设备」返回：正常清空会
+      // 删除 saved_servers Key，不会留下空数组。这里回退到旧单设备镜像迁移，
+      // 避免明明还有一份可用 saved_server 却显示没有设备。
+      if (servers != null && servers.isNotEmpty) {
+        final storedActiveKey = (prefs.getString(activeDeviceKey) ?? '').trim();
+        var activeKey = _resolveActiveKey(servers, storedActiveKey);
+
+        // 降级到旧版 APK 时，旧版只会写单设备 saved_server（可能新配对/切换过）。
+        // 升级回来必须与 v3 列表对账：同一 deviceKey 合并地址历史，新 deviceKey
+        // 追加进列表；若镜像记录明显更新，则把它设为活跃设备。否则降级期间
+        // 的变化会被静默丢弃。
+        final rawLegacy = prefs.getString(savedServerKey);
+        final legacy = _parseStoredServer(rawLegacy);
+        if (legacy == null && rawLegacy != null && rawLegacy.isNotEmpty) {
+          // 降级镜像损坏：删掉，避免每次启动重复解析失败（v3 列表仍是权威）。
+          await prefs.remove(savedServerKey);
         }
-      } catch (_) {
-        await prefs.remove(savedServerKey);
+        if (legacy != null) {
+          final merged = List<SavedServer>.of(servers);
+          final index = merged.indexWhere(
+            (server) => server.deviceKey == legacy.deviceKey,
+          );
+          var changed = false;
+          if (index >= 0) {
+            // 同一台设备：谁更新就以谁的身份字段为主（降级期间可能改过名/换了
+            // 主地址、刷新过 lastConnectedTs），再把另一份的地址历史并进来。
+            final current = merged[index];
+            final base = legacy.lastConnectedTs > current.lastConnectedTs
+                ? legacy
+                : current;
+            final other = identical(base, legacy) ? current : legacy;
+            final reconciled = base.mergeAddressHistoryFrom(other);
+            if (reconciled != current) {
+              merged[index] = reconciled;
+              changed = true;
+            }
+          } else {
+            merged.add(legacy);
+            changed = true;
+          }
+          final currentActive = merged.firstWhere(
+            (server) => server.deviceKey == activeKey,
+            orElse: () => merged.first,
+          );
+          if (legacy.lastConnectedTs > currentActive.lastConnectedTs) {
+            activeKey = legacy.deviceKey;
+            changed = true;
+          }
+          if (changed) {
+            await saveAll(merged, activeDeviceKey: activeKey);
+          }
+          return PairedDevicesSnapshot(
+            servers: List<SavedServer>.unmodifiable(merged),
+            activeDeviceKey: activeKey,
+          );
+        }
+        return PairedDevicesSnapshot(
+          servers: List<SavedServer>.unmodifiable(servers),
+          activeDeviceKey: activeKey,
+        );
+      }
+      // v3 列表损坏：丢弃，避免每次启动都解析失败；后续走旧格式迁移。
+      await prefs.remove(savedServersKey);
+    }
+
+    final servers = <SavedServer>[];
+    final rawSavedServer = prefs.getString(savedServerKey);
+    final parsedSavedServer = _parseStoredServer(rawSavedServer);
+    if (parsedSavedServer != null) {
+      servers.add(parsedSavedServer);
+    } else if (rawSavedServer != null && rawSavedServer.isNotEmpty) {
+      // 旧单设备数据损坏：删除后继续尝试手动 IP 迁移。
+      await prefs.remove(savedServerKey);
+    }
+
+    if (servers.isEmpty) {
+      final migrated = await _migrateLegacyManualServer(prefs);
+      if (migrated != null) {
+        servers.add(migrated);
       }
     }
 
-    return _migrateLegacyManualServer(prefs);
+    if (servers.isEmpty) {
+      return PairedDevicesSnapshot.empty;
+    }
+
+    // 迁移结果立刻回写成 v3 列表 + 单设备兼容字段，避免每次启动重复迁移。
+    await saveAll(servers, activeDeviceKey: servers.first.deviceKey);
+    return PairedDevicesSnapshot(
+      servers: List<SavedServer>.unmodifiable(servers),
+      activeDeviceKey: servers.first.deviceKey,
+    );
   }
 
+  /// 兼容旧单设备 API：按 deviceKey 覆盖或追加一台设备，并把它设为活跃设备。
   Future<void> save(SavedServer server) async {
+    final snapshot = await loadSnapshot();
+    final servers = List<SavedServer>.of(snapshot.servers);
+    final index = servers.indexWhere(
+      (existing) => existing.deviceKey == server.deviceKey,
+    );
+    if (index >= 0) {
+      servers[index] = server;
+    } else {
+      servers.add(server);
+    }
+    await saveAll(servers, activeDeviceKey: server.deviceKey);
+  }
+
+  /// 全量写回设备列表与活跃设备 Key（顺序即 UI 展示顺序）。
+  Future<void> saveAll(
+    List<SavedServer> servers, {
+    String? activeDeviceKey,
+  }) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(savedServerKey, json.encode(server.toJson()));
     await prefs.remove(legacyManualServerIpKey);
     await prefs.remove(legacyManualServerPortKey);
+
+    if (servers.isEmpty) {
+      await prefs.remove(savedServersKey);
+      await prefs.remove(savedServerKey);
+      await prefs.remove(SavedServerStore.activeDeviceKey);
+      return;
+    }
+
+    final activeKey = _resolveActiveKey(servers, activeDeviceKey ?? '');
+    final activeServer = servers.firstWhere(
+      (server) => server.deviceKey == activeKey,
+      orElse: () => servers.first,
+    );
+    final payload = <String, dynamic>{
+      'schema_version': savedServersSchemaVersion,
+      'servers': servers.map((server) => server.toJson()).toList(),
+    };
+    await prefs.setString(savedServersKey, json.encode(payload));
+    await prefs.setString(SavedServerStore.activeDeviceKey, activeServer.deviceKey);
+    // 兼容字段：旧版本只认单台 saved_server，写入当前活跃设备。
+    await prefs.setString(savedServerKey, json.encode(activeServer.toJson()));
   }
 
   Future<void> clear() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(savedServerKey);
+    await prefs.remove(savedServersKey);
+    await prefs.remove(activeDeviceKey);
     await prefs.remove(legacyManualServerIpKey);
     await prefs.remove(legacyManualServerPortKey);
+  }
+
+  static String _resolveActiveKey(
+    List<SavedServer> servers,
+    String storedKey,
+  ) {
+    if (servers.isEmpty) {
+      return '';
+    }
+    final normalized = storedKey.trim();
+    if (normalized.isNotEmpty &&
+        servers.any((server) => server.deviceKey == normalized)) {
+      return normalized;
+    }
+    // 活跃设备缺失（首次迁移 / 设备被删）：退回最近连接过的一台。
+    var latest = servers.first;
+    for (final server in servers) {
+      if (server.lastConnectedTs > latest.lastConnectedTs) {
+        latest = server;
+      }
+    }
+    return latest.deviceKey;
+  }
+
+  /// 宽松解析单设备 JSON（v1/v2 saved_server）：失败返回 null，不抛异常。
+  static SavedServer? _parseStoredServer(String? raw) {
+    if (raw == null || raw.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = json.decode(raw);
+      if (decoded is! Map) {
+        return null;
+      }
+      return SavedServer.fromJson(Map<String, dynamic>.from(decoded));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// 解析 v3 设备列表；格式不合法返回 null（调用方决定是否降级迁移）。
+  static List<SavedServer>? _decodeServerList(String raw) {
+    try {
+      final decoded = json.decode(raw);
+      Object? rawServers;
+      if (decoded is List) {
+        rawServers = decoded;
+      } else if (decoded is Map) {
+        rawServers = decoded['servers'];
+      }
+      if (rawServers is! List) {
+        return null;
+      }
+      final servers = <SavedServer>[];
+      for (final rawServer in rawServers) {
+        if (rawServer is! Map) {
+          continue;
+        }
+        try {
+          servers.add(SavedServer.fromJson(Map<String, dynamic>.from(rawServer)));
+        } catch (_) {
+          // 单条损坏只跳过这条，不让整份列表失效。
+        }
+      }
+      return servers;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<SavedServer?> _migrateLegacyManualServer(
@@ -375,7 +614,9 @@ class SavedServerStore {
       os: '',
       lastConnectedTs: DateTime.now().millisecondsSinceEpoch,
     );
-    await save(migrated);
+    // 直接写列表，不能走 save()：save() 会再次 loadSnapshot()，而此时旧
+    // manual_server_* Key 还在，会递归触发迁移导致死循环。
+    await saveAll([migrated], activeDeviceKey: migrated.deviceKey);
     return migrated;
   }
 }
