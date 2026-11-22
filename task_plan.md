@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 40（complete）
+阶段 41（complete）
 
 ## 各阶段
 
@@ -445,5 +445,31 @@
 - 资产：`voicing.apk`、`voicing-windows-x64.exe`、`voicing-macos-arm64.dmg`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`、`SHA256SUMS.txt`（扁平 basename，5 行校验和）。
 - 本机：官方 `voicing-linux-amd64.deb`（SHA256 `69b5bd7d…31789`）安装为 2.9.14；`/opt/voicing/voicing` SHA256 `75c2de42…b6239` = Release standalone 资产；监听 `10.10.0.225:9527` + `100.104.201.81:9527`（无 docker0），日志 0 ERROR/WARNING。
 - 用户侧：官方 APK 已下载到 `~/Downloads/Voicing-2.9.14/voicing.apk`，可直接安装到手机。
+
+- **状态：** complete
+
+## 阶段 41：同步云端最新进度 + 本机安装 v2.9.14 + 记录推送（2026-11-22）
+
+### 目标
+1. 把云端仓库的最新进度同步到本机（只拉取，不改写历史）。
+2. 在本机安装最新官方 Voicing 桌面端，保持开机自启与手机可连接。
+3. 记录进度并 push 到 `origin/main`。
+
+### 计划
+- [x] `git fetch` 后比较本地与远端，确认落后提交数与最新 tag
+- [x] `git pull --ff-only` 快进到 `origin/main`
+- [x] 核对仓库版本号与 GitHub `releases/latest`
+- [x] 下载官方 `voicing-linux-amd64.deb` 并用 `SHA256SUMS.txt` 校验
+- [x] 停旧进程、`dpkg -i` 覆盖安装，校验版本与二进制哈希
+- [x] 启动并验证自启单元、9527 监听与启动日志
+- [x] 更新 PWF 三件套并 push
+
+### 结果（2026-11-22 11:33–11:40）
+- 同步：本地 `3f8341b` → `9040709`，快进 5 个提交（35 文件，+8803/−2211），同时拉入 tag `v2.9.14`；仓库版本 `PC 2.9.14` / `Android 2.9.14+15`，GitHub `releases/latest` 同为 v2.9.14。
+- 安装基线纠正：本机实际为 `voicing 2.9.13`（`/opt/voicing/voicing` SHA-256 `b958f4c8…b6d0d` 属 2.9.13 产物），与仓库 2026-11-21 的安装记录不一致。
+- 安装：官方 DEB 75,794,776 B，SHA-256 `69b5bd7d…631789`（与 Release API digest 一致）→ `dpkg -i` 升级为 `voicing 2.9.14 amd64`；`/opt/voicing/voicing` 76,805,904 B、`root:root` 0755、SHA-256 `75c2de42…6b6239`（= `voicing-linux-x86_64` standalone 资产）。
+- 运行：`systemctl --user start app-voicing@autostart.service` → active，主进程 22192 + PyInstaller 子进程 22202；监听 `192.168.50.113:9527` + `100.102.136.4:9527`（无 docker0）；日志含 2.9.14 新增「可调参数生效值」表与「托盘就绪」，当日 0 ERROR/WARNING。
+- 自启：`~/.config/autostart/voicing.desktop` 保持 `Exec=/opt/voicing/voicing`、`X-GNOME-Autostart-enabled=true`，升级未改动用户级自启项。
+- 连通：重启后约 1 秒内手机 `192.168.50.56`（`okhttp/4.12.0`）自动重连成功并保持 ESTAB，已保存配对无需重扫。
 
 - **状态：** complete

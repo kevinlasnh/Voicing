@@ -1461,3 +1461,23 @@
 - 本机改用官方产物：停止运行中的本地构建（PID 17409/17412）→ `sudo -n dpkg -i` 官方 DEB（2.9.14，75,794,776 B）→ `/opt/voicing/voicing` SHA256 `75c2de42…b6239`、root:root 0755；`systemctl --user start app-voicing@autostart.service` 启动后主进程 29815 常驻，监听 `10.10.0.225:9527` + `100.104.201.81:9527`（无 docker0），日志含「托盘就绪」、该次启动 0 ERROR/WARNING，自启单元 active。
 - 用户侧：官方 APK 已下载到 `~/Downloads/Voicing-2.9.14/voicing.apk`（SHA256 `9b7634c6…23a4f`），可直接安装手机；安装后旧配对数据自动迁移，无需重扫。
 - 备注：CI 用 Python 3.12 构建的二进制 76.8MB，本机 venv Python 3.10 本地构建为 61.2MB，同源码但产物不同；本机现已运行官方 Release 资产。
+
+## 会话：2026-11-22 CST — 阶段 41：同步云端进度 + 本机安装 v2.9.14 + 推送
+
+### 云端同步（11:33–11:34）
+- 起始：`main` = `3f8341b`（v2.9.13 收口提交），工作区干净、无未跟踪文件；`git fetch --all --prune` 后 `origin/main` = `9040709`，本地落后 5 个提交，同时拉入 tag `v2.9.14`。
+- `git pull --ff-only` 快进 `3f8341b..9040709`：35 个文件、+8803/−2211，新增 `connection_race.dart`、`network_profile.dart`、`server_address_book.dart`、`pc/voicing_server.py`、`pc/tray_ui.py`、`pc/qr_dialog.py`、`pc/voicing_tuning.py` 等 2.9.14 模块与测试。
+- 版本自检：`pc/voice_coding.py` `APP_VERSION = "2.9.14"`、`android/voice_coding/pubspec.yaml` `2.9.14+15`、最新 tag `v2.9.14`；GitHub API `releases/latest` = v2.9.14（published 2026-11-21T03:13:03Z，6 项资产）。
+
+### 官方 2.9.14 本机安装（11:34–11:40）
+- 安装前事实：`dpkg-query` 显示 `voicing 2.9.13`，`/opt/voicing/voicing` 76,739,144 B、SHA-256 `b958f4c8…b6d0d`（2.9.13 产物），进程 3786/4504 正在监听 `192.168.50.113:9527` + `100.102.136.4:9527`；即本机从未落地 2.9.14，仓库 2026-11-21 的「已安装 2.9.14」不适用于这台机器。
+- 下载：`gh release download v2.9.14 --pattern voicing-linux-amd64.deb --pattern SHA256SUMS.txt` 到 `/tmp/voicing-v2914/`（约 5 分钟）；`sha256sum -c --ignore-missing SHA256SUMS.txt` → `OK`，DEB SHA-256 `69b5bd7d…631789` 与 Release API digest 一致。
+- 安装：`pkill -TERM -x voicing` 停旧进程并轮询 `pgrep -x voicing` 确认无残留（`-x` 精确匹配，避免误杀执行命令的 shell）→ `sudo -n dpkg -i` 由 2.9.13 覆盖升级到 2.9.14，`Setting up voicing (2.9.14)` 与 gnome-menus / desktop-file-utils / hicolor 触发器均正常。
+- 校验：`dpkg-query` = `voicing 2.9.14 amd64`；`/opt/voicing/voicing` 76,805,904 B、`root:root` 0755、SHA-256 `75c2de42…6b6239`，与 Release `voicing-linux-x86_64` 资产完全一致。
+- 启动：`systemctl --user start app-voicing@autostart.service`（xdg-autostart 生成单元）→ `active`；主进程 22192 + PyInstaller onefile 子进程 22202 常驻。
+- 监听与日志：`ss -ltnp` 显示 `192.168.50.113:9527`（wifi `wlp0s20f3`，接口枚举 9.86ms）与 `100.102.136.4:9527`（Tailscale）两个监听，无 docker0；`voice_coding_20261122.log` 出现 2.9.14 新增的「可调参数生效值」块、「托盘就绪: 图标定时器 200ms 已启动」、带 `remote`/`ua`/在线数的结构化连接日志，当日 0 ERROR/WARNING。
+- 自启：`~/.config/autostart/voicing.desktop` 保持 `Exec=/opt/voicing/voicing`、`TryExec=/opt/voicing/voicing`、`OnlyShowIn=GNOME;`、`X-GNOME-Autostart-enabled=true`，`dpkg` 升级不改动用户目录。
+- 手机连通：重启后 11:39:15 手机 `192.168.50.56`（`okhttp/4.12.0`）自动重连，okhttp 在首连后立即以新端口重建一次（code 1006、0 msg），随后保持 ESTAB 在线数 1 —— 已保存地址簿免重扫逻辑在实机生效。
+
+### 收尾
+- 本轮不改业务代码、不改版本号、不触发 Release；提交内容仅为 PWF 三件套增量记录，随后 push 到 `origin/main`。

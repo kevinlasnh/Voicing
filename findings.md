@@ -649,3 +649,12 @@
 - Release 校验闭环：`SHA256SUMS.txt` 扁平 5 行 == Release API assets digest（5 项逐一相同），deb 内二进制 digest == standalone 资产 digest == 本机安装后 `/opt/voicing/voicing` digest，说明「校验文件 / 发布资产 / 安装包 / 运行二进制」四者一致。[本地命令输出·confirmed]
 - CI 与本地构建差异：CI Python 3.12 打包二进制 76.8MB，本机 venv Python 3.10 为 61.2MB，同源码但产物不同；正式安装应以官方 Release 资产为准（本机已切换）。[构建·confirmed]
 - 失败 run 的 watch 命令经 `| tail` 会掩盖 `--exit-status` 的非零退出码（tail 退出码为 0），判断 CI 结果必须直接查 `gh run view --json conclusion`，不能只看管道退出码。[工具经验]
+
+## 2026-11-22 同步与本机安装发现
+
+- 仓库里的「已安装某版本」记录不能当作本机事实：本次开机后 `dpkg-query` 仍是 `voicing 2.9.13`，`/opt/voicing/voicing` 76,739,144 B、SHA-256 `b958f4c8…b6d0d`（2.9.13 产物），与 2026-11-21 PWF 记录的「已装 2.9.14、二进制 `75c2de42…`」不一致。安装类结论必须以本机 `dpkg-query` + 二进制哈希重新核对。[本地命令输出·confirmed]
+- 只比对版本号不够：DEB 内 `/opt/voicing/voicing` 的 SHA-256 与 Release `voicing-linux-x86_64` standalone 资产 digest 相同（`75c2de42…b6239`），因此「下载的 DEB / 安装后的二进制 / 发布资产」可以三点交叉校验，避免装到同版本号的旧构建或本地构建。[本地命令输出·confirmed]
+- `dpkg -i` 升级只替换 `/opt/voicing` 与 `/usr/{bin,share}` 下的系统文件，`~/.config/autostart/voicing.desktop` 原样保留；重启程序走 `systemctl --user start app-voicing@autostart.service`，与登录自启同一条生成单元路径，不需要重新配置自启。[本地命令输出·confirmed]
+- 2.9.14 的日志可观测性明显强于 2.9.13：新增「可调参数生效值」表（文本注入 / 网络自适应 / WebSocket / UI / 日志五组）、接口枚举耗时、带 `remote`/`ua`/在线数的连接与断开记录，排障不再依赖 console print。[日志·confirmed]
+- 重启后手机 1 秒内自动重连（`192.168.50.56`，`okhttp/4.12.0`），说明 2.9.14 的已保存地址簿重连路径在真实 X11 + LAN + Tailscale 环境下可用；okhttp 在首连后立即换端口重建一次（code 1006、0 消息）属客户端连接管理行为，不是服务端抖动——最终连接保持 ESTAB。[日志·实测]
+- `pkill -x voicing` 比 `pkill -f "/opt/voicing/voicing"` 安全：后者会匹配执行命令的 shell 自身（2026-09-25 已踩坑），`-x` 只按进程名精确匹配；停止后要轮询 `pgrep -x voicing` 确认无残留再 `dpkg -i`。[工具经验]
