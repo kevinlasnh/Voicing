@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.10.0-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.1-green)](#)
 
 [English](README.md) | **简体中文**
 
@@ -192,8 +192,8 @@ Voicing/
 正式发布通过 GitHub Actions 自动构建，只构建三个平台（Android / Windows / Linux）；macOS job 已删除，官方 Release 不再产出 macOS DMG。tag 发布固定产出 4 个构建产物（`voicing.apk`、`voicing-windows-x64.exe`、`voicing-linux-amd64.deb`、`voicing-linux-x86_64`）加 `SHA256SUMS.txt`：
 
 ```bash
-git tag v2.10.0
-git push origin v2.10.0
+git tag v2.10.1
+git push origin v2.10.1
 ```
 
 手动构建使用 `workflow_dispatch` 触发（GitHub Actions 页面 Run workflow，或命令行）：
@@ -202,7 +202,7 @@ git push origin v2.10.0
 gh workflow run release.yml --ref main
 ```
 
-手动构建只产出当前 APK 与 Linux DEB / standalone 二进制，作为 workflow artifact（`android-apk`、`linux-deb`、`linux-bin`）保留在本次 run 页面，不会创建 GitHub Release，也不产出 Windows EXE；版本号只从仓库版本文件（`pubspec.yaml` / `APP_VERSION`）推导，不会使用分支名。
+手动构建会自动发布一个新的 GitHub Release：从仓库版本文件（`pubspec.yaml` / `APP_VERSION`，不会使用分支名）推导版本号，在本次构建的 commit 上创建 tag `vX.Y.Z`，并把 APK、Linux DEB、Linux standalone 二进制与 `SHA256SUMS.txt` 上传到该 Release。workflow artifact（`android-apk`、`linux-deb`、`linux-bin`）仍保留在本次 run 页面。手动发布不构建 Windows EXE；tag 推送发布保留 Windows 资产。
 
 本地调试用：
 

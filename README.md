@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.10.0-green)](#)
+[![Version](https://img.shields.io/badge/version-2.10.1-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -192,8 +192,8 @@ Voicing/
 Production releases run through GitHub Actions and build three platforms (Android / Windows / Linux); the macOS job was removed, so official releases no longer produce a macOS DMG. A tag release publishes the four build artifacts (`voicing.apk`, `voicing-windows-x64.exe`, `voicing-linux-amd64.deb`, `voicing-linux-x86_64`) plus `SHA256SUMS.txt`:
 
 ```bash
-git tag v2.10.0
-git push origin v2.10.0
+git tag v2.10.1
+git push origin v2.10.1
 ```
 
 Manual builds use the `workflow_dispatch` trigger from the Actions page (Build And Release → Run workflow) or:
@@ -202,7 +202,7 @@ Manual builds use the `workflow_dispatch` trigger from the Actions page (Build A
 gh workflow run release.yml --ref main
 ```
 
-A manual run builds only the current APK and the Linux DEB / standalone binary, keeps them as workflow artifacts (`android-apk`, `linux-deb`, `linux-bin`) on the run page, and does not create a GitHub Release or a Windows EXE. Its version always comes from the repository version files (`pubspec.yaml` / `APP_VERSION`), never from a branch name.
+A manual run publishes a fresh GitHub Release automatically: it derives the version from the repository version files (`pubspec.yaml` / `APP_VERSION`, never from a branch name), creates tag `vX.Y.Z` at the built commit, and uploads the APK, Linux DEB, Linux standalone binary and `SHA256SUMS.txt` to that Release. Workflow artifacts (`android-apk`, `linux-deb`, `linux-bin`) are still kept on the run page. Manual releases do not build a Windows EXE; tag-push releases keep it.
 
 Local debug builds:
 

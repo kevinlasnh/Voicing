@@ -15,6 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.10.1] - 2026-11-22
+
+### Changed
+
+- CI: manual `workflow_dispatch` builds now automatically create or update the GitHub Release for the repository version. The workflow derives the version from `pubspec.yaml` / `APP_VERSION`, creates tag `vX.Y.Z` at the built commit and publishes the APK, Linux DEB, Linux standalone binary and `SHA256SUMS.txt`; the run no longer stops at workflow artifacts. Tag-push releases keep the extra Windows EXE
+- CI: release notes are now always extracted from `CHANGELOG.md` for the resolved version (both trigger paths), and the workflow fails if the matching bilingual block is missing, so every automated Release has complete notes
+- Docs/agents: a new mandatory release rule requires bumping the version and CHANGELOG whenever all tasks are completed, pushing the changes and triggering the Action so a fresh GitHub Release is published; the APK is installed by the user from the Release, while agents only download the Linux DEB when a local reinstall is needed
+
+### Notes
+
+- No runtime code change: Android and desktop behaviour is identical to 2.10.0
+
+### 变更
+
+- CI：`workflow_dispatch` 手动构建现在会自动创建/更新 GitHub Release。workflow 从 `pubspec.yaml` / `APP_VERSION` 推导版本号，在本次构建的 commit 上创建 tag `vX.Y.Z`，并发布 APK、Linux DEB、Linux standalone 二进制与 `SHA256SUMS.txt`，不再只停留在 workflow artifact。tag 推送发布仍额外包含 Windows EXE
+- CI：两条触发路径都会从 `CHANGELOG.md` 提取对应版本的发布说明，缺少该版本双语块时 workflow 直接失败，确保每次自动 Release 都有完整说明
+- 文档/Agent：新增强制发版规则——每轮全部任务完成后必须升版本号、写 CHANGELOG、push 并触发 Action，从而自动发布新的 GitHub Release；APK 由用户从 Release 自行安装，agent 只在需要本地重装 Linux 时下载 DEB
+
+### 说明
+
+- 无运行时代码改动：Android 与桌面端行为与 2.10.0 完全一致
+
+---
+
 ## [2.10.0] - 2026-11-22
 
 ### Added

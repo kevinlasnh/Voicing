@@ -58,7 +58,7 @@ flutter build apk --release
 ## 构建说明
 
 - GitHub Actions 发布环境使用 Java 17，可正常产出 `voicing.apk`
-- tag 发布构建 Android / Windows / Linux 三个平台并作为 GitHub Release 资产发布；`workflow_dispatch` 手动构建只产出 APK 与 Linux DEB / standalone 二进制，作为 workflow artifact 留在本次 run 页面，不会创建 GitHub Release
+- tag 发布构建 Android / Windows / Linux 三个平台并作为 GitHub Release 资产发布；`workflow_dispatch` 手动构建现在也会自动发布新的 GitHub Release（tag 为 `v<仓库版本号>`，资产含 APK、Linux DEB/standalone 与 `SHA256SUMS.txt`，不含 Windows EXE），同时仍在本次 run 页面保留 workflow artifact
 - 本地如果默认 Java 指向 25，`flutter build apk --release` 会失败；请在 `android/local.properties` 中通过 `org.gradle.java.home` 指向兼容的 JDK 17/21
 - 改动 `MainActivity.kt`、Manifest 或 Gradle 配置后必须完整重新安装 APK；Flutter hot restart 不会更新原生层
 - 改动键盘高度、WiFi-bound WebSocket 等原生桥接逻辑后，必须用完整 APK 重新安装验证

@@ -58,7 +58,7 @@ flutter build apk --release
 ## Build notes
 
 - The GitHub Actions release pipeline uses Java 17 and produces `voicing.apk` as expected
-- Tag releases build Android / Windows / Linux and publish them as GitHub Release assets; the `workflow_dispatch` manual build produces only the APK and the Linux DEB/standalone binary as workflow artifacts on the run page, and does not create a GitHub Release
+- Tag releases build Android / Windows / Linux and publish them as GitHub Release assets; a `workflow_dispatch` manual build now also publishes a fresh GitHub Release automatically (tag `v<version>` from the repository version files, APK + Linux DEB/standalone + `SHA256SUMS.txt`; no Windows EXE), while still keeping the workflow artifacts on the run page
 - If your local default Java points to 25, `flutter build apk --release` will fail; set `org.gradle.java.home` in `android/local.properties` to a compatible JDK 17/21
 - After changes to `MainActivity.kt`, the Manifest, or Gradle config, you must reinstall the full APK — Flutter hot restart does not refresh the native layer
 - The same applies to native bridges like keyboard-height handling and the WiFi-bound WebSocket — verify with a fresh APK install

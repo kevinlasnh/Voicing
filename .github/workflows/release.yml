@@ -1,9 +1,11 @@
 name: Build And Release
 
-# 触发方式（2026-11-22 改造）：
+# 触发方式（2026-11-22 第二次改造）：
 # 1) 推送 v* tag：完整发布流程，构建 Android / Windows / Linux 并创建 GitHub Release。
-# 2) workflow_dispatch 手动触发：只构建 Android APK 与 Linux DEB + standalone binary，
-#    产物通过 upload-artifact 保留在本次 run 页面；Windows 只在 tag 构建，不发布 Release。
+# 2) workflow_dispatch 手动触发：同样自动创建/更新 GitHub Release（tag 由 workflow
+#    自动创建为 v<仓库版本号>），资产包含 Android APK + Linux DEB/standalone；
+#    手动发布不构建 Windows。任何一次「完成全部任务」后的发版都走这条路径。
+# 3) 两条路径都会上传 workflow artifact，便于核对/下载；tag 推送保留 Windows 资产。
 # macOS 构建已按用户要求彻底移除（不再编译 macOS Action），禁止再加回 build-macos。
 on:
   push:
@@ -21,6 +23,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       version_number: ${{ steps.version.outputs.version_number }}
+      release_tag: ${{ steps.version.outputs.release_tag }}
       is_release: ${{ steps.version.outputs.is_release }}
 
     steps:
@@ -39,8 +42,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          # 只有 push tag 才算正式发布；workflow_dispatch 即使 ref 指向 tag，
-          # 也按手动构建处理（不构建 Windows、不创建 GitHub Release）。
+          # push tag = 完整发布（含 Windows）；workflow_dispatch 手动构建也会
+          # 自动发布 Release（无 Windows），因此 release_tag 两条路径都要给出。
           if [ "$EVENT_NAME" = "push" ] && [ "$REF_TYPE" = "tag" ]; then
             VERSION="$REF_NAME"
             VERSION_NUMBER="${REF_NAME#v}"
@@ -76,48 +79,56 @@ jobs:
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "version_number=$VERSION_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "release_tag=v$VERSION_NUMBER" >> "$GITHUB_OUTPUT"
           echo "is_release=$IS_RELEASE" >> "$GITHUB_OUTPUT"
-          echo "::notice title=Build version::构建版本 $VERSION（version_number=$VERSION_NUMBER, release=$IS_RELEASE）"
+          echo "::notice title=Build version::构建版本 $VERSION（version_number=$VERSION_NUMBER, release_tag=v$VERSION_NUMBER, full_release=$IS_RELEASE）"
 
       - name: Extract changelog for this release
-        if: github.event_name == 'push' && github.ref_type == 'tag'
+        # 两条触发路径都必须有对应版本的 CHANGELOG：自动 Release 的正文只来自这里。
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          IS_RELEASE: ${{ steps.version.outputs.is_release }}
         run: |
+          set -euo pipefail
           CHANGELOG_VERSION="${VERSION#v}"
           awk "/## \\[$CHANGELOG_VERSION\\]/{flag=1} flag{print} /^---$/{if(flag)exit}" CHANGELOG.md > release_notes.md
 
           if ! grep -q "^## \\[$CHANGELOG_VERSION\\]" release_notes.md; then
-            echo "CHANGELOG.md 中缺少版本 $CHANGELOG_VERSION 的条目"
+            echo "::error::CHANGELOG.md 中缺少版本 $CHANGELOG_VERSION 的条目，自动 Release 中止"
             exit 1
           fi
 
-          cat >> release_notes.md << 'EOF'
-
-          ### 下载说明
-
-          | 文件 | 平台 | 说明 |
-          |------|------|------|
-          | `voicing.apk` | Android | 手机安装包 |
-          | `voicing-windows-x64.exe` | Windows | Windows 10/11 (64-bit) |
-          | `voicing-linux-amd64.deb` | Ubuntu | Ubuntu 22.04+ GNOME |
-          | `voicing-linux-x86_64` | Ubuntu | Standalone Linux binary |
-
-          ### 系统要求
-
-          - Windows 10/11 (64位)
-          - Android 5.0+ (API 21+)
-          - Ubuntu 22.04+ GNOME on X11, or GNOME Wayland with RemoteDesktop portal
-
-          ### 完整性校验
-
-          - Release 同时提供 `SHA256SUMS.txt`
-          - 下载后可先校验 SHA-256 摘要，再安装或运行产物
-
-          EOF
+          {
+            echo ""
+            echo "### 下载说明"
+            echo ""
+            echo "| 文件 | 平台 | 说明 |"
+            echo "|------|------|------|"
+            echo "| \`voicing.apk\` | Android | 手机安装包 |"
+            if [ "$IS_RELEASE" = "true" ]; then
+              echo "| \`voicing-windows-x64.exe\` | Windows | Windows 10/11 (64-bit) |"
+            fi
+            echo "| \`voicing-linux-amd64.deb\` | Ubuntu | Ubuntu 22.04+ GNOME |"
+            echo "| \`voicing-linux-x86_64\` | Ubuntu | Standalone Linux binary |"
+            echo ""
+            if [ "$IS_RELEASE" != "true" ]; then
+              echo "> 本 Release 由 \`workflow_dispatch\` 自动化发布，包含 Android APK 与 Linux 资产（手动发布不含 Windows EXE）。"
+              echo ""
+            fi
+            echo "### 系统要求"
+            echo ""
+            echo "- Windows 10/11 (64位)"
+            echo "- Android 5.0+ (API 21+)"
+            echo "- Ubuntu 22.04+ GNOME on X11, or GNOME Wayland with RemoteDesktop portal"
+            echo ""
+            echo "### 完整性校验"
+            echo ""
+            echo "- Release 同时提供 \`SHA256SUMS.txt\`"
+            echo "- 下载后可先校验 SHA-256 摘要，再安装或运行产物"
+            echo ""
+          } >> release_notes.md
 
       - name: Upload release notes artifact
-        if: github.event_name == 'push' && github.ref_type == 'tag'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: release-notes
@@ -134,8 +145,9 @@ jobs:
             echo ""
             echo "- 触发方式：$TRIGGER"
             echo "- 构建版本：$VERSION"
-            echo "- 发布 GitHub Release：$IS_RELEASE"
-            echo "- 手动构建产物 artifact：\`android-apk\`、\`linux-bin\`、\`linux-deb\`"
+            echo "- 发布 GitHub Release：是（tag = v<version_number>）"
+            echo "- 是否含 Windows 资产：$IS_RELEASE（仅 push tag 为 true）"
+            echo "- 构建产物 artifact：\`android-apk\`、\`linux-bin\`、\`linux-deb\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
   build-android:
@@ -391,9 +403,18 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
-    # 只有 push tag 才创建 GitHub Release；workflow_dispatch 手动构建（包括
-    # ref 指向 tag 的情况）不进入本 job。
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    # 2026-11-22 起两条触发路径都发布 Release：
+    # - push tag：完整发布，额外上传 Windows EXE；
+    # - workflow_dispatch：自动创建/更新 tag v<version_number> 的 Release，
+    #   资产为 APK + Linux DEB/standalone（无 Windows）。
+    # 用 always() 是为了在 Windows job 被手动构建跳过时仍能发布；
+    # 显式 result 检查保证 Android/Linux 构建失败时绝不发半成品 Release。
+    if: >-
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      needs.build-android.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      (needs.build-windows.result == 'success' || needs.build-windows.result == 'skipped')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -416,7 +437,8 @@ jobs:
           name: android-apk
           path: release-assets/android
 
-      - name: Download Windows artifact
+      - name: Download Windows artifact (tag releases only)
+        if: needs.prepare-release.outputs.is_release == 'true'
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           name: windows-exe
@@ -436,34 +458,62 @@ jobs:
 
       - name: Generate release checksums
         run: |
+          set -euo pipefail
           cd release-assets
-          sha256sum \
-            android/voicing.apk \
-            windows/voicing-windows-x64.exe \
-            linux/voicing-linux-amd64.deb \
-            linux/voicing-linux-x86_64 \
+          FILES=(
+            android/voicing.apk
+            linux/voicing-linux-amd64.deb
+            linux/voicing-linux-x86_64
+          )
+          EXPECTED=3
+          if [ -f windows/voicing-windows-x64.exe ]; then
+            FILES+=(windows/voicing-windows-x64.exe)
+            EXPECTED=4
+          fi
+          sha256sum "${FILES[@]}" \
             | sed -E 's#  (android|windows|linux)/#  #' \
             > SHA256SUMS.txt
-          test "$(wc -l < SHA256SUMS.txt)" -eq 4
+          test "$(wc -l < SHA256SUMS.txt)" -eq "$EXPECTED"
           if awk '{print $2}' SHA256SUMS.txt | grep -q '/'; then
             echo "SHA256SUMS.txt must use flat GitHub Release asset names" >&2
             exit 1
           fi
+          echo "SHA256SUMS.txt ($EXPECTED assets):"
+          cat SHA256SUMS.txt
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
+          # 手动构建时 tag 不存在，由 GitHub API 在 target_commitish 上自动创建，
+          # 从而做到「推一次手动 Action = 发一次新 Release」。
+          tag_name: ${{ needs.prepare-release.outputs.release_tag }}
+          target_commitish: ${{ github.sha }}
           name: Voicing ${{ needs.prepare-release.outputs.version }}
           body_path: release-assets/release-notes/release_notes.md
           files: |
             release-assets/android/voicing.apk
-            release-assets/windows/voicing-windows-x64.exe
             release-assets/linux/voicing-linux-amd64.deb
             release-assets/linux/voicing-linux-x86_64
             release-assets/SHA256SUMS.txt
           fail_on_unmatched_files: true
           overwrite_files: true
+          make_latest: true
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows asset to tag release
+        if: needs.prepare-release.outputs.is_release == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+          # tag 发布才包含 Windows 资产；单独上传避免影响手动发布的文件列表。
+          gh release upload "$RELEASE_TAG" \
+            release-assets/windows/voicing-windows-x64.exe \
+            --clobber \
+            --repo "$GITHUB_REPOSITORY"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json url,assets \
+            --jq '{url, assets: [.assets[].name]}'
