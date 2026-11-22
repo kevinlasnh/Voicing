@@ -687,3 +687,13 @@
 - Linux 安装三点校验：DEB 文件 SHA256 `0bb98679…fa4a1`、DEB 内 `/opt/voicing/voicing` SHA256 `57d44239…b2d1d`、安装后 `/opt/voicing/voicing` 同哈希且 76,805,920B root:root 0755；`dpkg-query` 版本 2.10.0。以后重装都可复用这套交叉校验。[本地命令输出·confirmed]
 - 用户明确 APK 不需要 agent 下载：手机自行从 Actions artifact/Release 安装；仓库 AGENTS/CLAUDE 红线已改为「不下载 APK；重装/验证 Linux 时只下载 linux-deb，必要时 linux-bin」。减少无意义大文件下载与等待。[用户要求·confirmed]
 - 旧手机 APK（2.9.14）与新桌面端（2.10.0）自动重连成功，实证协议/QR schema 零变更的双向兼容承诺；Android 侧新功能只需用户更新手机 APK 即可生效。[运行日志·实测]
+
+
+## 2026-11-22 自动 Release 流程发现
+
+- `workflow_dispatch` 发 Release 的关键是给 softprops/action-gh-release 传 `tag_name` + `target_commitish`：tag 不存在时 GitHub Create Release API 会在指定 commit 上自动建 tag；Tag 由此产生的事件不会再次触发本 workflow（GITHUB_TOKEN 创建的事件不触发工作流），所以不会递归。该 action 对已存在 Release 走 `updateRelease`（按 tag 查找），重复触发同版本是幂等的，`overwrite_files` 会替换资产。[CI 源码/实测·confirmed]
+- `publish-release` 在手动构建时需要 `always()` + 显式检查 prepare/build-android/build-linux 的 result，否则 `needs` 里被 skip 的 Windows job 会让发布 job 一起跳过；Windows 资产只在 tag 路径用 `gh release upload --clobber` 追加，避免手动发布误带 Windows。[CI·confirmed]
+- 自动 Release 的正文质量依赖 CHANGELOG 门禁：prepare-release 两条触发路径都提取 `[版本号]` 块，缺块直接失败；这保证「完成一轮任务→发 Release」时正文完整，也强制版本/文档同步。[CI·实测]
+- 手动发布资产为 3 项 + SHA256SUMS（3 行），tag 发布为 4 项 + SHA256SUMS（4 行）；发布后可用 `gh release view --json assets` 与 `releases/latest` 双重复核 latest 标记。[本地命令输出·confirmed]
+- Release DEB 下载仍可能受 CDN 单连接限速；12 路 Range 并行约 500KB/s，3 分钟拿到 75.8MB；校验链=DEB 文件 SHA256→SHA256SUMS→DEB 资产 digest→安装后二进制 SHA256=standalone 资产 digest，四点一致即可确信安装的是官方产物。[实测·confirmed]
+- 自动发布后 main 分支会因 PWF/记录提交领先 tag 一个提交，这是正常现象；下一轮任务按规则升 2.10.2 再发新 Release，不需要移动已发布的 tag。[流程·confirmed]

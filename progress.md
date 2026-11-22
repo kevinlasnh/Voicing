@@ -1522,3 +1522,25 @@
 - 安装：停 `app-voicing@autostart.service` 与旧进程 22192/22202 → `sudo -n dpkg -i` 由 2.9.14 升级 2.10.0 → 启动后进程 89094/89096；`/opt/voicing/voicing` 76,805,920B root:root 0755，SHA256 `57d44239…b2d1d` 与 DEB 内载荷一致；监听 wifi + Tailscale 两个 9527，启动日志 0 ERROR/WARNING。
 - 兼容性实机验证：旧版手机 APK 在 15:28:06 自动重连新版桌面端成功（okhttp/4.12.0，在线 1），说明协议/QR 零变更的兼容承诺成立。
 - 交付物：本机 `~/Downloads/Voicing-2.10.0/voicing-linux-amd64.deb`；APK 由用户从 run artifact 下载。PWF 本次记录后提交 push。
+
+
+## 会话：2026-11-22 CST — 阶段 43：手动 Action 自动发布 GitHub Release（v2.10.1）
+
+### 需求理解（15:34）
+- 用户明确：每次完成更新/全部任务后就应该发新的 GitHub Release；推送 Action 后不应只停留在 workflow artifact。并要求继续用待办/目标工具规划、再次更新仓库级 Agent Markdown。
+- 新目标已创建（goal-7329a93b）；方案：手动 workflow_dispatch 自动建 tag `v<版本>` 并发布 Release（APK + Linux DEB/standalone + SHA256SUMS，无 Windows）；tag 推送保留完整三平台发布。
+
+### 实现（15:35–15:40）
+- release.yml publish-release：`if: always() && prepare/android/linux 成功 && (windows 成功或 skipped)`；新增 `release_tag` 输出；softprops/action-gh-release 使用 `tag_name=${ needs.prepare-release.outputs.release_tag }` + `target_commitish=${ github.sha }` + `make_latest=true`；Windows EXE 只在 tag 路径用 `gh release upload --clobber` 追加；手动构建不带 Windows。
+- prepare-release：两条路径都执行 CHANGELOG 提取（缺失对应双语块直接失败）；下载说明表格按触发路径动态包含 Windows 行；手动 Release 正文注明自动发布不含 Windows。
+- 版本 2.10.1：`APP_VERSION=2.10.1`、pubspec `2.10.1+17`；CHANGELOG 新增 [2.10.1] 双语块；README/README.zh/android README 中英更正「手动构建不发布 Release」为自动 Release，版本徽章与示例 tag 同步 2.10.1。
+- AGENTS.md/CLAUDE.md 重写：新增「每轮全部任务完成必须发新 Release」六步流程（升版本→CHANGELOG→文档→push→触发 Action→核验 run 与 release assets），保留「不下载 APK、只在重装 Linux 时下载 DEB」规则；37 行/2656 字符/552 汉字，两份逐字节一致。
+- 本地模拟验证：手动模式 resolve 输出 version=v2.10.1/release_tag=v2.10.1/is_release=false；release notes 手动 45 行无 Windows、tag 模式含 Windows；PyYAML/job 结构/19 个 action pin 断言通过；PC 138 测试 0.77s OK；Android 65 测试全绿。
+- 提交 push：`acd54ed`（远端 main）；触发 Action run `44998948373`，等待 build+自动发布 Release。
+
+
+### 收尾：自动 Release v2.10.1 + Linux 安装验证（15:40–15:46）
+- run `44998948373` success：Prepare（v2.10.1、release_tag=v2.10.1、is_release=false）→ Android/Linux 构建成功、Windows skipped → Publish GitHub Release 成功（18s）；workflow 自动创建 tag `v2.10.1` 并发布 **Voicing v2.10.1**（latest），资产 APK/DEB/standalone/SHA256SUMS 齐全，手动发布按设计不含 Windows。
+- 资产核对：APK 32,389,748B（sha256 72633867…b8d8）、DEB 75,795,356B（8d385048…eb48）、standalone 76,806,040B（89da4949…b86d6）；`gh api releases/latest` = v2.10.1。
+- Linux 重装：Release DEB 用 12 路 Range 并行下载 (~3 分钟)，`dpkg -i` 由 2.10.0 → **2.10.1**；DEB 内与安装后二进制哈希均 `89da4949…b86d6`（= standalone 资产 digest）；服务 active、双地址 9527 监听、启动 0 ERROR/WARNING；手机旧版 APK 自动重连成功。
+- AGENTS/CLAUDE 已更新「每轮任务完成必须自动发新 Release」六步红线（37 行/2656 字符/552 汉字，逐字节一致）。PWF 收尾后提交 push。

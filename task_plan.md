@@ -514,3 +514,34 @@
 - Linux 安装：由于 artifact CDN 单连接约 26KB/s，使用 12 路 Range 并行下载 75,772,960B 完成，`voicing-linux-amd64.deb` SHA256 `0bb98679…fa4a1`、Version 2.10.0；`systemctl --user stop` + `pkill -TERM -x voicing` 后 `sudo -n dpkg -i` 由 2.9.14 升级到 **2.10.0**；DEB 内 `/opt/voicing/voicing` 与安装后二进制 SHA256 均为 `57d44239…b2d1d`（76,805,920B）。
 - 运行验证：`systemctl --user start app-voicing@autostart.service` active；监听 `192.168.50.113:9527` + `100.102.136.4:9527`；启动后 0 ERROR/WARNING；旧版手机 APK（2.9.14）15:28:06 自动重连回新版 PC（okhttp/4.12.0，在线 1），协议兼容得到实机验证。
 - 交付：本机安装包位于 `~/Downloads/Voicing-2.10.0/voicing-linux-amd64.deb`；APK 下载入口为 run `44996455255` 的 `android-apk` artifact（用户手机自行下载安装）。
+
+
+## 阶段 43：每次任务完成自动发布 GitHub Release（v2.10.1，2026-11-22 15:40）
+
+### 目标
+1. 改造 release.yml：`workflow_dispatch` 手动构建也自动创建/更新 GitHub Release（tag=`v<仓库版本号>`，资产 APK + Linux DEB/standalone + SHA256SUMS；tag 推送仍含 Windows EXE）。
+2. 版本升 2.10.1 并更新 CHANGELOG/README/Android README 中「手动构建不发布 Release」的旧描述。
+3. 更新仓库级 AGENTS.md/CLAUDE.md：每轮全部任务完成必须升版本+CHANGELOG → push → 触发 Action → 核验新 Release；不下载 APK，Linux 按需安装。
+4. push、触发 Action、确认新 Release，并按需安装 v2.10.1 Linux DEB。
+
+### 计划
+- [x] 改造 publish-release：`always()` + 显式 result 检查，手动构建设 tag_name/target_commitish/make_latest，Windows 资产仅 tag 发布路径单独上传
+- [x] prepare-release：release_tag 输出、两条路径都提取 CHANGELOG、缺块即失败、手动/正式 release notes 表格动态生成
+- [x] 版本 2.10.1（APP_VERSION/pubspec 2.10.1+17）+ CHANGELOG 双语块 + README/Android README/版本徽章更新
+- [x] AGENTS.md/CLAUDE.md 重写（37 行/2656 字符/552 汉字，逐字节一致）
+- [x] 本地模拟：手动模式版本解析 v2.10.1/release_tag/is_release=false；release notes 手动无 Windows、tag 含 Windows；PyYAML 与 19 个 action pin 校验
+- [x] PC 138 测试/py_compile；Android 65 测试；commit+push（`acd54ed`）
+- [x] 触发 Action run `44998948373`（自动创建 tag v2.10.1 + Release）
+- [x] 核验 run 成功、GitHub Release v2.10.1 与资产齐全
+- [x] 下载并安装 v2.10.1 Linux DEB，验证运行
+- [x] PWF 收尾、commit、push，完成目标
+
+- **状态：** complete
+
+
+### 收尾结果（2026-11-22 15:46）
+- Action run `44998948373`：**success**。Prepare（v2.10.1, is_release=false）→ Android/Linux 构建成功，Windows skipped；Publish GitHub Release 18s 成功。
+- 自动发布：tag `v2.10.1`（指向 `acd54ed`）+ GitHub Release **Voicing v2.10.1**（非 draft/prerelease，isLatest）。资产：`voicing.apk` 32,389,748B、`voicing-linux-amd64.deb` 75,795,356B、`voicing-linux-x86_64` 76,806,040B、`SHA256SUMS.txt`（3 行）；手动发布不含 Windows，符合设计。Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.1
+- Linux 安装：Release DEB SHA256 `8d385048…eb48`（= 资产 digest = SHA256SUMS 行）；`dpkg -i` 由 2.10.0 升级 **2.10.1**；DEB 内二进制与安装后 `/opt/voicing/voicing` SHA256 均为 `89da4949…b86d6`（= Release standalone 资产 digest），76,806,040B root:root 0755。
+- 运行：`app-voicing@autostart.service` active，进程 95419/95421，监听 `192.168.50.113:9527` + `100.102.136.4:9527`；启动日志 0 ERROR/WARNING；旧手机 APK 15:44:45 自动重连成功（okhttp/4.12.0，在线 1）。
+- 交付：本机 `~/Downloads/Voicing-2.10.1/voicing-linux-amd64.deb`；手机 APK 从 Release 页面直接下载安装（无需解压 artifact）。
