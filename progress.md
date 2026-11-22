@@ -1580,3 +1580,21 @@
 - Release 资产：APK 32,397,149B（f8bf7d82…f7e9）、Linux DEB 75,795,354B（d1ee9b41…275f）、Linux standalone 76,806,640B（0477ece2…2ea8）、SHA256SUMS.txt；手动发布无 Windows，符合设计。
 - 按用户要求：APK 不由 agent 下载；Linux DEB 本轮未重装（PC 运行时代码未变，仅版本号，无需重装）。本机继续运行 2.10.1，行为与 2.10.2 完全一致。
 - PWF 收尾后提交并 push。
+
+
+## 会话：2026-11-22 CST — 阶段 45：设备选择点选后菜单保持展开（v2.10.3）
+
+### 需求（17:12）
+- 点击左侧设备子菜单里的设备单元格时，不要收起整个菜单；只有点击非菜单区域才收起，和右侧「更多功能操作」菜单其他项的交互一致。
+
+### 实现与验证（17:13–17:20）
+- `main.dart` `_handleDeviceSelected` 去掉 `_closeMenu()`，只调用 `_controller.selectDevice(deviceKey)`；主/子菜单保持展开，选中行高亮由 controller notify 触发重建；backdrop 逻辑未改（第一次点收子菜单，再点收主菜单）。
+- 版本 2.10.3（pubspec `2.10.3+19`、APP_VERSION 2.10.3）+ CHANGELOG [2.10.3] 双语块 + README/README.zh/android README 中英补充「点选后菜单保持展开，只有点击菜单外才关闭」+ AGENTS/CLAUDE 版本更新。
+- 验证：dart format 无改动；flutter analyze 4 条既有 withOpacity info；`flutter test --no-pub` 67 项全绿；debug APK 构建成功；PC 138 测试 0.65s OK；`git diff --check` 干净。
+- 提交 push：`017c55e`；触发 Action run `45006994328`，等待自动发布 v2.10.3 Release。
+
+
+### v2.10.3 自动 Release 收尾（17:26）
+- run `45006994328` success：Prepare（v2.10.3, is_release=false）→ Android/Linux 构建成功、Windows skipped → Publish GitHub Release 成功；workflow 自动建 tag `v2.10.3` 并发布 Voicing v2.10.3（latest）。
+- Release 资产：APK 32,397,083B（4200e3b7…85d3）、Linux DEB 75,795,484B（1e532144…8449）、standalone 76,805,824B（760d3368…9212）、SHA256SUMS.txt。
+- 按规则未下载 APK、未重装 Linux DEB（桌面运行时代码未变）。PWF 收尾后提交 push。

@@ -720,3 +720,9 @@
 - run `45005709784`（workflow_dispatch）自动创建 tag `v2.10.2` 并发布 GitHub Release（latest），资产 APK/Linux DEB/standalone/SHA256SUMS 齐全；手动发布仍不含 Windows，与 release.yml 门控一致。[CI·实测]
 - 本次仅 Android UI/文档变更，桌面端只改版本号；按 AGENTS「需要才装 DEB」规则未在本机重装 Linux 包（本机 2.10.1 行为与 2.10.2 相同）。Release 页面同时提供 APK，用户手机直接下载安装即可。[流程·confirmed]
 - widget 回归测试 `test/auto_scroll_text_test.dart` 单跑约 3.9s（≤5s）；整套 `flutter test` 67 项约 8.0s，时间成本主要是多 suite 的 Flutter 启动，而非测试逻辑本身。[实测]
+
+
+## 2026-11-22 v2.10.3 菜单交互与发布
+
+- 「点选设备后菜单收起」的根因在 `_handleDeviceSelected` 里显式调用了 `_closeMenu()`；与右侧菜单其他项（刷新连接/撤回输入/自动 Enter）不一致。修复为只调用 `selectDevice`，菜单保持展开，高亮由 controller notify 重建；backdrop 逻辑本来已是「先收子菜单、再收主菜单」，保持不变。[代码·confirmed]
+- 小交互改动仍需走完整发版流程（版本+CHANGELOG+文档+push+Action+核验 Release），本次 run `45006994328` 自动创建 tag `v2.10.3` 并发布 APK/Linux 资产；Linux 桌面运行时代码未变，故未重装本机 DEB。[CI·实测]

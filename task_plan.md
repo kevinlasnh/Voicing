@@ -578,3 +578,28 @@
 - 本地验证（最终快照）：`flutter analyze` 4 条既有 info；`flutter test --no-pub` **67 项全绿**（全套约 8.0s；新 widget 测试单跑 3.96s）；debug APK 构建成功；PC 138 测试 0.68s OK；`git diff --check` 干净。
 - Linux DEB 本轮**未重装**：PC 运行时代码零改动（仅版本号），按用户「需要就安装，不用就不用」跳过；当前本机仍运行 2.10.1（行为与 2.10.2 相同）。APK 由用户从 Release 页面自行下载安装。
 - Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.2
+
+
+## 阶段 45：设备选择菜单点击后保持展开（v2.10.3，2026-11-22 17:20）
+
+### 目标
+1. 在左侧设备子菜单点选设备后，主菜单与子菜单都保持展开，仅更新选中高亮。
+2. 只有点击非菜单区域才收起（第一次收子菜单、再点收主菜单），与右侧更多功能菜单行为一致。
+3. 版本 2.10.3 + CHANGELOG/README/Android README/AGENTS 同步，跑验证后 push 并自动发布新 Release。
+
+### 计划
+- [x] `_handleDeviceSelected` 移除 `_closeMenu()`，只调用 `selectDevice`
+- [x] 确认 backdrop 关闭逻辑保持原样（子菜单优先关闭，再关主菜单）
+- [x] 版本 2.10.3（2.10.3+19）+ CHANGELOG 双语块 + 文档/AGENTS 版本同步
+- [x] 本地验证：flutter analyze 4 条既有 info；flutter test 67 项全绿；debug APK 构建成功；PC 138 测试 OK；dart format 无改动；diff-check 干净
+- [x] 触发 Action 自动发布 v2.10.3 Release 并核验
+- [x] PWF 收尾、commit/push
+
+- **状态：** complete
+
+
+### 收尾结果（2026-11-22 17:26）
+- Action run `45006994328` success：手动构建自动创建 tag `v2.10.3`（`017c55e`）并发布 **Voicing v2.10.3**（latest）。资产：`voicing.apk` 32,397,083B（sha256 4200e3b7…85d3）、`voicing-linux-amd64.deb` 75,795,484B（1e532144…8449）、`voicing-linux-x86_64` 76,805,824B（760d3368…9212）、`SHA256SUMS.txt`；手动发布按设计不含 Windows。
+- 本地验证：flutter analyze 4 条既有 info；flutter test 67 项全绿；debug APK 构建成功；PC 138 测试 OK；dart format 无改动；`git diff --check` 干净。
+- Linux DEB 未重装：桌面运行时代码未变（仅版本号），按「需要才安装」跳过；APK 由用户从 Release 页面自行下载安装。
+- Release：https://github.com/kevinlasnh/Voicing/releases/tag/v2.10.3
