@@ -1481,3 +1481,35 @@
 
 ### 收尾
 - 本轮不改业务代码、不改版本号、不触发 Release；提交内容仅为 PWF 三件套增量记录，随后 push 到 `origin/main`。
+
+
+## 会话：2026-11-22 CST — 阶段 42：v2.10.0 多设备并发 + 设备选择菜单 + CI/文档改造
+
+### 需求与侦察（14:19–14:24）
+- 用户需求：同一 WiFi 下手机可同时配对/连接多台 PC；「更多功能操作」最下方（扫码连接下）新增「设备选择」，点击向左弹出同风格二级菜单，选择哪个设备就发往哪个；不再覆盖已有配对。前端风格延续。完成后记录进度、push、触发 Action 编译新 APK/Linux 包；更新仓库级 Agents Markdown（推送后自动触发 Action、重装/发版重新触发、不要 macOS Action）。
+- 侦察基线：`main`=origin/main=`bd77773`，工作区干净；版本 2.9.14；Flutter 3.27.0 在 `~/development/flutter-3.27.0`；PC 测试用 `.venv/bin/python`（ambient python3 缺 PyQt5）；现有 controller 1701 行单设备状态机、`SavedServerStore` 单设备存储、release.yml 四平台 tag 发布。
+- 任务拆分：根代理做核心 Android 数据层+状态机+UI；子代理 ci-agents 做 release.yml+AGENTS/CLAUDE；子代理 docs-zh 做 5 份双语文档；子代理 qa-verify 独立验证。
+
+### 实现（14:24–14:46）
+- `saved_server.dart`：新增 `PairedDevicesSnapshot`/`deviceKey`；`SavedServerStore` 升级 schema v3（`saved_servers` 列表 + `active_device_key`），`loadSnapshot/saveAll` 支持旧 v1/v2/手动 IP 迁移，继续回写单设备 `saved_server` 兼容降级；修复迁移递归。
+- `voicing_connection_controller.dart`：重写为 `_DeviceLink` 多设备并发模型（每设备独立 channel/generation/竞速/reconnect/心跳状态），扫码改为追加或按 device_id 合并，新增 `pairedDevices/activeDeviceKey/selectDevice/removeDevice`，文本/shadow/commit/ACK 全部按活跃设备路由；修复 deviceKey 不变量与手动地址身份保留。
+- `main.dart`：删除旧的「替换设备」确认框；「扫码连接」下方新增「设备选择」项，向左二级菜单复刻主菜单 surface/圆角/阴影/分隔线/行样式，带状态点、当前勾选、空态提示；头部显示「状态 · 设备名」；修复二级菜单收起后命中穿透。
+- CI/AGENTS：release.yml 删除 build-macos 与相关资产，新增 workflow_dispatch 手动构建（APK+Linux artifact，不发布 Release），tag 发布保留三平台 4 资产；AGENTS.md/CLAUDE.md 重写为 36 行/2137 字符/370 汉字、H1 `# Repository Agent Markdown`、逐字节一致。
+- 文档：CHANGELOG 新增 [2.10.0] 双语块；README/README.zh-CN/android README 中英同步多设备、设备选择、schema v3、CI 三平台/手动构建；版本升 `2.10.0` / `2.10.0+16`。
+
+### 本地验证（14:40–14:50）
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`：仅 5 条既有 `withOpacity` info；无 error/warning。
+- `flutter test --no-pub`：60 项全绿（含新增多设备并发/路由/ACK/QR 追加合并/身份升级/v3 存储用例）。
+- `flutter build apk --debug`：成功（Gradle assembleDebug 82.9s）。
+- PC：`.venv/bin/python -m unittest discover -s tests` → `Ran 138 tests in 0.810s OK`；全部模块 `py_compile` OK；`git diff --check` OK。
+- 回归清理：Flutter build 给 `android/gradlew` 加了可执行位（git mode 100644→100755），已 `chmod 644` 恢复，避免无关 diff。
+- 待 QA（qa-verify）独立复跑与代码审查，通过后提交推送并触发 Action。
+
+
+### 独立 QA 与修复复验（14:52–15:12）
+- QA v1（qa-verify）：PASS，1 Medium + 5 Low + 2 nit。全绿证据：analyze 5 info（含新增 1 条 withOpacity）、`flutter test` 60 项、debug APK 17s、PC 138 项 1.012s、workflow PyYAML/19 pin/4 资产、文档与 AGENTS 合规。
+- 根代理按报告修复：① 设备行尾新增删除按钮+确认框（可解绑，含 active 回退与持久化同步删除单测）；② v3 列表与降级单设备镜像对账（同 key 合并/新 key 追加/更新则切 active，全损坏回退镜像，损坏镜像清理）并新增 2 个 store 测试；③ dispose 递增 QR generation + 清扫码态 + `_finishQrPairing` disposed 守卫；④ 同设备重扫/手动改地址仅在活跃目标变化时重置 shadow；⑤ release.yml 发布类条件收紧为 `event_name == 'push' && ref_type == 'tag'`；⑥ 新代码 withValues、文档补解绑说明与中文措辞。
+- QA v2（复验）：PASS。analyze 回到 4 条既有 info、`flutter test` 64 项全绿 5s、debug APK 5s、workflow 条件/19 pin/文档均确认；另用 CountingStore 临时脚本实证镜像对账「正常启动连续两次 loadSnapshot 0 写盘、对账首次写第二次 0 写」无循环。
+- QA 残留（Low，未阻断）：镜像写序在两次 SharedPreferences 写之间被杀时理论上可能复活刚删设备（概率极低，未做 tombstone）；镜像对账现已吸收同设备更新身份字段。QA 建议的 mounted 检查与旧 deviceKey 重解析已补，dispose 测试加 `pairedDevices isEmpty` 断言，新增同设备镜像身份测试。
+- 最终本地验证：`flutter test --no-pub` **65 项全绿 4.49s**（≤5s）；`flutter analyze` 4 条既有 withOpacity info；`flutter build apk --debug` 成功（11.5s）；PC `.venv` **138 项 0.503s OK**；`git diff --check` OK；`android/gradlew` 已恢复 644；无 untracked 意外文件。
+- 待：commit + push main + `gh workflow run release.yml --ref main` 手动构建，下载核对 APK/DEB。

@@ -473,3 +473,35 @@
 - 连通：重启后约 1 秒内手机 `192.168.50.56`（`okhttp/4.12.0`）自动重连成功并保持 ESTAB，已保存配对无需重扫。
 
 - **状态：** complete
+
+
+## 阶段 42：多设备并发连接 + 设备选择菜单 + CI/文档改造（v2.10.0，2026-11-22 14:48）
+
+### 目标
+1. Android 端同一 WiFi 下可同时配对/连接多台 PC：扫码不再覆盖旧设备，同一 device_id 重扫只合并地址历史；所有已配对设备并发建链。
+2. 「更多功能操作」最下方（扫码连接下方）新增「设备选择」入口，点击向左弹出与现有下拉菜单同风格的二级菜单，列出已配对设备+连接状态+当前勾选；文本/shadow/Auto Enter 只发当前选中设备，迟到 ACK 不清当前输入。
+3. 存储升级 schema v3（`saved_servers` + `active_device_key`），旧 v1/v2 自动迁移，继续写单设备兼容字段；协议与 QR schema 零变更，PC 端无需升级。
+4. GitHub Actions：删除 macOS 构建；新增 workflow_dispatch 手动构建 APK + Linux DEB/standalone（不发布 Release）；tag 发布保留三平台 + 4 项资产 + SHA256SUMS。
+5. 重写仓库级 AGENTS.md/CLAUDE.md：推送后自动触发 Action、重装/发版重新触发、禁止 macOS job、限长合规。
+6. 版本升 2.10.0（Android 2.10.0+16），双语文档/CHANGELOG 更新；全量验证后 push 并触发 Action，下载新 APK/DEB。
+
+### 计划
+- [x] 侦察现有 controller/store/main/测试与 CI，确认单设备覆盖点
+- [x] 设计并实现 SavedServerStore schema v3（列表/活跃 Key/迁移/单设备兼容写回）
+- [x] 重构 VoicingConnectionController 为多设备并发链接（每设备独立竞速/心跳/重连/generation）+ 活跃设备路由
+- [x] 修复设备身份不变量（legacy key → device_id 重排 Map Key；手动地址保留原 deviceId）
+- [x] UI：扫码连接下方设备选择入口 + 向左二级菜单（状态点/勾选/空态）+ 头部「状态 · 设备名」
+- [x] 新增/更新测试：v3 存储、多设备并发、文本路由、ACK 过滤、QR 追加/合并不覆盖、身份迁移
+- [x] CI 改造 + 仓库 AGENTS/CLAUDE 重写
+- [x] 文档与版本更新（CHANGELOG/README/Android README 中英）
+- [ ] 独立 QA 验证（analyze/test/build/PC 测试/CI/文档）
+- [ ] PWF 收尾、commit、push main
+- [ ] 触发 GitHub Action 手动构建，下载并核对新 APK/DEB
+
+### 结果（进行中，2026-11-22 14:48）
+- 代码：Android 新增多设备链接模型；`saved_server.dart` schema v3；`main.dart` 设备选择二级菜单；PC 端仅版本号变更。
+- 过程中修复：① `SavedServerStore._migrateLegacyManualServer` 调 `save()` 会递归 `loadSnapshot` 造成测试挂起；② legacy 记录 connected 后 device_id 升级导致 Map Key 与 `server.deviceKey` 失配；③ 手动 IP 命中已有 QR 设备时会丢 deviceId；④ 二级菜单收起后 opacity 0 仍可命中（必须卸载 overlay）。
+- 本地验证：Flutter analyze 仅 5 条既有 withOpacity info；`flutter test --no-pub` 60 项全绿；`flutter build apk --debug` 成功；PC `unittest` 138 项 0.81s OK + py_compile OK；`git diff --check` OK。
+- 版本/文档：`APP_VERSION=2.10.0`、pubspec `2.10.0+16`；CHANGELOG 2.10.0 双语块、README/Android README 中英同步；AGENTS/CLAUDE 36 行 2137 字符 370 汉字且逐字节一致。
+
+- **状态：** in_progress

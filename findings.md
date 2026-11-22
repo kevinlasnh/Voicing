@@ -658,3 +658,23 @@
 - 2.9.14 的日志可观测性明显强于 2.9.13：新增「可调参数生效值」表（文本注入 / 网络自适应 / WebSocket / UI / 日志五组）、接口枚举耗时、带 `remote`/`ua`/在线数的连接与断开记录，排障不再依赖 console print。[日志·confirmed]
 - 重启后手机 1 秒内自动重连（`192.168.50.56`，`okhttp/4.12.0`），说明 2.9.14 的已保存地址簿重连路径在真实 X11 + LAN + Tailscale 环境下可用；okhttp 在首连后立即换端口重建一次（code 1006、0 消息）属客户端连接管理行为，不是服务端抖动——最终连接保持 ESTAB。[日志·实测]
 - `pkill -x voicing` 比 `pkill -f "/opt/voicing/voicing"` 安全：后者会匹配执行命令的 shell 自身（2026-09-25 已踩坑），`-x` 只按进程名精确匹配；停止后要轮询 `pgrep -x voicing` 确认无残留再 `dpkg -i`。[工具经验]
+
+
+## 2026-11-22 v2.10.0 多设备改造发现
+
+- 单设备覆盖的根因不是 UI，而是存储层只有一个 `saved_server` 字段且 controller 只有一个 `_savedServer`/`_channel`/heartbeat/reconnect 状态；改造必须同时替换存储结构（列表 + 活跃 Key）和连接状态机（每设备一份 link），只改其中一层会出现「多存了但只连一台」或「连了多台但发错目标」。[代码分析·confirmed]
+- 多设备后 Map Key 必须与 `link.server.deviceKey` 恒等：legacy 手动记录（deviceId 为空，key=`legacy:ip:port`）在 connected 后升级出真实 device_id，若不重排 Map Key，后续 `_beginDeviceRace` 的 `identical(_links[key], link)` 守卫会静默失效、设备再也不重连。已用 `_syncLinkKey` 统一处理（含冲突合并）。[代码·confirmed]
+- 多设备下 ACK 必须按活跃设备过滤：每台 PC 都会在注入完成后回 `ack(clear_input)`，若不过滤，用户给设备 B 输入中的文字会被设备 A 的迟到 ACK 清空。该行为已写成单测 `ACK from a non-active device never clears the active input box`。[代码·测试·confirmed]
+- 旧存储迁移不能调用会再次读盘的 `save()`：`_migrateLegacyManualServer` 内先 `save()` 时旧 manual_server_* Key 尚未删除，`save()->loadSnapshot()->migrate->save()` 形成异步死递归，`flutter test` 全套会卡在「store migrates legacy manual ip keys」用例（单文件跑还看不出）。修复为迁移时直接 `saveAll([migrated])`。[测试经验·confirmed]
+- Flutter 回归测试不要用 `| tail` 观察进度：输出会被缓冲到进程结束，挂起时只能看到旧行；定位挂起应 `timeout N flutter test <file>` 逐文件跑或 `-r expanded` 直接看最后一个用例。另有 `timeout` 退出码会被管道末端的 `tail` 覆盖，需直接看命令本身退出码。[工具经验·confirmed]
+- 二级菜单动画收起后仅把 `_showDeviceMenu=false` 不够：`Opacity(0)` 仍参与命中测试，invisible 的设备行会拦截点击；必须在 reverse 完成后把 `_deviceMenuOverlayMounted` 置 false 从树里移除。[代码·confirmed]
+- Android release workflow 原先只有 tag 触发，无法「只编译新 APK/DEB」；新增 workflow_dispatch 后手动 run 只跑 Android+Linux（Windows 与 publish-release 用 `github.ref_type == 'tag'` 门控），DEB Version 从 pubspec/APP_VERSION 推导并断言，避免分支名 `main` 写进包版本。[CI·confirmed]
+
+
+## 2026-11-22 v2.10.0 QA 复验发现
+
+- 多设备存储升级存在「降级→升级」数据窗口：旧版 2.9.14 只会写单设备 `saved_server`，升回 2.10 若只信任 v3 列表会丢降级期间的新配对。已改为 load 时与镜像对账（同 deviceKey 以较新记录为身份基座并合并历史、未知 deviceKey 追加、镜像更新则切活跃）。QA 用 CountingStore 验证正常启动连续两次 load 0 写盘、对账仅首次写，不存在写盘循环。[QA·confirmed]
+- 对账仍有极低概率边界：`saved_servers`、`active_device_key`、`saved_server` 三次写之间进程被杀（尤其 mirror 写在最后）时，旧镜像可能被当成降级新增而复活刚删除的设备。彻底修复需 tombstone 或单 key 原子载荷；本版按 Low 接受并记录，不在本轮扩大改动。[代码分析·QA]
+- 二级菜单里「行点击=切换目标、行尾 IconButton=删除」在 GestureArena 中子级优先，不会同时触发；但确认框 await 后必须重新按当前 `pairedDevices` 解析 key（legacy key 可能在对话框打开期间升级为 device_id），否则删除会静默 no-op。已补 mounted 检查与 `_resolveCurrentDeviceKey`。[代码·confirmed]
+- dispose 在途 QR 回调的根因是 `_finishQrPairing` 在 reveal/hold await 后仍 `notifyListeners`；修复必须同时递增 `_qrPairingGeneration` 并清 `_qrScanMode`，仅取消 `_qrRace` 不够（延时任务不属于 race）。测试断言 dispose 后 `pairedDevices` 仍为空，能捕获旧实现重新加回设备的行为。[代码·测试·confirmed]
+- CI 用 `github.ref_type == 'tag'` 判断发布不充分：`workflow_dispatch` 允许 `--ref` 指向 tag，会误触发 Windows 构建与 Release。发布类门控必须同时判断 `github.event_name == 'push'`；prepare-release 的 is_release 也要同步收紧。[CI·confirmed]
