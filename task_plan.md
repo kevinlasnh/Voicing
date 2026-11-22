@@ -494,9 +494,9 @@
 - [x] 新增/更新测试：v3 存储、多设备并发、文本路由、ACK 过滤、QR 追加/合并不覆盖、身份迁移
 - [x] CI 改造 + 仓库 AGENTS/CLAUDE 重写
 - [x] 文档与版本更新（CHANGELOG/README/Android README 中英）
-- [ ] 独立 QA 验证（analyze/test/build/PC 测试/CI/文档）
-- [ ] PWF 收尾、commit、push main
-- [ ] 触发 GitHub Action 手动构建，下载并核对新 APK/DEB
+- [x] 独立 QA 验证（analyze/test/build/PC 测试/CI/文档）
+- [x] PWF 收尾、commit、push main
+- [x] 触发 GitHub Action 手动构建并核对（Linux DEB 已下载安装；APK 按新规则不由本地下载）
 
 ### 结果（进行中，2026-11-22 14:48）
 - 代码：Android 新增多设备链接模型；`saved_server.dart` schema v3；`main.dart` 设备选择二级菜单；PC 端仅版本号变更。
@@ -504,4 +504,13 @@
 - 本地验证：Flutter analyze 仅 5 条既有 withOpacity info；`flutter test --no-pub` 60 项全绿；`flutter build apk --debug` 成功；PC `unittest` 138 项 0.81s OK + py_compile OK；`git diff --check` OK。
 - 版本/文档：`APP_VERSION=2.10.0`、pubspec `2.10.0+16`；CHANGELOG 2.10.0 双语块、README/Android README 中英同步；AGENTS/CLAUDE 36 行 2137 字符 370 汉字且逐字节一致。
 
-- **状态：** in_progress
+- **状态：** complete
+
+
+### 收尾结果（2026-11-22 15:28）
+- 提交并 push `origin/main`：`40a927d`（Android 多设备实现+版本）、`1f7afb5`（CI/文档）、`6163372`（PWF 记录），远端 main = `6163372`。
+- 触发手动构建 Action：run `44996455255`（workflow_dispatch, main）→ **success**；Prepare Release Metadata 推导版本 `v2.10.0`、`release=false`；Build Android APK/Linux Desktop 成功，Build Windows EXE 与 Publish GitHub Release 按设计 skipped。产物 artifacts：`android-apk`（30MB）、`linux-deb`（72MB）、`linux-bin`（72MB）。
+- 用户新指示：APK 由用户自己在手机下载，本地不再下载；AGENTS.md/CLAUDE.md 已加入「不下载 APK、仅在重装 Linux 时下载 linux-deb」红线（37 行/2451 字符/487 汉字，逐字节一致）。
+- Linux 安装：由于 artifact CDN 单连接约 26KB/s，使用 12 路 Range 并行下载 75,772,960B 完成，`voicing-linux-amd64.deb` SHA256 `0bb98679…fa4a1`、Version 2.10.0；`systemctl --user stop` + `pkill -TERM -x voicing` 后 `sudo -n dpkg -i` 由 2.9.14 升级到 **2.10.0**；DEB 内 `/opt/voicing/voicing` 与安装后二进制 SHA256 均为 `57d44239…b2d1d`（76,805,920B）。
+- 运行验证：`systemctl --user start app-voicing@autostart.service` active；监听 `192.168.50.113:9527` + `100.102.136.4:9527`；启动后 0 ERROR/WARNING；旧版手机 APK（2.9.14）15:28:06 自动重连回新版 PC（okhttp/4.12.0，在线 1），协议兼容得到实机验证。
+- 交付：本机安装包位于 `~/Downloads/Voicing-2.10.0/voicing-linux-amd64.deb`；APK 下载入口为 run `44996455255` 的 `android-apk` artifact（用户手机自行下载安装）。

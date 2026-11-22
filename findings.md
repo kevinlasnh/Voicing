@@ -678,3 +678,12 @@
 - 二级菜单里「行点击=切换目标、行尾 IconButton=删除」在 GestureArena 中子级优先，不会同时触发；但确认框 await 后必须重新按当前 `pairedDevices` 解析 key（legacy key 可能在对话框打开期间升级为 device_id），否则删除会静默 no-op。已补 mounted 检查与 `_resolveCurrentDeviceKey`。[代码·confirmed]
 - dispose 在途 QR 回调的根因是 `_finishQrPairing` 在 reveal/hold await 后仍 `notifyListeners`；修复必须同时递增 `_qrPairingGeneration` 并清 `_qrScanMode`，仅取消 `_qrRace` 不够（延时任务不属于 race）。测试断言 dispose 后 `pairedDevices` 仍为空，能捕获旧实现重新加回设备的行为。[代码·测试·confirmed]
 - CI 用 `github.ref_type == 'tag'` 判断发布不充分：`workflow_dispatch` 允许 `--ref` 指向 tag，会误触发 Windows 构建与 Release。发布类门控必须同时判断 `github.event_name == 'push'`；prepare-release 的 is_release 也要同步收紧。[CI·confirmed]
+
+
+## 2026-11-22 收尾发现：CI artifact 下载、Linux 安装与 APK 交付规则
+
+- GitHub Actions artifact 的 Azure Blob CDN 在当前网络单连接限速约 26KB/s（75.7MB 需 45+ 分钟）；`gh run download`/`gh api` 单流都受同一限制。改用 12 路 HTTP Range 并行（每路独立 curl Range 请求）后聚合约 380KB/s，75.7MB 约 3 分钟完成，且 Range 拼接后 zip 大小与 `content-length` 完全一致；签名 URL 有效期约 10 分钟，脚本内失败重试时需重新调 API 取 Location。[实测·confirmed]
+- 手动构建 Action（run `44996455255`）在 `workflow_dispatch` 下按设计只构建 Android+Linux：`Build Windows EXE` 与 `Publish GitHub Release` skipped，`release=false`，版本从 pubspec 推导为 v2.10.0；说明 `github.event_name == 'push' && github.ref_type == 'tag'` 门控生效。[CI·confirmed]
+- Linux 安装三点校验：DEB 文件 SHA256 `0bb98679…fa4a1`、DEB 内 `/opt/voicing/voicing` SHA256 `57d44239…b2d1d`、安装后 `/opt/voicing/voicing` 同哈希且 76,805,920B root:root 0755；`dpkg-query` 版本 2.10.0。以后重装都可复用这套交叉校验。[本地命令输出·confirmed]
+- 用户明确 APK 不需要 agent 下载：手机自行从 Actions artifact/Release 安装；仓库 AGENTS/CLAUDE 红线已改为「不下载 APK；重装/验证 Linux 时只下载 linux-deb，必要时 linux-bin」。减少无意义大文件下载与等待。[用户要求·confirmed]
+- 旧手机 APK（2.9.14）与新桌面端（2.10.0）自动重连成功，实证协议/QR schema 零变更的双向兼容承诺；Android 侧新功能只需用户更新手机 APK 即可生效。[运行日志·实测]

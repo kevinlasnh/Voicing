@@ -1513,3 +1513,12 @@
 - QA 残留（Low，未阻断）：镜像写序在两次 SharedPreferences 写之间被杀时理论上可能复活刚删设备（概率极低，未做 tombstone）；镜像对账现已吸收同设备更新身份字段。QA 建议的 mounted 检查与旧 deviceKey 重解析已补，dispose 测试加 `pairedDevices isEmpty` 断言，新增同设备镜像身份测试。
 - 最终本地验证：`flutter test --no-pub` **65 项全绿 4.49s**（≤5s）；`flutter analyze` 4 条既有 withOpacity info；`flutter build apk --debug` 成功（11.5s）；PC `.venv` **138 项 0.503s OK**；`git diff --check` OK；`android/gradlew` 已恢复 644；无 untracked 意外文件。
 - 待：commit + push main + `gh workflow run release.yml --ref main` 手动构建，下载核对 APK/DEB。
+
+
+### 收尾：GitHub Action 手动构建 + Linux 安装 + Agent 规则更新（15:03–15:28）
+- push 完成后触发 `gh workflow run release.yml --ref main` → run `44996455255`，结论 **success**；手动构建版本 `v2.10.0`（release=false），Android/Linux 成功、Windows 与 Release 按设计 skipped，产出 `android-apk`/`linux-deb`/`linux-bin` 三个 artifact。
+- 用户新指示：不下载 APK（手机自行下载安装），只需安装 Linux 包；据此更新 `AGENTS.md` 与 `CLAUDE.md`（37 行/2451 字符/487 汉字，逐字节一致）新增「不下载 APK、重装 Linux 时只取 linux-deb」规则，同时更新多设备语义红线。
+- artifact CDN 单连接下载约 26KB/s，改为 12 路 HTTP Range 并行下载，75,772,960B 约 3 分钟完成；`voicing-linux-amd64.deb` Version 2.10.0、SHA256 `0bb98679…fa4a1`。
+- 安装：停 `app-voicing@autostart.service` 与旧进程 22192/22202 → `sudo -n dpkg -i` 由 2.9.14 升级 2.10.0 → 启动后进程 89094/89096；`/opt/voicing/voicing` 76,805,920B root:root 0755，SHA256 `57d44239…b2d1d` 与 DEB 内载荷一致；监听 wifi + Tailscale 两个 9527，启动日志 0 ERROR/WARNING。
+- 兼容性实机验证：旧版手机 APK 在 15:28:06 自动重连新版桌面端成功（okhttp/4.12.0，在线 1），说明协议/QR 零变更的兼容承诺成立。
+- 交付物：本机 `~/Downloads/Voicing-2.10.0/voicing-linux-amd64.deb`；APK 由用户从 run artifact 下载。PWF 本次记录后提交 push。
